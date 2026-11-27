@@ -30,14 +30,23 @@ jobs:
       - name: Install locked dependencies safely
         run: npm ci --ignore-scripts
 
+      - name: Audit dependency security
+        run: npm audit --audit-level=moderate
+
       - name: Run build, data validation, and strict typecheck
         run: npm run build
 
       - name: Run project lint
         run: npm run lint
 
-      - name: Run unit and integration tests
-        run: npm test
+      - name: Run unit and integration tests with coverage
+        run: npm run test:coverage
+
+      - name: Install Playwright Chromium browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright browser E2E and full playthrough tests
+        run: npm run test:e2e
 
       - name: Upload Pages artifact on main
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

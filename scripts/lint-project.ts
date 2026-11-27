@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const DOC_DIRS = ['README.md', 'AGENTS.md', 'docs'];
+const DOC_DIRS = ['README.md', 'AGENTS.md', 'CREDITS.md', 'docs'];
 const SRC_DIRS = ['src', 'scripts', 'tests'];
 
 const issues: string[] = [];

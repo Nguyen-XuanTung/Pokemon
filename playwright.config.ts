@@ -7,8 +7,9 @@ export default defineConfig({
     timeout: 10_000,
   },
   fullyParallel: false,
+  workers: 2,
   retries: 0,
-  reporter: [['list']],
+  reporter: [['line']],
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
@@ -28,7 +29,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run preview -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });
