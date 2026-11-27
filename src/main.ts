@@ -49,14 +49,13 @@ const worldScene = new WorldScene(controller);
 const phaserGame = new Phaser.Game({
   type: Phaser.AUTO,
   parent: viewportEl,
-  width: 352,
-  height: 256,
+  width: Math.max(320, viewportEl.clientWidth || window.innerWidth),
+  height: Math.max(240, viewportEl.clientHeight || window.innerHeight),
   pixelArt: true,
   roundPixels: true,
   backgroundColor: '#1b2820',
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.RESIZE,
   },
   audio: {
     noAudio: true,
@@ -64,6 +63,20 @@ const phaserGame = new Phaser.Game({
   banner: false,
   scene: [worldScene],
 });
+
+const syncViewportResize = () => {
+  const w = Math.max(240, viewportEl.clientWidth);
+  const h = Math.max(240, viewportEl.clientHeight);
+  if (phaserGame.scale && (phaserGame.scale.width !== w || phaserGame.scale.height !== h)) {
+    phaserGame.scale.resize(w, h);
+  }
+};
+
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(() => syncViewportResize());
+  ro.observe(viewportEl);
+}
+window.addEventListener('resize', syncViewportResize);
 
 new GameUiRenderer(rootEl, overlayEl, controller);
 

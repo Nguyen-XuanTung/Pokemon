@@ -151,6 +151,41 @@ export class SoundEngine {
     }
   }
 
+  public speakEnglishSentence(sentenceEn: string): {
+    readonly spokenByVoice: boolean;
+    readonly fallbackMessageVi: string;
+  } {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi:
+          'Thiết bị chưa hỗ trợ đọc cả câu bằng giọng nói. Bạn có thể chạm từng từ để xem phiên âm.',
+      };
+    }
+    try {
+      const synth = window.speechSynthesis;
+      const voices = synth.getVoices();
+      const englishVoice = voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(sentenceEn);
+      utterance.lang = englishVoice?.lang ?? 'en-US';
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+      utterance.rate = 0.94;
+      synth.speak(utterance);
+      return {
+        spokenByVoice: true,
+        fallbackMessageVi: 'Đang đọc câu tiếng Anh...',
+      };
+    } catch {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi: 'Trình duyệt tạm khóa giọng đọc, hãy chạm từng từ để xem phiên âm.',
+      };
+    }
+  }
+
   public destroy(): void {
     this.stopBgmTimerOnly();
     if (this.ctx) {

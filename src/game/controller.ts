@@ -2,7 +2,7 @@ import { SoundEngine } from '../audio/soundEngine.ts';
 import { DIALOGUES_BY_ID } from '../data/dialogues.ts';
 import { ITEMS, ITEMS_BY_ID } from '../data/items.ts';
 import { LEXICON_INDEX } from '../data/lexicon.ts';
-import { MAPS_BY_ID } from '../data/maps.ts';
+import { MAPS, MAPS_BY_ID } from '../data/maps.ts';
 import { MOVES_BY_ID } from '../data/moves.ts';
 import { NPCS, NPCS_BY_ID } from '../data/npcs.ts';
 import { QUESTS } from '../data/quests.ts';
@@ -17,15 +17,17 @@ import {
 import { createCreatureInstance } from '../domain/creatures.ts';
 import {
   buildCampfireReviewSet,
+  buildContextualReencounterEcho,
   recordCampfireRecall,
   recordSentenceExposure,
   recordWordLookup,
+  resolveDialogueLineForLevel,
   toggleWordSaved,
   type CampfireReviewPrompt,
 } from '../domain/learning.ts';
 import { startQuest, syncQuestsWithState, type QuestSyncNotification } from '../domain/quests.ts';
 import { SeededRng } from '../domain/rng.ts';
-import { SaveRepository } from '../domain/save.ts';
+import { SaveRepository, type SaveValidationRegistry } from '../domain/save.ts';
 import {
   addItemToState,
   buySupplyItem,
@@ -43,6 +45,7 @@ import type {
   DialogueChoice,
   DialogueNode,
   Direction,
+  ElementType,
   GameSettings,
   GameState,
   LexiconEntry,
@@ -54,10 +57,34 @@ import {
   nextTimeOfDay,
 } from '../domain/world.ts';
 
+export const GAME_SAVE_VALIDATION_REGISTRY: SaveValidationRegistry = {
+  validSpeciesIds: new Set(SPECIES.map((s) => s.id)),
+  starterSpeciesIds: new Set(SPECIES.filter((s) => s.isStarter).map((s) => s.id)),
+  validMoveIds: new Set(Object.keys(MOVES_BY_ID)),
+  validItemIds: new Set(Object.keys(ITEMS_BY_ID)),
+  validQuestIds: new Set(QUESTS.map((q) => q.id)),
+  validWordIds: new Set(Object.keys(LEXICON_INDEX.byId)),
+  mapBounds: Object.fromEntries(MAPS.map((m) => [m.id, { width: m.width, height: m.height }])),
+};
+
 export interface ActiveDialogueState {
   readonly node: DialogueNode;
   lineIndex: number;
+  resolvedEn: string;
+  resolvedVi: string;
+  echoEn?: string;
+  echoVi?: string;
   revealViOverride: boolean;
+  speechNoteVi: string;
+}
+
+export interface BattleVisualCue {
+  readonly id: number;
+  readonly kind: 'player_attack' | 'enemy_attack' | 'capture_success' | 'capture_break' | 'heal';
+  readonly element?: ElementType;
+  readonly damage?: number;
+  readonly isSuperEffective?: boolean;
+  readonly shakes?: number;
 }
 
 export interface ToastBanner {
@@ -76,6 +103,7 @@ export type ActiveModal =
 
 export type JournalTab =
   | 'quests'
+  | 'map'
   | 'team'
   | 'bag'
   | 'compendium'
@@ -95,7 +123,10 @@ export class GameController {
   public activeTrainerNpc: NpcDefinition | null = null;
   public battleLogs: BattleEventLog[] = [];
   public lastBattleAnim: 'none' | 'player_attack' | 'enemy_attack' | 'capture' | 'heal' = 'none';
+  public lastBattleVisual: BattleVisualCue | null = null;
   public activeGlossEntry: LexiconEntry | null = null;
+  public activeGlossContextTag: string = '';
+  public activeGlossSentenceEn: string = '';
   public activeGlossNoteVi: string = '';
   public campPrompts: CampfireReviewPrompt[] = [];
   public campPromptIndex = 0;
@@ -103,11 +134,12 @@ export class GameController {
   public statusNotice: string = '';
 
   private nextToastId = 1;
+  private nextVisualCueId = 1;
   private readonly listeners = new Set<() => void>();
   private playTimerId: number | null = null;
 
   public constructor(saveRepo?: SaveRepository) {
-    this.saveRepo = saveRepo ?? new SaveRepository();
+    this.saveRepo = saveRepo ?? new SaveRepository(undefined, GAME_SAVE_VALIDATION_REGISTRY);
     this.sound = new SoundEngine();
     const loaded = this.saveRepo.load();
     if (loaded.state) {
@@ -167,6 +199,7 @@ export class GameController {
     this.activeTrainerNpc = null;
     this.activeDialogue = null;
     this.activeGlossEntry = null;
+    this.lastBattleVisual = null;
     this.activeModal = 'none';
     this.sound.unlock();
     this.syncRegionMusic();
@@ -339,21 +372,41 @@ export class GameController {
     }
   }
 
+  private activateDialogueLine(node: DialogueNode, lineIndex: number): void {
+    const line = node.lines[lineIndex];
+    if (!line) {
+      this.activeDialogue = null;
+      return;
+    }
+    const resolved = resolveDialogueLineForLevel(line, this.state.settings.cefrBand);
+    const echo = line.includeReencounterEcho
+      ? buildContextualReencounterEcho(this.state, this.state.regionId, LEXICON_INDEX)
+      : null;
+
+    this.activeDialogue = {
+      node,
+      lineIndex,
+      resolvedEn: resolved.en,
+      resolvedVi: resolved.vi,
+      echoEn: echo?.en,
+      echoVi: echo?.vi,
+      revealViOverride: false,
+      speechNoteVi: '',
+    };
+
+    recordSentenceExposure(this.state, resolved.en, node.contextTag, LEXICON_INDEX);
+    if (echo) {
+      recordSentenceExposure(this.state, echo.en, `${node.contextTag}_echo`, LEXICON_INDEX);
+    }
+    if (line.action) {
+      this.executeDialogueAction(line.action);
+    }
+  }
+
   public openDialogueById(dialogueId: string): void {
     const node = DIALOGUES_BY_ID[dialogueId];
     if (!node) return;
-    this.activeDialogue = {
-      node,
-      lineIndex: 0,
-      revealViOverride: false,
-    };
-    const firstLine = node.lines[0];
-    if (firstLine) {
-      recordSentenceExposure(this.state, firstLine.en, node.contextTag, LEXICON_INDEX);
-      if (firstLine.action) {
-        this.executeDialogueAction(firstLine.action);
-      }
-    }
+    this.activateDialogueLine(node, 0);
   }
 
   public advanceDialogue(): void {
@@ -370,15 +423,14 @@ export class GameController {
     }
     const nextIdx = lineIndex + 1;
     if (nextIdx < node.lines.length) {
-      this.activeDialogue.lineIndex = nextIdx;
-      this.activeDialogue.revealViOverride = false;
-      const nextLine = node.lines[nextIdx]!;
-      recordSentenceExposure(this.state, nextLine.en, node.contextTag, LEXICON_INDEX);
-      if (nextLine.action) {
-        this.executeDialogueAction(nextLine.action);
-      }
+      this.activateDialogueLine(node, nextIdx);
     } else {
+      const finishedNodeId = node.id;
       this.activeDialogue = null;
+      if (finishedNodeId === 'finale_credits_summary' && !this.state.flags.seen_ending_banner) {
+        this.state.flags.seen_ending_banner = true;
+        this.activeModal = 'ending_banner';
+      }
       this.persistState();
     }
     this.emitChange();
@@ -402,6 +454,21 @@ export class GameController {
   public toggleDialogueVietnameseAssist(): void {
     if (!this.activeDialogue) return;
     this.activeDialogue.revealViOverride = !this.activeDialogue.revealViOverride;
+    this.emitChange();
+  }
+
+  public speakActiveDialogueSentence(): void {
+    if (!this.activeDialogue) return;
+    const fullText = this.activeDialogue.echoEn
+      ? `${this.activeDialogue.resolvedEn} ${this.activeDialogue.echoEn}`
+      : this.activeDialogue.resolvedEn;
+    const res = this.sound.speakEnglishSentence(fullText);
+    this.activeDialogue.speechNoteVi = res.fallbackMessageVi;
+    this.emitChange();
+  }
+
+  public openEndingBanner(): void {
+    this.activeModal = 'ending_banner';
     this.emitChange();
   }
 
@@ -440,6 +507,7 @@ export class GameController {
       LEXICON_INDEX,
     );
     this.lastBattleAnim = 'none';
+    this.lastBattleVisual = null;
     this.sound.playTrack('wild_battle');
     this.syncQuestsAndNotify();
   }
@@ -482,6 +550,7 @@ export class GameController {
       },
     ];
     this.lastBattleAnim = 'none';
+    this.lastBattleVisual = null;
     this.sound.playTrack(npc.trainerBattle.isBoss ? 'boss_battle' : 'wild_battle');
     this.syncQuestsAndNotify();
   }
@@ -489,9 +558,11 @@ export class GameController {
   public submitBattleAction(action: PlayerBattleAction): void {
     if (!this.activeBattle || this.activeBattle.outcome !== 'ongoing') return;
 
+    let usedCharm = false;
     if (action.kind === 'item') {
       const def = ITEMS_BY_ID[action.itemId];
       if (def?.category === 'charm') {
+        usedCharm = true;
         this.sound.playSfx('chime');
         this.lastBattleAnim = 'capture';
       } else {
@@ -516,11 +587,59 @@ export class GameController {
     for (const log of turnLogs) {
       recordSentenceExposure(this.state, log.messageEn, 'battle_log', LEXICON_INDEX);
       if (log.kind === 'damage') {
-        if (log.messageEn.includes('natural weakness')) {
+        if (log.isSuperEffective || log.messageEn.includes('natural weakness')) {
           this.sound.playSfx('super_hit');
         } else {
           this.sound.playSfx('hit');
         }
+      }
+    }
+
+    const cueId = this.nextVisualCueId++;
+    if (usedCharm) {
+      const capLog = [...turnLogs].reverse().find((l) => l.kind === 'capture' && l.shakes !== undefined);
+      if (capLog) {
+        this.lastBattleVisual = {
+          id: cueId,
+          kind: capLog.captured ? 'capture_success' : 'capture_break',
+          shakes: capLog.shakes,
+        };
+      }
+    } else if (action.kind === 'move') {
+      const pDmg = turnLogs.find((l) => l.kind === 'damage' && l.actor === 'player');
+      const pMove = turnLogs.find((l) => l.kind === 'move' && l.actor === 'player');
+      if (pDmg || pMove) {
+        this.lastBattleVisual = {
+          id: cueId,
+          kind: 'player_attack',
+          element: pDmg?.element ?? pMove?.element,
+          damage: pDmg?.damage,
+          isSuperEffective: pDmg?.isSuperEffective,
+        };
+      } else {
+        const eDmg = turnLogs.find((l) => l.kind === 'damage' && l.actor === 'enemy');
+        if (eDmg) {
+          this.lastBattleVisual = {
+            id: cueId,
+            kind: 'enemy_attack',
+            element: eDmg.element,
+            damage: eDmg.damage,
+            isSuperEffective: eDmg.isSuperEffective,
+          };
+        }
+      }
+    } else if (action.kind === 'item') {
+      this.lastBattleVisual = { id: cueId, kind: 'heal' };
+    } else {
+      const eDmg = turnLogs.find((l) => l.kind === 'damage' && l.actor === 'enemy');
+      if (eDmg) {
+        this.lastBattleVisual = {
+          id: cueId,
+          kind: 'enemy_attack',
+          element: eDmg.element,
+          damage: eDmg.damage,
+          isSuperEffective: eDmg.isSuperEffective,
+        };
       }
     }
 
@@ -536,13 +655,23 @@ export class GameController {
     if (!this.activeBattle || this.activeBattle.outcome === 'ongoing') return;
     const outcome = this.activeBattle.outcome;
     const defeatedTrainer = this.activeTrainerNpc;
+    const wasAltarSolacern =
+      Boolean(this.state.flags.main_story_completed) &&
+      Boolean(this.state.flags.met_altar_solacern) &&
+      !this.state.flags.seen_ending_banner &&
+      defeatedTrainer === null;
+
     this.activeBattle = null;
     this.activeTrainerNpc = null;
     this.lastBattleAnim = 'none';
+    this.lastBattleVisual = null;
     this.syncRegionMusic();
 
     if (outcome === 'player_victory' && defeatedTrainer?.trainerBattle) {
       this.openDialogueById(defeatedTrainer.trainerBattle.defeatDialogueId);
+    } else if (wasAltarSolacern) {
+      this.state.flags.seen_ending_banner = true;
+      this.activeModal = 'ending_banner';
     }
     this.persistState();
     this.emitChange();
@@ -626,22 +755,27 @@ export class GameController {
 
     if (session.outcome === 'player_defeat') {
       healPartyInState(this.state, MOVES_BY_ID);
+      const hub = MAPS_BY_ID.mosslight_hub;
       this.state.regionId = 'mosslight_hub';
-      this.state.playerPos = { x: 11, y: 8, facing: 'up' };
+      this.state.playerPos = { x: hub.spawnX, y: hub.spawnY, facing: 'up' };
       this.persistState();
     }
   }
 
-  public inspectGlossWord(entry: LexiconEntry, contextTag: string): void {
+  public inspectGlossWord(entry: LexiconEntry, contextTag: string, sentenceEn: string = ''): void {
     this.sound.playSfx('gloss');
     recordWordLookup(this.state, entry.id, contextTag);
     this.activeGlossEntry = entry;
+    this.activeGlossContextTag = contextTag;
+    this.activeGlossSentenceEn = sentenceEn;
     this.activeGlossNoteVi = '';
     this.emitChange();
   }
 
   public closeGlossPopup(): void {
     this.activeGlossEntry = null;
+    this.activeGlossContextTag = '';
+    this.activeGlossSentenceEn = '';
     this.activeGlossNoteVi = '';
     this.emitChange();
   }
@@ -769,6 +903,14 @@ export class GameController {
         ? { ...this.state.settings.keyMap, ...patch.keyMap }
         : this.state.settings.keyMap,
     };
+    if (patch.cefrBand && this.activeDialogue) {
+      const currentLine = this.activeDialogue.node.lines[this.activeDialogue.lineIndex];
+      if (currentLine) {
+        const resolved = resolveDialogueLineForLevel(currentLine, this.state.settings.cefrBand);
+        this.activeDialogue.resolvedEn = resolved.en;
+        this.activeDialogue.resolvedVi = resolved.vi;
+      }
+    }
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
       sfxVolume: this.state.settings.sfxVolume,
@@ -860,10 +1002,12 @@ export class GameController {
         break;
       }
       case 'open_camp_review': {
+        this.activeDialogue = null;
         this.openCampfireReview();
         break;
       }
       case 'open_supply_post': {
+        this.activeDialogue = null;
         this.activeModal = 'supply_post';
         break;
       }
@@ -926,14 +1070,14 @@ export class GameController {
   public pushToast(messageEn: string, messageVi: string): void {
     const id = this.nextToastId++;
     this.toasts.push({ id, messageEn, messageVi });
-    if (this.toasts.length > 3) {
+    if (this.toasts.length > 2) {
       this.toasts.shift();
     }
     if (typeof window !== 'undefined') {
       window.setTimeout(() => {
         this.toasts = this.toasts.filter((t) => t.id !== id);
         this.emitChange();
-      }, 4200);
+      }, 3600);
     }
   }
 
