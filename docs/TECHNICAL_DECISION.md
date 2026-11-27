@@ -1,74 +1,41 @@
-# Quyết định kỹ thuật và báo cáo kiểm chứng giai đoạn 0
+# Quyết định kỹ thuật và kiến trúc LingoWild
 
-## 1. Bối cảnh và phương pháp kiểm chứng
+## 1. Bối cảnh và phương pháp kiểm chứng giai đoạn nền tảng
 
-Trước khi viết mã nguồn cho LingoWild, nhóm kỹ thuật thực hiện kiểm chứng độc lập toàn bộ ứng viên mã nguồn mở, mẫu khởi tạo, nguồn ngữ liệu và nguồn tài nguyên đồ họa được nêu trong `docs/RESEARCH.md`. Mọi kết luận dưới đây dựa trên việc tải mã nguồn về thư mục tạm ngoài nhánh chính, đọc trực tiếp tệp giấy phép, đối chiếu mã commit, kiểm tra cây thư mục tài nguyên và chạy thử trình biên dịch thực tế trên môi trường Node.js `v24.14.0`, npm `11.9.0`, Windows 10/11 x64.
+Trước khi viết mã nguồn cho LingoWild, nhóm kỹ thuật thực hiện kiểm chứng độc lập toàn bộ ứng viên mã nguồn mở, mẫu khởi tạo, nguồn ngữ liệu và nguồn tài nguyên đồ họa nêu trong `docs/RESEARCH.md`. Mọi kết luận dựa trên việc tải mã nguồn về thư mục tạm ngoài nhánh chính, đọc trực tiếp tệp giấy phép, đối chiếu mã commit, kiểm tra cây thư mục tài nguyên và chạy thử trình biên dịch trên môi trường Node.js `v24.14.0`, npm `11.9.0`, Windows x64.
 
-## 2. Bảng kiểm toán các kho mã nguồn và nguồn dữ liệu
+## 2. Bảng kiểm toán các kho mã nguồn và nguồn dữ liệu ban đầu
 
-| Nguồn khảo sát | Mã commit hoặc phiên bản kiểm chứng | Giấy phép mã nguồn | Giấy phép tài nguyên và dữ liệu | Kết quả chạy thử và phân tích kỹ thuật | Quyết định |
+| Nguồn khảo sát | Phiên bản kiểm chứng | Giấy phép mã | Giấy phép tài nguyên | Phân tích kỹ thuật thực tế | Quyết định |
 | --- | --- | --- | --- | --- | --- |
-| `devshareacademy/monster-tamer` | `a964bba7ca0ae1aeeb712065a01b09ce3366f395` | MIT | Không có hình ảnh và âm thanh trong kho git; gói nén rời pha trộn 14 nguồn itch.io và SoundCloud, chỉ phông chữ Kenney là CC0 | Không có `package.json`, không dùng TypeScript, tải Phaser `3.60.0` và `webfontloader` qua CDN nên hỏng khi mất mạng; logic bắt sinh vật gọi trực tiếp đối tượng giao diện và hàm ngẫu nhiên không hạt giống; dữ liệu chỉ có 5 loài, 2 chiêu, 2 vật phẩm | Loại bỏ nhập mã và tài nguyên; chỉ tham khảo ý tưởng máy trạng thái hữu hạn cho lượt đấu |
-| `phaserjs/template-vite-ts` | `d1d7d58acfcf47f97642bcb8b4967071b85f8db9` | MIT | Ảnh mẫu minh họa của Phaser Studio | Lệnh `npm ci` thất bại ngay lập tức do `package.json` khai báo `phaser@4.0.0` lệch với `phaser@3.88.2` trong `package-lock.json`; tệp `log.js` âm thầm gửi dữ liệu về máy chủ `gryzor.co` mỗi lần chạy `dev` hoặc `build`; `tsconfig.json` tắt kiểm tra khởi tạo thuộc tính | Không chép nguyên bản; tự dựng cấu hình Vite và TypeScript nghiêm ngặt không chứa mã theo dõi |
-| `Annoraaq/grid-engine` | `ddb9b61f86d3c656c3b160ea8afc5acea6067705` (`v2.55.1`) | Apache-2.0 | Không kèm tài nguyên game | Mã sạch nhưng bản `2.55.1` yêu cầu `phaser@~4.2.1` và kéo theo `rxjs`, `mnemonist` chỉ để giải quyết di chuyển theo ô lưới 4 hướng | Không cài đặt; tự viết bộ điều khiển lưới thuần TypeScript gọn nhẹ và kiểm thử trực tiếp |
-| `pokeclicker/pokeclicker` | `b6b4200d6a7f8d0528727b64155028bf18bba5bf` | ISC | Chứa tên gọi, hình ảnh và dữ liệu thương hiệu Pokémon | Dùng Gulp và KnockoutJS cũ, lối chơi nhấp chuột nhàn rỗi, vi phạm yêu cầu nguyên bản | Loại bỏ hoàn toàn |
-| `pagefaultgames/pokerogue` | `8abad7c2c14cbc2fc41f68e808424f2c62fd5479` | AGPL-3.0 | Chứa hình ảnh, âm thanh và thương hiệu Pokémon | Giấy phép copyleft mạnh AGPL-3.0 buộc mở mã toàn bộ phái sinh mạng, đồng thời dính tài sản trí tuệ của bên thứ ba | Loại bỏ hoàn toàn |
-| `Tuxemon/Tuxemon` | `4e63c45b436d372daae9f802bb5efa44232fe151` | GPL-3.0 | Pha trộn CC-BY-SA 4.0 và GPL-3.0 từ nhiều tác giả | Viết bằng Python và Pygame; nhập mã hoặc gói tài nguyên sẽ kéo theo nghĩa vụ copyleft GPL-3.0 hoặc CC-BY-SA 4.0 phức tạp | Không nhập mã hay tài nguyên; chỉ tham khảo cách tách dữ liệu loài và kỹ năng ra tệp cấu hình |
-| `rspeer/wordfreq` | `912caf64b657478d1dff1138efdc078947d54bb1` | Apache-2.0 | Dữ liệu tần suất theo giấy phép CC-BY-SA 4.0 | Nhúng bảng dữ liệu vào ứng dụng tĩnh phía máy khách sẽ kích hoạt điều khoản chia sẻ tương tự CC-BY-SA 4.0 | Không nhúng dữ liệu vào sản phẩm; tự biên soạn từ vựng gắn ngữ cảnh game |
-| `tatoeba.org` | Điều khoản hiện hành trên trang chủ | Nền tảng mã mở | Văn bản mặc định CC-BY 2.0 FR, một phần nhỏ CC0, âm thanh cấp phép riêng từng cá nhân | Câu ví dụ đời sống hiện đại lệch tông bối cảnh thám hiểm sinh vật; trộn lẫn câu cộng đồng chưa biên tập dễ sai ngữ cảnh | Không nhập tự động; tự biên soạn toàn bộ hội thoại và câu ví dụ nguyên bản trong bối cảnh LingoWild |
-| `kenney.nl/assets` | Xác minh trực tiếp tệp `License.txt` | Không áp dụng | CC0 1.0 Universal | Cho phép dùng tự do kể cả thương mại, tuy nhiên phông chữ pixel của Kenney thiếu dấu tiếng Việt tổ hợp nên gây lỗi hiển thị khi ghép câu song ngữ | Dùng bảng màu và phong cách pixel tối giản; dùng phông chữ hỗ trợ đầy đủ tiếng Việt kết hợp bộ sinh tài nguyên pixel nội bộ |
+| `devshareacademy/monster-tamer` | `a964bba7` | MIT | Rỗng ảnh và nhạc trong git; gói rời pha trộn 14 nguồn itch.io và SoundCloud | Không có `package.json`, không dùng TypeScript, tải Phaser qua CDN nên hỏng khi mất mạng; công thức bắt sinh vật trộn trực tiếp vào đối tượng hiển thị | Không nhập mã hay tài nguyên; chỉ tham khảo máy trạng thái lượt đấu |
+| `phaserjs/template-vite-ts` | `d1d7d58a` | MIT | Ảnh mẫu Phaser Studio | Lệch phiên bản trong `package-lock.json` làm `npm ci` lỗi; tệp `log.js` ngầm gọi máy chủ `gryzor.co` mỗi lần đóng gói | Không chép mẫu; dựng cấu hình Vite và TypeScript nghiêm ngặt sạch theo dõi |
+| `Annoraaq/grid-engine` | `ddb9b61f` (`v2.55.1`) | Apache-2.0 | Không kèm tài nguyên | Yêu cầu `phaser@~4.2.1` và kéo theo `rxjs`, `mnemonist` chỉ cho di chuyển lưới 4 hướng | Tự viết bộ điều khiển ô lưới thuần TypeScript gọn nhẹ |
+| `pokeclicker` và `pokerogue` | `b6b4200d` / `8abad7c2` | ISC / AGPL-3.0 | Chứa tài sản trí tuệ Pokémon | Dính bản quyền thương mại bên thứ ba và điều khoản AGPL-3.0 | Loại bỏ hoàn toàn |
+| `Tuxemon/Tuxemon` | `4e63c45b` | GPL-3.0 | Pha trộn CC-BY-SA 4.0 và GPL-3.0 | Viết bằng Python/Pygame; nhập tài nguyên hoặc mã sẽ kích hoạt nghĩa vụ copyleft | Chỉ tham khảo cách tách dữ liệu loài và chiêu thức ra tệp cấu hình |
+| `wordfreq` và `Tatoeba` | `912caf64` / trang chủ | Apache-2.0 / mở | CC-BY-SA 4.0 và CC-BY 2.0 FR | Nhúng dữ liệu kéo theo copyleft và câu ví dụ đời thường lệch bối cảnh thám hiểm | Tự biên soạn toàn bộ từ vựng, cụm từ và hội thoại gắn với thế giới game |
+| `Kenney Roguelike/RPG Pack` | Tệp `License.txt` gốc | Không áp dụng | CC0 1.0 Universal | Sạch bản quyền tuyệt đối, giàu chi tiết địa hình rừng, nước, đường mòn, mái nhà | Sử dụng làm nền địa hình chính trong `assets-src/kenney-roguelike-cc0/` |
+| `Sharm Tiny 16: Basic` | Tệp `ATTRIBUTION.txt` gốc | Không áp dụng | CC-BY 3.0 / 4.0 | Bộ nhân vật bước đi 4 hướng, rương gỗ, lửa trại và vách đá rất đồng bộ tỷ lệ `16x16` | Sử dụng có ghi công chuẩn trong `assets-src/sharm-tiny16-ccby/` và `CREDITS.md` |
 
-## 3. Kết quả hai bản dựng thử nghiệm thực tế
+## 3. Phản biện và bài học thiết kế khi nâng cấp lên bản 1.1
 
-Nhóm đã thực hiện hai bản dựng độc lập trong thư mục kiểm thử để đo khả năng biên dịch, dung lượng gói tin và độ tương thích công cụ:
+Sau đợt rà soát nghiệm thu độc lập đối với mốc `8bd1b89`, nhóm đối chiếu sản phẩm với các chuẩn mực thiết kế của Pokémon Emerald, Pokémon HeartGold, Stardew Valley, Eastward, Cassette Beasts, Coromon và Nexomon để giải quyết sáu vấn đề trọng tâm mà không viết lại dự án hay tạo giao diện trùng lặp:
 
-1. Bản dựng thử A (`phaserjs/template-vite-ts` sau khi bỏ qua `log.js`):
-   - Lệnh `npm ci --ignore-scripts` báo lỗi `EUSAGE` vì tệp khóa phiên bản trên kho gốc bị lệch (`phaser@3.88.2` so với `phaser@4.0.0` trong `package.json`).
-   - Sau khi cài lại bằng `npm install --ignore-scripts`, lệnh `vite build` tạo ra gói `phaser` nặng `1.352,41 kB` và mã khởi tạo `3,14 kB`.
-   - Rủi ro lớn: Phaser `4.0` thay đổi tầng dựng hình WebGL, nhiều tài liệu và hành vi bản đồ ô lưới chưa ổn định bằng nhánh `3.x` cuối cùng.
-
-2. Bản dựng thử B (Khởi tạo sạch với `phaser@3.90.0`, `vite@6.3.5`, `typescript@5.8.3` chế độ nghiêm ngặt tối đa):
-   - Cài đặt sạch 17 gói phụ thuộc trong 9 giây, không có kịch bản hậu cài đặt đáng ngờ.
-   - Kiểm tra kiểu với `strict: true`, `noUncheckedIndexedAccess: true`, `noImplicitOverride: true` đạt 0 lỗi.
-   - Đóng gói sản phẩm hoàn tất trong `4,15 giây`, tổng dung lượng sau nén gzip đạt khoảng `340,30 kB`, tách riêng gói thư viện Phaser để tận dụng bộ nhớ đệm trình duyệt.
-   - Máy kiểm thử đã có sẵn trình duyệt Chromium của Playwright (`chromium-1255`), cho phép chạy kiểm thử đầu cuối tự động, chụp ảnh màn hình thực tế và thu thập chỉ số khung hình.
-
-## 4. Phản biện độc lập đối với tài liệu nghiên cứu ban đầu
-
-Qua đối chứng thực nghiệm, tài liệu `docs/RESEARCH.md` có định hướng sản phẩm rất tốt ở triết lý đặt trải nghiệm chơi lên trước việc học, nhưng có 5 giả định kỹ thuật cần điều chỉnh triệt để:
-
-1. Đánh giá quá lạc quan về `devshareacademy/monster-tamer`: Tài liệu ban đầu xếp kho này làm ứng viên số một và kỳ vọng có thể tận dụng mã nguồn. Thực tế đây là bài hướng dẫn viết bằng JavaScript thuần, phụ thuộc CDN, rỗng thư mục hình ảnh và âm thanh trong git, trộn lẫn tài nguyên itch.io không rõ quyền tái phân phối trên kho mã công khai và gắn chặt công thức chiến đấu vào đối tượng hiển thị của Phaser. Việc sửa mã này sang TypeScript nghiêm ngặt tốn kém và rủi ro hơn nhiều so với viết tầng nghiệp vụ sạch ngay từ đầu.
-2. Bỏ sót mã theo dõi ngầm và lỗi tệp khóa trong `phaserjs/template-vite-ts`: Tài liệu ban đầu đề xuất dùng mẫu chính thức của Phaser nhưng chưa phát hiện tệp `log.js` tự động kết nối tới `gryzor.co` mỗi lần chạy lệnh, đi ngược trực tiếp nguyên tắc không thu thập dữ liệu mặc định và quy tắc an toàn chuỗi cung ứng trong `AGENTS.md`.
-3. Rủi ro giấy phép phái sinh từ `wordfreq` và `Tatoeba`: Cả hai nguồn đều mang điều khoản CC-BY-SA 4.0 hoặc CC-BY 2.0 FR với chất lượng câu không đồng nhất với thế giới giả tưởng. Với quy mô 300 mục từ và 150 đoạn hội thoại, phương án biên soạn nguyên bản 100% gắn liền với sinh thái, nhiệm vụ, chiêu thức và vật phẩm của LingoWild vừa sạch hoàn toàn về bản quyền, vừa giúp người chơi nhớ từ nhờ ngữ cảnh câu chuyện liền mạch.
-4. Giới hạn hiển thị tiếng Việt trong khung vẽ pixel: Vẽ hội thoại song ngữ Anh Việt và cửa sổ giải nghĩa từ trực tiếp bằng đối tượng văn bản của Phaser dễ bị nhòe dấu thanh tiếng Việt trên màn hình mật độ điểm ảnh cao, khó bấm chọn từng từ trên điện thoại và không hỗ trợ trình đọc màn hình. Giải pháp tối ưu là kết hợp hai lớp: Phaser `3.90.0` chuyên trách thế giới pixel 2D, chuyển động, hạt thời tiết và sân đấu; lớp giao diện DOM/CSS thuần TypeScript mang phong cách sổ tay thực địa đảm nhận hội thoại bấm tra từ, thực đơn chiến đấu, túi đồ, sổ sinh vật và điều khiển cảm ứng.
-5. Ước lượng thời lượng chơi 60 đến 120 phút: Với phạm vi 1 khu trại trung tâm, 4 vùng liên kết, 12 nhiệm vụ và 3 thủ lĩnh vùng mà không dùng thủ thuật kéo dài thời gian bằng cày cấp lặp lại hay câu hỏi chắn đường, người chơi đi thẳng tuyến chính sẽ hoàn thành trong khoảng 25 đến 45 phút, còn người chơi khám phá trọn vẹn 30 loài, đọc sổ thực địa và ôn tập tự nguyện sẽ đạt khoảng 60 đến 90 phút. Tài liệu bàn giao cần công bố đúng thời lượng đo thực tế thay vì giữ con số mục tiêu cứng.
-
-## 5. Kiến trúc lựa chọn và phương án dự phòng
-
-### Lựa chọn chính thức
-
-- Công cụ nền: `phaser@3.90.0` (MIT), `vite@6.3.5` (MIT), `typescript@5.8.3` (Apache-2.0), `vitest` (MIT) cho kiểm thử đơn vị và tích hợp, `@playwright/test` (Apache-2.0) cho kiểm thử trình duyệt thực tế. Mọi phiên bản được khóa chặt trong `package-lock.json`.
-- Tách biệt hoàn toàn miền nghiệp vụ (`src/domain/`) khỏi tầng hiển thị (`src/scenes/`, `src/ui/`):
-  - `src/domain/rng.ts`: Bộ sinh số giả ngẫu nhiên xác định Mulberry32 có hạt giống để tái lập 100% kết quả chiến đấu, tỷ lệ thu phục và chạm trán trong kiểm thử.
-  - `src/domain/types.ts`, `src/domain/battle.ts`, `src/domain/capture.ts`: Hệ thống chiến đấu theo lượt có 6 nguyên tố tự nhiên (Lá Rừng, Suối Nước, Đất Nung, Gió Mây, Tia Chớp, Ánh Sao), trạng thái bất lợi, đổi sinh vật, dùng vật phẩm, rút lui và công thức thu phục theo máu cùng trạng thái mà không bao giờ bật câu đố chắn ngang.
-  - `src/domain/world.ts`, `src/domain/quests.ts`, `src/domain/progression.ts`: Quản lý 1 khu trại trung tâm và 4 vùng sinh thái liên kết, chu kỳ ngày đêm, vật cản mở đường theo tiến độ nhiệm vụ, 15 nhân vật phụ, 12 nhiệm vụ có điểm kết thúc rõ ràng và 3 thủ lĩnh vùng.
-  - `src/domain/learning.ts`: Bộ tách từ ngữ cảnh, tra nghĩa tiếng Việt tức thời khi chạm vào từ, phát âm qua Web Speech API có chế độ dự phòng văn bản phiên âm khi trình duyệt thiếu giọng đọc, lưu từ tự nguyện, theo dõi mức độ quen thuộc và gợi ý ôn tập nhẹ nhàng bên lửa trại.
-  - `src/domain/save.ts`: Lưu trữ trên `localStorage` kèm cơ chế sao lưu dự phòng vào `IndexedDB`, có số hiệu phiên bản cấu trúc, kiểm tra tính toàn vẹn, chống tràn dung lượng, khôi phục bản lưu trước khi gặp dữ liệu hỏng, hỗ trợ xuất và nhập tệp JSON an toàn.
-- Tài nguyên đồ họa và âm thanh nguyên bản:
-  - Xây dựng trình sinh bảng hình ảnh pixel xác định (`scripts/generate-assets.ts`) xuất ra các tệp PNG thật trong `public/assets/sprites/` theo đúng bảng màu rừng rêu, đất nung, kem giấy và nước suối. Toàn bộ 30 loài sinh vật (gồm 3 loài khởi đầu và các nhánh tiến hóa), nhân vật chính, 15 nhân vật phụ, biểu tượng vật phẩm và bộ ô bản đồ 4 vùng đều là tài nguyên nguyên bản do dự án tự tạo, không phụ thuộc bên thứ ba.
-  - Hệ thống âm thanh tổng hợp bằng Web Audio API nhiều kênh (nhạc nền riêng theo từng vùng, trận đấu thường, trận đấu thủ lĩnh, lửa trại và hiệu ứng âm thanh tương tác), tách riêng thanh trượt nhạc nền và hiệu ứng, tự động chuyển sang chế độ im lặng an toàn nếu thiết bị tắt âm thanh.
-- Triển khai tĩnh: Cấu hình đường dẫn tương đối `./` (hoặc `/Pokemon/` tương thích tự động trên GitHub Pages và máy chủ tĩnh nội bộ), kèm trình quản lý bộ nhớ đệm ngoại tuyến an toàn.
-
-### Phương án dự phòng
-
-- Nếu môi trường trình duyệt kiểm thử hoặc thiết bị người dùng không khởi tạo được ngữ cảnh WebGL, Phaser ở chế độ `Phaser.AUTO` kết hợp cấu hình dự phòng `Phaser.CANVAS` sẽ tự động chuyển về Canvas 2D mà không làm gián đoạn trò chơi.
-- Nếu bộ nhớ trình duyệt bị khóa hoặc đầy (`QuotaExceededError`), tầng lưu trữ giữ nguyên phiên chơi trong bộ nhớ RAM, cảnh báo nhẹ trên giao diện và cho phép người chơi tải tệp lưu `.json` về máy.
-- Nếu trình duyệt không hỗ trợ `speechSynthesis` hoặc không có giọng tiếng Anh ngoại tuyến, nút nghe tự động hiển thị phiên âm dễ đọc cùng giải thích ngữ cảnh mà không phát sinh lỗi bảng điều khiển.
-
-## 6. Kiểm tra công cụ mở rộng và quy trình kiểm định dữ liệu
-
-- Qua rà soát các kỹ năng sẵn có trong môi trường làm việc và kho tiện ích, không có gói mở rộng chuyên biệt nào cho Phaser 2D cần cài thêm; các gói trên chợ tiện ích như Unity hay Meshy thiên về 3D và phụ thuộc dịch vụ ngoài nên không phù hợp. Toàn bộ quy trình được thực hiện trực tiếp bằng bộ công cụ chuẩn đã kiểm chứng.
-- Quy trình kiểm định dữ liệu tự động (`scripts/validate-data.ts`) sẽ chạy trước mỗi lần đóng gói để đảm bảo:
-  - Đủ và đúng cấu trúc tối thiểu 30 loài sinh vật nguyên bản, 3 loài khởi đầu, 40 chiêu thức, 15 nhân vật phụ, 12 nhiệm vụ, 3 thủ lĩnh vùng, 1 khu trung tâm và 4 vùng liên kết.
-  - Tối thiểu 300 mục từ tiếng Anh đã biên tập nghĩa tiếng Việt, từ loại, phiên âm, cấp độ tham chiếu A1 đến B2 và câu ví dụ gắn với thế giới trò chơi; tối thiểu 150 đoạn hội thoại và ghi chép thực địa có ngữ cảnh.
-  - Mọi liên kết mã loài, chiêu thức, vật phẩm, bản đồ, cửa chuyển vùng, nhân vật và điều kiện nhiệm vụ đều hợp lệ 100%, không có tham chiếu mồ côi và không trùng lặp nội dung giả tạo.
+1. Từ hình chữ nhật tự vẽ sang quy trình kết hợp tài nguyên pixel mở và tự nối ô 16 hướng:
+   - Ở bản đầu, việc vẽ toàn bộ cây cối, đất đá và nhà cửa bằng các hình khối đơn giản khiến bản đồ trông giống môi trường thử thuật toán.
+   - Nhóm tích hợp bộ địa hình Kenney CC0 cùng bộ nhân vật và vật cảnh Sharm CC-BY vào `assets-src/`, đồng thời xây dựng bộ tự nối ô theo mặt nạ 4 hướng Bắc Đông Nam Tây (`16` trạng thái cho đường mòn đất nện và `16` trạng thái cho bờ nước tự nhiên) trong `scripts/generate-assets.ts` và `src/scenes/WorldScene.ts`. Cây cổ thụ được tách thành lớp gốc có va chạm và lớp tán lá hiển thị phía trên nhân vật, kết hợp mái trại, cầu gỗ, thuyền sậy, hoa dại và hạt sáng môi trường để mỗi vùng có bản sắc thị giác riêng.
+2. Mở rộng không gian `32x24` và khử khoảng trống chết trên di động:
+   - Cố định khung vẽ tỷ lệ `4:3` trước đây tạo mảng đen lớn phía trên bản đồ khi cầm dọc điện thoại và gây biến dạng nếu ép giãn bằng CSS khi xoay ngang.
+   - Nhóm chuyển sang `Phaser.Scale.RESIZE` kết hợp `ResizeObserver` đồng bộ kích thước đệm điểm ảnh thực tế, đi cùng máy quay bám theo nhân vật với hệ số phóng đại nửa nguyên sắc nét từ `2x` đến `3.5x`. Bản đồ luôn phủ kín khung nhìn trên cả màn hình dọc lẫn ngang mà không méo điểm ảnh.
+3. Nâng cấp chiều sâu chiến đấu và nhận diện 30 loài sinh vật:
+   - Toàn bộ 30 loài được nâng lên khung `48x48` hai nhịp động có đổ bóng, bổ sung phân hạng độ hiếm và vai trò chiến đấu rõ ràng.
+   - Sân đấu dựng 5 phông nền chân trời riêng cho từng vùng, bổ sung bảng ảnh hiệu ứng nguyên tố `vfx.png`, chuyển động lao tới khi ra đòn, chớp sáng kèm số sát thương nổi khi trúng đòn, quỹ đạo chuông cộng hưởng khi thu phục thành công hoặc bung ra và tùy chọn tốc độ hoạt ảnh trận đấu.
+4. Nâng cấp cơ chế tiếng Anh từ gạch chân tĩnh sang thích ứng thực chất:
+   - Trong `src/domain/learning.ts`, bộ tách từ ưu tiên khớp cụm nhiều từ dài nhất trước từ đơn, chọn đúng nghĩa của từ đa nghĩa dựa trên ngữ cảnh hội thoại và chọn biến thể câu thoại phù hợp với mức A1 đến B2 của người chơi.
+   - Hồ sơ từ vựng tách riêng số lần bắt gặp thụ động (`exposures`) với mức độ thành thạo (`mastery`): nhìn thấy từ nhiều lần trong thoại tuyệt đối không tự cộng điểm thuộc từ. Bộ lập lịch tính độ ưu tiên gặp lại dựa trên số lần tra cứu, trạng thái lưu từ, khoảng cách thời gian và kết quả ôn tự nguyện để lồng ghép từ đó trở lại trong lời kể ở các điểm ngắm cảnh và bếp lửa trại.
+5. Gia cố an toàn lưu trữ và cô lập bộ nhớ đệm ngoại tuyến:
+   - `src/domain/save.ts` bổ sung bộ kiểm định sâu toàn bộ cấu trúc lồng nhau, giới hạn số học, biên tọa độ theo từng bản đồ và khóa ngoại đối chiếu trực tiếp với danh mục loài, chiêu thức, vật phẩm, nhiệm vụ và từ điển. Khi `localStorage` chứa bản cũ hơn phiên đang giữ trên bộ nhớ tạm do lỗi đầy bộ nhớ trước đó, `SaveRepository.load()` tự động ưu tiên bản trên bộ nhớ tạm để không mất tiến trình vừa chơi.
+   - `public/sw.js` gắn danh sách tệp tiền nạp xác định ngay lúc đóng gói qua `scripts/inject-sw-manifest.ts`, chỉ xóa các bộ nhớ đệm mang tiền tố `lingowild-cache-` và trả mã lỗi `503` chuẩn cho yêu cầu JS, CSS hoặc ảnh thất bại khi mất mạng thay vì trả nhầm `index.html`.
+6. Nâng cấp chuỗi công cụ và tách gọn mô-đun giao diện:
+   - Nâng cấp `vite@8.4.0` và `vitest@5.1.2` để xử lý triệt để các cảnh báo bảo mật phụ thuộc (`npm audit` đạt 0 lỗ hổng).
+   - Tách `src/ui/gameUi.ts` theo đúng trách nhiệm thực tế thành `battleView.ts`, `journalView.ts`, `uiHelpers.ts` và bộ điều phối `gameUi.ts` mà không sinh lớp trung gian rườm rà.

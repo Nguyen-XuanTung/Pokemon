@@ -6,6 +6,7 @@ import { createBattleSession, stepBattleTurn } from '../../src/domain/battle.ts'
 import { computeCaptureProbability } from '../../src/domain/capture.ts';
 import { awardCreatureExperience, createCreatureInstance, expRequiredForLevel } from '../../src/domain/creatures.ts';
 import { SeededRng } from '../../src/domain/rng.ts';
+import { buySupplyItem, createInitialGameState, useFieldItem } from '../../src/domain/state.ts';
 
 describe('Capture probability and non-quiz bonding', () => {
   it('increases capture probability monotonically with lower HP, sleep status, and stronger charms', () => {
@@ -149,5 +150,50 @@ describe('Turn-based combat, statuses, leveling, and 3-stage evolution', () => {
     expect(evo2.evolvedToSpeciesId).toBe('verdantag');
     expect(partner.speciesId).toBe('verdantag');
     expect(partner.level).toBeGreaterThanOrEqual(20);
+  });
+
+  it('validates field item usage (tonics, herbs, tea, ward lanterns) and supply post token bounds', () => {
+    const state = createInitialGameState(404);
+    const partner = createCreatureInstance({
+      uid: 'field_p1',
+      species: SPECIES_BY_ID.mosskit!,
+      level: 8,
+      bondedRegion: 'mosslight_hub',
+      movesById: MOVES_BY_ID,
+    });
+    state.party = [partner];
+    state.inventory = [
+      { itemId: 'dew_tonic', quantity: 2 },
+      { itemId: 'clear_herb', quantity: 1 },
+      { itemId: 'breeze_tea', quantity: 1 },
+      { itemId: 'calm_lantern', quantity: 1 },
+      { itemId: 'moss_charm', quantity: 1 },
+    ];
+
+    // Full HP/PP/clean status rejects tonic waste
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.dew_tonic! }).ok).toBe(false);
+    // Charm cannot be used outside wild battle
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.moss_charm! }).ok).toBe(false);
+
+    // Damage HP, apply status, reduce PP, then use each field item
+    partner.currentHp = Math.max(1, partner.maxHp - 15);
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.dew_tonic! }).ok).toBe(true);
+    expect(partner.currentHp).toBe(partner.maxHp);
+
+    partner.status = 'poison';
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.clear_herb! }).ok).toBe(true);
+    expect(partner.status).toBeNull();
+
+    partner.moves[0]!.pp = 0;
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.breeze_tea! }).ok).toBe(true);
+    expect(partner.moves[0]!.pp).toBeGreaterThan(0);
+
+    expect(useFieldItem({ state, item: ITEMS_BY_ID.calm_lantern! }).ok).toBe(true);
+    expect(state.wardStepsRemaining).toBe(45);
+
+    // Supply post purchase checks token balance and rejects priceless key items
+    expect(buySupplyItem({ state, item: ITEMS_BY_ID.reed_ferry_pass!, quantity: 1 }).ok).toBe(false);
+    expect(buySupplyItem({ state, item: ITEMS_BY_ID.star_charm!, quantity: 10 }).ok).toBe(false);
+    expect(buySupplyItem({ state, item: ITEMS_BY_ID.dew_tonic!, quantity: 2 }).ok).toBe(true);
   });
 });

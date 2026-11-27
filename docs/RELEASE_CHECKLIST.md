@@ -1,34 +1,29 @@
-# Danh mục kiểm tra trước bàn giao phiên bản 1.0
+# Danh mục kiểm tra bàn giao LingoWild 1.1
 
-## 1. Kiến trúc và an toàn chuỗi cung ứng
+## 1. Kiến trúc, phụ thuộc và an toàn chuỗi cung ứng
 
-- [x] Đã thực hiện kiểm toán độc lập các kho mã nguồn mở và ghi nhận bằng chứng thực tế trong `docs/TECHNICAL_DECISION.md`.
-- [x] Không sử dụng tệp `log.js` gửi dữ liệu theo dõi ngầm từ mẫu khởi tạo bên ngoài.
-- [x] Tách biệt hoàn toàn tầng miền nghiệp vụ (`src/domain/`) khỏi tầng dựng hình Phaser (`src/scenes/`) và tầng giao diện sổ thực địa (`src/ui/`).
-- [x] Bộ sinh số giả ngẫu nhiên có hạt giống xác định (`SeededRng`), không gọi mạng trong chiến đấu hay thu phục.
-- [x] Khóa chặt phiên bản phụ thuộc trong `package.json` và `package-lock.json`, cài đặt an toàn với cờ bỏ qua kịch bản hậu cài đặt lạ.
-- [x] Không chứa khóa bí mật, mã thông báo dịch vụ ngoài hay thu thập dữ liệu cá nhân trong mã máy khách.
+- [x] Giữ nguyên kiến trúc cốt lõi hợp lệ trên nhánh `develop/lingowild`, không tạo giao diện thứ hai và không sinh tệp trùng lặp kiểu `v2`.
+- [x] Kiểm tra lỗ hổng bảo mật bằng `npm audit` đạt 0 lỗ hổng sau khi nâng cấp `vite@8.4.0`, `vitest@5.1.2` và `@vitest/coverage-v8@5.1.2` kèm khóa chặt `package-lock.json`.
+- [x] Tách gọn trách nhiệm giao diện thành `src/ui/gameUi.ts`, `src/ui/battleView.ts`, `src/ui/journalView.ts` và `src/ui/uiHelpers.ts`; giữ tầng nghiệp vụ thuần trong `src/domain/` độc lập khỏi Phaser và DOM.
+- [x] Không chứa khóa bí mật, mã theo dõi ngầm hay dữ liệu cá nhân trong mã máy khách.
 
-## 2. Phạm vi nội dung và trải nghiệm cốt lõi
+## 2. Tài nguyên mở, thế giới 5 vùng và chiến đấu sinh vật
 
-- [x] Đủ 1 khu trại trung tâm (`Mosslight Camp`) và 4 vùng sinh thái liên kết hai chiều (`Whisperwood Glen`, `Reedwater Fen`, `Terracotta Ridge`, `Starfall Sanctuary`).
-- [x] Đủ 30 loài sinh vật nguyên bản (gồm 3 loài khởi đầu tiến hóa 3 bậc và 21 loài hoang dã), tất cả đều có thể thu phục được trong chế độ chơi đơn.
-- [x] Đủ 42 chiêu thức thuộc 6 nguyên tố cân bằng đối xứng (mỗi hệ thắng 2 hệ và yếu trước 2 hệ) cùng 4 trạng thái chiến đấu.
-- [x] Đủ 16 nhân vật phụ có tên riêng, 12 nhiệm vụ có điểm kết thúc và phần thưởng rõ ràng, 3 Thủ lĩnh vùng và 1 Trưởng lão khảo nghiệm cuối tại thánh địa.
-- [x] Đủ 321 mục từ vựng Anh Việt biên soạn theo ngữ cảnh trò chơi (phân bổ từ A1 đến B2) và 174 đoạn hội thoại, biển chỉ đường, văn bia, hồ sơ thực địa.
-- [x] Đảm bảo triết lý đặt trò chơi lên trước: không bao giờ chặn tiến trình hay biến thao tác bắt sinh vật thành bài kiểm tra từ vựng.
+- [x] Xác minh giấy phép và ghi công đầy đủ cho hai bộ pixel mã mở Kenney `Roguelike/RPG Pack` (CC0 1.0) và Sharm `Tiny 16: Basic` (CC-BY 3.0 / 4.0) trong `assets-src/` và `CREDITS.md`.
+- [x] Nâng cấp toàn bộ 5 bản đồ lên kích thước `32x24` với đường mòn tự nối 16 hướng, bờ nước tự động 16 hướng, cây cổ thụ hai lớp có tán che trên nhân vật, kiến trúc trại, cầu gỗ, thuyền, điểm ngắm cảnh, rương ẩn và kiểm định đường đi bằng thuật toán tìm kiếm theo chiều rộng.
+- [x] Nâng cấp toàn bộ 30 loài sinh vật lên khung hình `48x48` hai nhịp thở có đổ bóng, phân loại độ hiếm và vai trò chiến đấu; dựng 5 sân đấu theo vùng kèm đòn bay nguyên tố, số sát thương nổi, hoạt ảnh thu phục thành công và thất bại cùng tùy chọn tốc độ trận đấu.
 
-## 3. Đồ họa, âm thanh, điều khiển và trợ năng
+## 3. Cơ chế tiếng Anh thích ứng và triết lý đặt trò chơi lên trước
 
-- [x] Hình ảnh pixel thống nhất bảng màu rừng rêu, đất nung, kem giấy và nước suối; không dùng thẻ quản trị, chuyển sắc tím, hiệu ứng kính mờ hay biểu tượng cảm xúc thay hình vẽ.
-- [x] Hỗ trợ điều khiển bàn phím (cụm mũi tên, `WASD`, cho phép đổi phím trực tiếp trong cài đặt) và cụm phím cảm ứng tự động trên thiết bị di động.
-- [x] Hỗ trợ chế độ độ tương phản cao, giảm chuyển động, phóng to cỡ chữ, thanh trượt âm lượng nhạc nền riêng, thanh trượt hiệu ứng riêng và nút tắt tiếng hoàn toàn.
-- [x] Phát âm từ tiếng Anh qua Web Speech API kèm thông báo phiên âm dự phòng khi trình duyệt không có giọng đọc.
+- [x] Đủ 343 mục từ và cụm từ Anh Việt đã kiểm định nghĩa, từ loại, phiên âm và ví dụ; hỗ trợ cụm nhiều từ và giải nghĩa từ đa nghĩa theo ngữ cảnh câu.
+- [x] Đủ 179 đoạn hội thoại có biến thể câu theo trình độ từ A1 đến B2 và hỗ trợ phát âm cả câu hội thoại qua Web Speech API kèm thông báo phiên âm dự phòng.
+- [x] Tách bạch hoàn toàn số lần nhìn thấy từ thụ động với mức độ ghi nhớ chủ động; vận hành bộ lập lịch gặp lại từ theo thời gian và lịch sử tra cứu tại các điểm ngắm cảnh cùng lửa trại.
+- [x] Đảm bảo người chơi hoàn thành trọn vẹn cốt truyện từ đầu đến cuối mà không cần mở bất kỳ lượt ôn tập từ vựng nào.
 
-## 4. Lưu trữ, triển khai tĩnh và kiểm thử cổng nghiệm thu
+## 4. Giao diện, di động, lưu trữ, ngoại tuyến và kiểm thử nghiệm thu
 
-- [x] Tầng lưu trữ có số hiệu phiên bản, mã kiểm tra toàn vẹn FNV-1a, bản sao lưu tự động khôi phục khi bản lưu chính bị hỏng, giới hạn kích thước chống tràn và chế độ lưu tạm trên RAM khi bộ nhớ trình duyệt đầy.
-- [x] Hỗ trợ xuất và nhập tệp lưu định dạng `.json` có kiểm tra cấu trúc nghiêm ngặt.
-- [x] Đường dẫn tài nguyên tương đối tương thích triển khai tĩnh trên GitHub Pages dưới thư mục con `/Pokemon/` kèm trình phục vụ bộ nhớ đệm ngoại tuyến `public/sw.js`.
-- [x] Chạy thực tế kiểm tra dữ liệu (`validate:data`), quy tắc dự án (`lint`), kiểm tra kiểu nghiêm ngặt (`typecheck`), kiểm thử đơn vị, kiểm thử tích hợp xuyên suốt cốt truyện và kiểm thử trình duyệt thực tế trên máy tính cùng thiết bị di động.
-- [x] Mọi thay đổi thực hiện trên nhánh `develop/lingowild`, giữ nguyên lịch sử git, không tự ý gộp vào nhánh `main`.
+- [x] Hoàn thiện phong cách sổ gỗ và giấy thực địa trên màn hình mở đầu, thanh trạng thái gọn, hội thoại, túi đồ, đội hình, sổ từ, bản đồ la bàn 5 vùng và màn hình tổng kết cuối truyện.
+- [x] Trên di động dọc (`412x915`) và ngang (`915x412`), loại bỏ khoảng trống chết phía trên bản đồ, thông báo nhỏ gọn không che khu vực chơi, cụm điều khiển chữ thập trực quan hoàn thành nhiệm vụ không cần bàn phím.
+- [x] Kiểm định sâu cấu trúc tệp lưu, giới hạn số, tọa độ bản đồ và toàn bộ khóa ngoại; chặn tệp nhập lỗi làm mất bản lưu hợp lệ; ưu tiên bản lưu bộ nhớ tạm khi có dữ liệu mới hơn `localStorage`.
+- [x] Giới hạn `public/sw.js` chỉ quản lý bộ nhớ đệm mang tiền tố `lingowild-cache-`, không bao giờ trả `index.html` thay cho tệp mã nguồn, định kiểu hoặc hình ảnh thất bại; cấu hình chạy đủ kiểm thử đơn vị, tích hợp, độ phủ và Playwright E2E trên quy trình tích hợp liên tục.
+- [x] Giữ nguyên kiểm thử tích hợp có dữ liệu mẫu với tên mô tả trung thực, đồng thời bổ sung kiểm thử phá đảo tự nhiên 100% thao tác người chơi cho cả 3 sinh vật khởi đầu và kịch bản trình duyệt đầu cuối từ màn hình mở đầu tới đoạn kết.
