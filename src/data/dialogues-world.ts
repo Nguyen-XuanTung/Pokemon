@@ -1,0 +1,924 @@
+import type { DialogueNode } from '../domain/types.ts';
+
+export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
+  {
+    id: 'sign_hub_crossroads',
+    speaker: 'Basin Trail Signpost',
+    speakerRoleVi: 'Biển chỉ đường ngã tư',
+    cefr: 'A1',
+    regionId: 'mosslight_hub',
+    contextTag: 'world_sign',
+    lines: [
+      {
+        en: 'West: Whisperwood Glen. East: Reedwater Fen. South: Terracotta Ridge. North: Starfall Sanctuary.',
+        vi: 'Tây: Thung Lũng Rừng Thầm. Đông: Đầm Sậy Nước Trong. Nam: Đèo Đất Nung. Bắc: Thánh Địa Sao Rơi.',
+        focusWords: ['west', 'east', 'south', 'north', 'sanctuary'],
+      },
+    ],
+  },
+  {
+    id: 'sign_rowan_board',
+    speaker: 'Rowan Field Board',
+    speakerRoleVi: 'Bảng ghi chú thực địa',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'world_sign',
+    lines: [
+      {
+        en: 'Field Rule One: Never rush! Lowering a wild creature health or inducing calm sleep helps chimes resonate.',
+        vi: 'Nguyên tắc thực địa số một: Đừng vội vàng! Giảm máu sinh vật hoang hoặc ru ngủ êm sẽ giúp tiếng chuông dễ cộng hưởng.',
+        focusWords: ['wild', 'creature', 'health', 'induce', 'chime', 'resonate'],
+      },
+      {
+        en: 'Field Rule Two: English clues enrich your journey, and Vietnamese help is always welcome without penalty.',
+        vi: 'Nguyên tắc số hai: Manh mối tiếng Anh làm giàu hành trình, và trợ giúp tiếng Việt luôn sẵn sàng không chút phạt nào.',
+        focusWords: ['clue', 'journey', 'help'],
+      },
+    ],
+  },
+  {
+    id: 'sign_whisperwood_entry',
+    speaker: 'Whisperwood Ranger Notice',
+    speakerRoleVi: 'Bảng lưu ý đầu rừng',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'world_sign',
+    lines: [
+      {
+        en: 'Stay on the packed footpath for a safe walk, or step into swaying tall grass to meet woodland Wildkin.',
+        vi: 'Đi trên đường đất nện để dạo bước an toàn, hoặc rẽ vào bụi cỏ cao đung đưa để gặp các loài rừng xanh.',
+        focusWords: ['path', 'safe', 'walk', 'grass'],
+      },
+    ],
+  },
+  {
+    id: 'sign_whisperwood_dusk_clue',
+    speaker: 'Hollow Trunk Clue',
+    speakerRoleVi: 'Manh mối hốc cây cổ',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'Carved note by Haru: Shellglow hides inside damp oak hollows by day and glows brightest at dusk. Check behind eastern ferns too!',
+        vi: 'Lời khắc của Haru: Shellglow trốn trong hốc sồi ẩm ban ngày và phát sáng rõ nhất lúc chạng vạng. Nhớ tìm sau bụi dương xỉ phía đông!',
+        focusWords: ['hide', 'damp', 'hollow', 'glow', 'dusk', 'fern'],
+      },
+    ],
+  },
+  {
+    id: 'shrine_whisperwood',
+    speaker: 'Whispering Oak Stone',
+    speakerRoleVi: 'Đá cộng hưởng rừng sồi',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'world_shrine',
+    lines: [
+      {
+        en: 'Spiral leaf patterns wrap this moss-covered monolith. A gentle woodland chord hums deep inside the stone.',
+        vi: 'Hoa văn lá xoắn ốc bao quanh khối đá phủ rêu. Một hợp âm rừng xanh dịu nhẹ ngân sâu bên trong lòng đá.',
+        focusWords: ['leaf', 'moss', 'gentle', 'stone'],
+      },
+    ],
+  },
+  {
+    id: 'sign_fen_entry',
+    speaker: 'Fen Waterway Guide',
+    speakerRoleVi: 'Bảng chỉ dẫn đường thủy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'world_sign',
+    lines: [
+      {
+        en: 'Wooden bridges connect the reed islands. Lotus blossoms mark clean currents toward the northeastern Tide Arch.',
+        vi: 'Những cây cầu gỗ nối liền các đảo sậy. Hoa sen đánh dấu dòng nước sạch dẫn về Vòm Thủy Triều hướng đông bắc.',
+        focusWords: ['bridge', 'reed', 'lotus', 'current', 'arch'],
+      },
+    ],
+  },
+  {
+    id: 'sign_fen_beacon',
+    speaker: 'Misty Channel Lantern Post',
+    speakerRoleVi: 'Trụ đèn luồng sương',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'You trimmed the wick and lit the cedar lantern! Its amber reflection guides reed boats past the southern lotus cove.',
+        vi: 'Bạn khêu bấc và thắp sáng ngọn đèn tuyết tùng! Ánh vàng phản chiếu dẫn lối thuyền sậy qua vịnh hoa sen phía nam.',
+        focusWords: ['lantern', 'guide', 'reed', 'boat', 'lotus'],
+      },
+    ],
+  },
+  {
+    id: 'shrine_reedwater',
+    speaker: 'Sunken Tide Arch',
+    speakerRoleVi: 'Vòm đá thủy triều',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'world_shrine',
+    lines: [
+      {
+        en: 'Cool water laps rhythmically against carved wave motifs. Every ripple echoes across the serene wetland.',
+        vi: 'Làn nước mát vỗ nhịp nhàng vào những nét chạm hình sóng. Từng gợn nước vang vọng khắp đầm lầy thanh bình.',
+        focusWords: ['cool', 'water', 'rhythm', 'echo', 'serene'],
+      },
+    ],
+  },
+  {
+    id: 'sign_ridge_entry',
+    speaker: 'Canyon Wind Warning Sign',
+    speakerRoleVi: 'Biển báo gió hẻm núi',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'world_sign',
+    lines: [
+      {
+        en: 'Strong updrafts sweep these steep sandstone slopes! Keep tonics handy and rest beside the central windbreak fire.',
+        vi: 'Luồng gió ngược thổi mạnh dọc sườn đá dốc! Hãy giữ thuốc hồi bên mình và nghỉ cạnh bếp lửa chắn gió trung tâm.',
+        focusWords: ['strong', 'steep', 'sand', 'slope', 'tonic', 'rest'],
+      },
+    ],
+  },
+  {
+    id: 'sign_ancient_kiln',
+    speaker: 'Ancient Kiln Tablet',
+    speakerRoleVi: 'Bia đá lò gốm cổ',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'Inscription: Red clay shaped by patient hands and kindled by steady hearth fire endures a thousand mountain storms.',
+        vi: 'Văn bia khắc: Đất sét đỏ nặn bởi đôi tay kiên nhẫn và nung bằng lửa ấm bền bỉ sẽ trường tồn qua ngàn cơn bão núi.',
+        focusWords: ['inscription', 'clay', 'patient', 'kindle', 'steady', 'hearth', 'endure', 'storm'],
+      },
+    ],
+  },
+  {
+    id: 'shrine_terracotta',
+    speaker: 'Sunforge Resonance Beacon',
+    speakerRoleVi: 'Đài cộng hưởng nắng sớm',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'world_shrine',
+    lines: [
+      {
+        en: 'Polished amber minerals crown this terracotta tower, catching sunlight and projecting warm notes across the ridge.',
+        vi: 'Những tinh thể hổ phách mài nhẵn đặt trên đỉnh tháp đất nung, đón ánh mặt trời và ngân vang khắp sống đèo.',
+        focusWords: ['mineral', 'sun', 'warm', 'ridge'],
+      },
+    ],
+  },
+  {
+    id: 'sign_pillar_west',
+    speaker: 'West Star Pillar',
+    speakerRoleVi: 'Trụ đá sao tây',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'First Verse: Walk gently beneath ancient canopies, for humble roots sustain the highest branches.',
+        vi: 'Khổ thứ nhất: Hãy bước nhẹ dưới tán rừng cổ thụ, bởi bộ rễ khiêm nhường nuôi dưỡng những cành cao nhất.',
+        focusWords: ['walk', 'gentle', 'ancient', 'canopy', 'humble', 'root', 'branch'],
+      },
+    ],
+  },
+  {
+    id: 'sign_pillar_east',
+    speaker: 'East Star Pillar',
+    speakerRoleVi: 'Trụ đá sao đông',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'Second Verse: Listen to misty tides and canyon gales alike, for diverse elements safeguard natural balance.',
+        vi: 'Khổ thứ hai: Hãy lắng nghe cả con nước mờ sương lẫn gió ngàn hẻm núi, vì các nguyên tố đa dạng gìn giữ thế cân bằng.',
+        focusWords: ['mist', 'tide', 'canyon', 'gale', 'diverse', 'element', 'safeguard', 'balance'],
+      },
+    ],
+  },
+  {
+    id: 'sign_pillar_north',
+    speaker: 'North Harmony Stele',
+    speakerRoleVi: 'Bia đá hòa hợp phương bắc',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'world_clue',
+    lines: [
+      {
+        en: 'Third Verse: True resonance awakens not by force, but through patient trust between traveler and companion.',
+        vi: 'Khổ thứ ba: Cộng hưởng đích thực chẳng thức tỉnh nhờ ép buộc, mà nảy nở từ niềm tin kiên nhẫn giữa người và bạn đồng hành.',
+        focusWords: ['resonance', 'awaken', 'patient', 'trust', 'companion'],
+      },
+    ],
+  },
+  {
+    id: 'lore_rowan_elements',
+    speaker: 'Ranger Rowan',
+    speakerRoleVi: 'Trưởng đoàn nghiên cứu',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'lore_guide',
+    lines: [
+      {
+        en: 'Our basin holds six combat elements: Leaf beats Water and Stone; Water beats Ember and Stone; Ember beats Leaf and Gale.',
+        vi: 'Thung lũng có sáu nguyên tố: Lá thắng Nước và Đá; Nước thắng Lửa và Đá; Lửa thắng Lá và Gió.',
+        focusWords: ['basin', 'element', 'leaf', 'water', 'stone', 'ember', 'gale'],
+      },
+      {
+        en: 'Meanwhile, Stone beats Gale and Spark; Gale beats Leaf and Spark; and Spark beats Water and Ember!',
+        vi: 'Đồng thời, Đá thắng Gió và Điện; Gió thắng Lá và Điện; còn Điện thắng Nước và Lửa!',
+        focusWords: ['stone', 'gale', 'spark', 'water', 'ember'],
+      },
+    ],
+  },
+  {
+    id: 'lore_linh_study_tips',
+    speaker: 'Botanist Linh',
+    speakerRoleVi: 'Nhà thực vật học song ngữ',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'lore_guide',
+    lines: [
+      {
+        en: 'Whenever you tap an English word, click Save Word to bookmark it. Later at any campfire, you can practice saved words!',
+        vi: 'Mỗi khi chạm vào một từ tiếng Anh, hãy bấm Lưu từ để đánh dấu. Sau đó bên lửa trại, bạn có thể ôn lại các từ đã lưu!',
+        focusWords: ['meaning', 'campfire', 'practice'],
+      },
+    ],
+  },
+  {
+    id: 'logbook_hub_story',
+    speaker: 'Camp Logbook: Entry 1',
+    speakerRoleVi: 'Nhật ký trại: Trang 1',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'ranger_log',
+    lines: [
+      {
+        en: 'Last autumn, a shy Kindlet wandered into Mosslight Camp during heavy rain and fell asleep beside our dry firewood.',
+        vi: 'Mùa thu năm ngoái, một chú Kindlet nhút nhát đi lạc vào Trại Đèn Rêu giữa cơn mưa lớn rồi ngủ quên cạnh đống củi khô.',
+        focusWords: ['shy', 'camp', 'rain', 'wood'],
+      },
+      {
+        en: 'By morning, its warm embers helped brew herbal tea for six soaked Rangers!',
+        vi: 'Sáng hôm sau, đốm lửa ấm của nó đã giúp đun trà thảo mộc cho sáu kiểm lâm ướt mưa!',
+        focusWords: ['morning', 'warm', 'ember', 'herb', 'ranger'],
+      },
+    ],
+  },
+  {
+    id: 'logbook_forest_story',
+    speaker: 'Woodland Logbook: Entry 4',
+    speakerRoleVi: 'Nhật ký rừng: Trang 4',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'ranger_log',
+    lines: [
+      {
+        en: 'A fallen pine blocked our footpath after a night gale, until two sturdy Canopyhorns lifted the timber together.',
+        vi: 'Một thân thông đổ chắn ngang lối mòn sau trận gió đêm, cho tới khi hai chú Canopyhorn khỏe khoắn cùng nâng khúc gỗ lên.',
+        focusWords: ['path', 'night', 'gale', 'sturdy'],
+      },
+      {
+        en: 'We left sweet berries on the mossy stump as thanks for their quiet help.',
+        vi: 'Chúng tôi đặt những trái quả mọng ngọt lên gốc cây phủ rêu để cảm ơn sự giúp đỡ thầm lặng ấy.',
+        focusWords: ['berry', 'moss', 'help'],
+      },
+    ],
+  },
+  {
+    id: 'logbook_fen_story',
+    speaker: 'Wetland Logbook: Entry 9',
+    speakerRoleVi: 'Nhật ký đầm sậy: Trang 9',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'ranger_log',
+    lines: [
+      {
+        en: 'Dense fog hid every wooden bridge at twilight, so Sora whistled a soft three-note melody.',
+        vi: 'Sương dày che khuất mọi cây cầu gỗ lúc chạng vạng, nên Sora đã huýt vang giai điệu ba nốt êm dịu.',
+        focusWords: ['fog', 'bridge', 'twilight', 'whistle', 'soft'],
+      },
+      {
+        en: 'Within moments, glowing Glimmerfin aligned along the current like floating lanterns.',
+        vi: 'Chỉ lát sau, đàn Glimmerfin phát sáng đã xếp hàng dọc dòng nước như những chiếc đèn lồng nổi.',
+        focusWords: ['glow', 'align', 'current', 'float', 'lantern'],
+      },
+    ],
+  },
+  {
+    id: 'logbook_ridge_story',
+    speaker: 'Canyon Logbook: Entry 14',
+    speakerRoleVi: 'Nhật ký hẻm núi: Trang 14',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'ranger_log',
+    lines: [
+      {
+        en: 'Midday sun baked the steep sandstone ledges, making the ascent exhausting for junior scouts.',
+        vi: 'Nắng trưa nung nóng những mỏm đá sa thạch dốc đứng, khiến chặng leo trở nên vất vả với các trinh sát trẻ.',
+        focusWords: ['sun', 'steep', 'sand', 'ledge', 'scout'],
+      },
+      {
+        en: 'High overhead, a flock of Zephyrwings glided in wide circles, casting cool shade across our trail.',
+        vi: 'Tít trên cao, đàn Zephyrwing sải cánh lượn vòng rộng, tỏa bóng râm mát rượi xuống lối mòn của cả đội.',
+        focusWords: ['glide', 'cool', 'shade', 'trail'],
+      },
+    ],
+  },
+  {
+    id: 'logbook_sanctuary_story',
+    speaker: 'Observatory Chronicle: Entry 21',
+    speakerRoleVi: 'Biên niên sử đài sao: Trang 21',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'ranger_log',
+    lines: [
+      {
+        en: 'Once each season, clear starlight reflects across the upper pools while Astraloom feathers shimmer in silence.',
+        vi: 'Mỗi mùa một lần, ánh sao trong vắt soi bóng xuống mặt hồ thượng nguồn khi lông vũ Astraloom lấp lánh trong tĩnh lặng.',
+        focusWords: ['star', 'feather', 'shimmer', 'silent'],
+      },
+      {
+        en: 'Those who listen with calm hearts hear Solacern antlers chime from the northern terrace.',
+        vi: 'Người lắng nghe bằng tâm thế bình yên sẽ nghe tiếng gạc pha lê của Solacern ngân vang từ thềm bắc.',
+        focusWords: ['calm', 'antler', 'chime', 'terrace'],
+      },
+    ],
+  },
+  {
+    id: 'lore_biomes_overview',
+    speaker: 'Basin Atlas Note',
+    speakerRoleVi: 'Ghi chú bản đồ sinh cảnh',
+    cefr: 'B1',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Verdant Basin links five distinct habitats: central camp meadows, mossy oak woods, lotus marshes, red clay cliffs, and starlit ruins.',
+        vi: 'Thung Lũng Rêu Xanh nối liền năm sinh cảnh: trảng cỏ trại trung tâm, rừng sồi rêu, đầm sen, vách đất nung và phế tích sao trời.',
+        focusWords: ['basin', 'distinct', 'habitat', 'meadow', 'moss', 'lotus', 'marsh', 'clay', 'cliff', 'ruin'],
+      },
+    ],
+  },
+  {
+    id: 'lore_chime_craft',
+    speaker: 'Artisan Note: Resonance Chimes',
+    speakerRoleVi: 'Ghi chú nghề làm chuông',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Unlike cages or traps, wooden chimes invite a wild partner to join willingly through gentle acoustic resonance.',
+        vi: 'Khác với lồng hay bẫy, chuông gỗ mời gọi bạn hoang dã tự nguyện đồng hành nhờ âm thanh cộng hưởng dịu nhẹ.',
+        focusWords: ['wood', 'chime', 'wild', 'partner', 'join', 'gentle', 'resonance'],
+      },
+    ],
+  },
+  {
+    id: 'lore_day_night_rhythm',
+    speaker: 'Naturalist Note: Daily Cycles',
+    speakerRoleVi: 'Ghi chú chu kỳ ngày đêm',
+    cefr: 'B1',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Morning brings songbirds like Breezeling, midday warms Sunskink ledges, and dusk awakens Shellglow, Glimmerfin, and Starhoot.',
+        vi: 'Buổi sớm gọi chim ca như Breezeling, nắng trưa sưởi mỏm đá Sunskink, còn chiều tối đánh thức Shellglow, Glimmerfin và Starhoot.',
+        focusWords: ['morning', 'warm', 'ledge', 'dusk', 'awaken'],
+      },
+    ],
+  },
+  {
+    id: 'lore_status_tactics',
+    speaker: 'Ranger Note: Status Conditions',
+    speakerRoleVi: 'Sổ tay trạng thái chiến đấu',
+    cefr: 'B2',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Slumber pauses actions for one or two turns, paralysis slows agility, spores drain vitality, and embers soften physical strikes.',
+        vi: 'Giấc ngủ tạm dừng hành động một hai lượt, tê liệt giảm tốc độ, bào tử rút sinh lực, còn vết bỏng làm giảm đòn vật lý.',
+        focusWords: ['slumber', 'turn', 'paralyze', 'slow', 'spore', 'vitality', 'ember', 'soften', 'strike'],
+      },
+    ],
+  },
+  {
+    id: 'lore_herbal_remedies',
+    speaker: 'Greenhouse Note: Basin Herbs',
+    speakerRoleVi: 'Ghi chú nhà vườn thảo mộc',
+    cefr: 'B1',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Dew Tonic uses cool mint, Orchard Salve blends valley berries, and Sunlit Nectar comes from high canyon blossoms.',
+        vi: 'Sương Thảo Dược pha bạc hà mát, Cao Quả Rừng cô từ quả mọng thung lũng, còn Mật Hoa Nắng hái trên vách núi cao.',
+        focusWords: ['dew', 'tonic', 'cool', 'salve', 'valley', 'berry', 'nectar', 'canyon'],
+      },
+    ],
+  },
+  {
+    id: 'lore_sanctuary_pillars',
+    speaker: 'Epigraphy Summary',
+    speakerRoleVi: 'Tóm lược văn bia cổ',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Roots, tides, gales, and stars form one living circle across the basin observatory.',
+        vi: 'Rễ cây, con nước, ngọn gió và vì sao kết thành một vòng tuần hoàn sống động nơi đài quan sát thung lũng.',
+        focusWords: ['root', 'tide', 'gale', 'star', 'basin', 'observatory'],
+      },
+    ],
+  },
+  {
+    id: 'lore_warden_tradition',
+    speaker: 'History Note: Regional Wardens',
+    speakerRoleVi: 'Lịch sử các Thủ lĩnh vùng',
+    cefr: 'B2',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Sylvan tends ancient timber, Mirella guides wetland ferries, and Kaelen maintains cliffside beacons.',
+        vi: 'Sylvan chăm sóc rừng cổ thụ, Mirella dẫn lối đò đầm sậy, còn Kaelen gìn giữ những đài lửa vách núi.',
+        focusWords: ['ancient', 'guide', 'ferry', 'cliff', 'beacon'],
+      },
+    ],
+  },
+  {
+    id: 'lore_campfire_etiquette',
+    speaker: 'Trail Etiquette Card',
+    speakerRoleVi: 'Quy tắc bên bếp lửa đường rừng',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Always share warm tea with fellow travelers and leave dry kindling stacked neatly inside stone shelters.',
+        vi: 'Hãy luôn sẻ chia tách trà ấm cùng bạn đồng hành và xếp gọn củi khô trong những hốc đá trú mưa.',
+        focusWords: ['warm', 'stone', 'shelter'],
+      },
+    ],
+  },
+  {
+    id: 'lore_sound_of_reeds',
+    speaker: 'Wetland Acoustic Note',
+    speakerRoleVi: 'Ghi chú âm thanh đầm sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Hollow reeds vibrate in evening breezes, teaching Rangers how wind pitch calms startled water creatures.',
+        vi: 'Thân sậy rỗng ngân rung trong gió chiều, gợi mở cho kiểm lâm cách dùng âm điệu làm dịu loài thủy sinh giật mình.',
+        focusWords: ['hollow', 'reed', 'breeze', 'ranger', 'wind', 'calm', 'water', 'creature'],
+      },
+    ],
+  },
+  {
+    id: 'lore_kiln_glazes',
+    speaker: 'Pottery Craft Note',
+    speakerRoleVi: 'Ghi chú men gốm đèo cao',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'Crushed canyon minerals give Amber Charms their warm lustre and clear acoustic ring.',
+        vi: 'Khoáng chất nghiền mịn vùng hẻm núi tạo nên ánh sắc ấm áp và tiếng ngân trong trẻo cho Chuông Hổ Phách.',
+        focusWords: ['canyon', 'mineral', 'charm', 'warm'],
+      },
+    ],
+  },
+  {
+    id: 'lore_ward_lanterns',
+    speaker: 'Scout Gear Note: Cedar Smoke',
+    speakerRoleVi: 'Ghi chú đèn hương tuyết tùng',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'atlas_note',
+    lines: [
+      {
+        en: 'When your team health runs low deep inside tall grass, light a Cedar Lantern for forty-five quiet steps back to camp.',
+        vi: 'Khi máu cả đội xuống thấp giữa thảm cỏ rậm, hãy thắp Đèn Tuyết Tùng để có bốn mươi lăm bước yên tĩnh quay về trại.',
+        focusWords: ['team', 'health', 'grass', 'lantern', 'camp'],
+      },
+    ],
+  },
+  {
+    id: 'chat_sylvan_trees',
+    speaker: 'Warden Sylvan',
+    speakerRoleVi: 'Thủ lĩnh Rừng Thầm',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Count the rings on a fallen oak trunk to read decades of dry summers and generous autumn rains.',
+        vi: 'Đếm vòng gỗ trên thân sồi đổ có thể đọc được hàng chục năm mùa hạ khô hay mùa thu mưa thuận.',
+        focusWords: ['tree', 'read', 'rain'],
+      },
+    ],
+  },
+  {
+    id: 'chat_sylvan_briarpaw',
+    speaker: 'Warden Sylvan',
+    speakerRoleVi: 'Thủ lĩnh Rừng Thầm',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'My Briarpaw began as a tiny Mosskit who followed me home after a chilly morning drizzle.',
+        vi: 'Briarpaw của tôi vốn là một chú Mosskit nhỏ từng lẽo đẽo theo tôi về trại sau cơn mưa phùn buổi sáng.',
+        focusWords: ['follow', 'morning', 'rain'],
+      },
+    ],
+  },
+  {
+    id: 'chat_haru_woodcraft',
+    speaker: 'Woodcarver Haru',
+    speakerRoleVi: 'Nghệ nhân chuông gỗ',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'artisan_chat',
+    lines: [
+      {
+        en: 'I never cut living branches for chimes. Windfalls after a storm offer seasoned wood with the sweetest tone.',
+        vi: 'Tôi không bao giờ chặt cành tươi làm chuông. Cành khô rụng sau cơn giông cho thớ gỗ già với tiếng ngân ngọt nhất.',
+        focusWords: ['branch', 'chime', 'storm', 'wood'],
+      },
+    ],
+  },
+  {
+    id: 'chat_elena_scouting',
+    speaker: 'Scout Elena',
+    speakerRoleVi: 'Kiểm lâm trẻ Elena',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'scout_chat',
+    lines: [
+      {
+        en: 'Writing short English trail notes every morning helped me remember plant names without boring drills.',
+        vi: 'Viết vài dòng ghi chú đường rừng bằng tiếng Anh mỗi sáng giúp mình nhớ tên cây cối tự nhiên không nhàm chán.',
+        focusWords: ['trail', 'morning', 'memory'],
+      },
+    ],
+  },
+  {
+    id: 'chat_mirella_tides',
+    speaker: 'Warden Mirella',
+    speakerRoleVi: 'Thủ lĩnh Đầm Sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Even murky floodwater clears when we give wetland roots and lotus beds enough room to breathe.',
+        vi: 'Ngay cả dòng nước lũ đục ngầu cũng lắng trong khi ta dành đủ không gian cho rễ cây và đầm sen thở.',
+        focusWords: ['murky', 'water', 'root', 'lotus'],
+      },
+    ],
+  },
+  {
+    id: 'chat_mirella_brookotter',
+    speaker: 'Warden Mirella',
+    speakerRoleVi: 'Thủ lĩnh Đầm Sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Brookotter tests every wooden bridge plank each morning before travelers cross the fen.',
+        vi: 'Brookotter kiểm tra từng tấm ván cầu gỗ mỗi sáng trước khi khách bộ hành băng qua đầm sậy.',
+        focusWords: ['wood', 'bridge', 'morning', 'cross'],
+      },
+    ],
+  },
+  {
+    id: 'chat_sora_reeds',
+    speaker: 'Ferrywoman Sora',
+    speakerRoleVi: 'Người chèo đò sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'artisan_chat',
+    lines: [
+      {
+        en: 'Harvested autumn reeds dry light yet strong, letting flat boats glide over shallow lily beds.',
+        vi: 'Sậy thu hoạch mùa thu phơi khô vừa nhẹ vừa dai, giúp thuyền đáy bằng lướt êm trên thảm súng cạn.',
+        focusWords: ['reed', 'strong', 'boat', 'glide', 'shallow'],
+      },
+    ],
+  },
+  {
+    id: 'chat_noah_fishing',
+    speaker: 'Angler Noah',
+    speakerRoleVi: 'Người gác suối Noah',
+    cefr: 'A2',
+    regionId: 'reedwater_fen',
+    contextTag: 'scout_chat',
+    lines: [
+      {
+        en: 'I sit on the dock just to watch Glimmerfin shimmer beneath cool ripples at sunset.',
+        vi: 'Mình ngồi trên bến gỗ chỉ để ngắm đàn Glimmerfin lấp lánh dưới làn nước mát lúc chiều tà.',
+        focusWords: ['dock', 'shimmer', 'cool', 'water'],
+      },
+    ],
+  },
+  {
+    id: 'chat_kaelen_kilns',
+    speaker: 'Warden Kaelen',
+    speakerRoleVi: 'Thủ lĩnh Đèo Đất Nung',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Fierce heat cracks hasty clay, yet steady warmth turns humble earth into durable terracotta.',
+        vi: 'Lửa gắt làm nứt đất vội, nhưng hơi ấm đều đặn lại biến đất sét bình dị thành gốm nung bền bỉ.',
+        focusWords: ['fierce', 'clay', 'steady', 'warm', 'humble', 'durable'],
+      },
+    ],
+  },
+  {
+    id: 'chat_kaelen_cinderfox',
+    speaker: 'Warden Kaelen',
+    speakerRoleVi: 'Thủ lĩnh Đèo Đất Nung',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Cinderfox scouts steep cliff ledges ahead of rockfalls and barks a sharp warning echo.',
+        vi: 'Cinderfox dò đường trên các mỏm vách dốc trước khi có đá lăn và sủa vang tiếng báo hiệu dứt khoát.',
+        focusWords: ['scout', 'steep', 'cliff', 'ledge', 'sharp', 'echo'],
+      },
+    ],
+  },
+  {
+    id: 'chat_amara_glaze',
+    speaker: 'Potter Amara',
+    speakerRoleVi: 'Nghệ nhân gốm cổ',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'artisan_chat',
+    lines: [
+      {
+        en: 'Every chime bell carries a slightly distinct pitch depending on the canyon mineral blend.',
+        vi: 'Mỗi quả chuông gốm mang một cao độ riêng biệt tùy theo tỷ lệ khoáng chất vùng hẻm núi.',
+        focusWords: ['chime', 'distinct', 'canyon', 'mineral'],
+      },
+    ],
+  },
+  {
+    id: 'chat_diego_winds',
+    speaker: 'Mountaineer Diego',
+    speakerRoleVi: 'Trinh sát núi cao Diego',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'scout_chat',
+    lines: [
+      {
+        en: 'Morning air stays calm for climbing, while afternoon gales favor swift winged partners.',
+        vi: 'Không khí buổi sáng êm ả rất hợp leo vách, còn gió mạnh buổi chiều lại nâng bước các loài có cánh.',
+        focusWords: ['morning', 'calm', 'climb', 'gale', 'swift', 'wing'],
+      },
+    ],
+  },
+  {
+    id: 'chat_astraea_stars',
+    speaker: 'Elder Keeper Astraea',
+    speakerRoleVi: 'Trưởng lão hộ vệ',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'warden_chat',
+    lines: [
+      {
+        en: 'Generations of naturalists climbed these stone terraces not to conquer nature, but to listen.',
+        vi: 'Nhiều thế hệ nhà tự nhiên đã bước lên những thềm đá này không phải để chinh phục, mà để lắng nghe thiên nhiên.',
+        focusWords: ['climb', 'stone', 'terrace'],
+      },
+    ],
+  },
+  {
+    id: 'chat_lyra_language',
+    speaker: 'Archivist Lyra',
+    speakerRoleVi: 'Học giả văn bia',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'artisan_chat',
+    lines: [
+      {
+        en: 'Language lives best on open trails, where every word connects to a real stream, branch, or companion.',
+        vi: 'Ngôn ngữ sống động nhất trên những cung đường mở, nơi mỗi từ gắn liền với con suối, nhành cây hay người bạn thật.',
+        focusWords: ['trail', 'stream', 'branch', 'companion'],
+      },
+    ],
+  },
+  {
+    id: 'chat_orin_nightwatch',
+    speaker: 'Starwatcher Orin',
+    speakerRoleVi: 'Người gác đài sao Orin',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'scout_chat',
+    lines: [
+      {
+        en: 'On cloudless nights, constellations mirror the exact layout of our five basin camps and shrines.',
+        vi: 'Vào những đêm quang mây, các chòm sao phản chiếu đúng vị trí của năm khu trại và đài đá trong thung lũng.',
+        focusWords: ['cloud', 'night', 'constellation', 'basin', 'camp', 'shrine'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_01',
+    speaker: 'Expedition Tale: First Rain',
+    speakerRoleVi: 'Chuyện thực địa: Cơn Mưa Đầu Mùa',
+    cefr: 'A1',
+    regionId: 'mosslight_hub',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Warm tea tastes best under a dry wooden roof while cool rain taps on green leaves.',
+        vi: 'Trà ấm ngon nhất là khi ngồi dưới mái gỗ khô ráo nghe mưa mát gõ nhịp trên vòm lá xanh.',
+        focusWords: ['warm', 'wood', 'cool', 'rain', 'leaf'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_02',
+    speaker: 'Expedition Tale: Bridge Builders',
+    speakerRoleVi: 'Chuyện thực địa: Nhịp Cầu Qua Suối',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Three scouts tied sturdy ropes across the brook so children from camp could pick berries safely.',
+        vi: 'Ba trinh sát đã chăng dây thừng chắc chắn qua khe suối để trẻ nhỏ trong trại sang hái quả mọng an toàn.',
+        focusWords: ['scout', 'sturdy', 'rope', 'brook', 'camp', 'berry', 'safe'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_03',
+    speaker: 'Expedition Tale: Lantern Boats',
+    speakerRoleVi: 'Chuyện thực địa: Thuyền Đèn Đầm Sen',
+    cefr: 'A2',
+    regionId: 'reedwater_fen',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Every autumn dusk, reed boats carry paper lanterns across the pond to thank wetland guardians.',
+        vi: 'Mỗi chiều thu, những chiếc thuyền sậy lại chở đèn giấy trôi qua mặt hồ để tri ân các loài hộ vệ đầm lầy.',
+        focusWords: ['dusk', 'reed', 'boat', 'lantern', 'pond', 'guardian'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_04',
+    speaker: 'Expedition Tale: Echo Canyon',
+    speakerRoleVi: 'Chuyện thực địa: Hẻm Núi Vang Âm',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Whistle one clear note beside the southern cliff and five gentle echoes return from distant ridges.',
+        vi: 'Chỉ cần huýt một nốt trong trẻo bên vách đá phía nam, năm tiếng ngân dịu sẽ vọng về từ những rặng đèo xa.',
+        focusWords: ['whistle', 'south', 'cliff', 'gentle', 'echo', 'distant', 'ridge'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_05',
+    speaker: 'Expedition Tale: Mossy Compass',
+    speakerRoleVi: 'Chuyện thực địa: La Bàn Rêu Xanh',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Thick damp moss prefers the shaded northern side of tree trunks, offering hikers a natural clue.',
+        vi: 'Lớp rêu dày ẩm thường mọc ở mặt bắc râm mát của thân cây, mang lại manh mối định hướng tự nhiên.',
+        focusWords: ['damp', 'moss', 'shade', 'north', 'tree', 'clue'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_06',
+    speaker: 'Expedition Tale: Pebble Cairns',
+    speakerRoleVi: 'Chuyện thực địa: Tháp Sỏi Dẫn Đường',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Climbers stack three flat pebbles on windy ledges to mark safe footholds toward the summit.',
+        vi: 'Người leo núi xếp ba viên sỏi dẹt trên mỏm đá lộng gió để đánh dấu điểm đặt chân an toàn lên đỉnh.',
+        focusWords: ['climb', 'pebble', 'wind', 'ledge', 'safe', 'summit'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_07',
+    speaker: 'Expedition Tale: Starlight Dew',
+    speakerRoleVi: 'Chuyện thực địa: Giọt Sương Ánh Sao',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Botanists collect pure morning dew from sanctuary lotus petals to brew rare restorative tonics.',
+        vi: 'Các nhà thực vật thu hứng sương mai tinh khiết trên cánh sen thánh địa để pha chế thuốc bồi bổ quý hiếm.',
+        focusWords: ['collect', 'pure', 'morning', 'dew', 'sanctuary', 'lotus', 'rare', 'tonic'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_08',
+    speaker: 'Expedition Tale: Winter Hearth',
+    speakerRoleVi: 'Chuyện thực địa: Bếp Lửa Mùa Đông',
+    cefr: 'B1',
+    regionId: 'mosslight_hub',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Even when frost dusts the high peaks, Mosslight hearth stays warm for travelers and wild foxes alike.',
+        vi: 'Ngay cả khi sương giá phủ mờ đỉnh cao, bếp lửa Đèn Rêu vẫn luôn ấm áp đón cả lữ khách lẫn đàn cáo rừng.',
+        focusWords: ['peak', 'hearth', 'warm', 'wild', 'fox'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_09',
+    speaker: 'Expedition Tale: Patient Angler',
+    speakerRoleVi: 'Chuyện thực địa: Người Ngồi Bên Bến',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Noah once waited four quiet hours in mist just to sketch a Lotusbell blossom opening.',
+        vi: 'Noah từng ngồi đợi bốn tiếng yên tĩnh giữa màn sương chỉ để ký họa khoảnh khắc hoa trên lưng Lotusbell bung nở.',
+        focusWords: ['patient', 'mist', 'bloom'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_10',
+    speaker: 'Expedition Tale: Winged Mail',
+    speakerRoleVi: 'Chuyện thực địa: Cánh Chim Đưa Thư',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'Trained Zephyrwings carry rolled parchment notes from hilltop outposts back to Ranger Rowan in minutes.',
+        vi: 'Những chú Zephyrwing quen đường mang cuộn giấy ghi chép từ trạm đồi cao về cho Rowan chỉ trong vài phút.',
+        focusWords: ['hill', 'ranger'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_11',
+    speaker: 'Expedition Tale: Harmony Festival',
+    speakerRoleVi: 'Chuyện thực địa: Lễ Hội Hòa Hợp',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'When all four regions celebrate together, wooden chimes and clay bells ring from dusk until dawn.',
+        vi: 'Khi cả bốn vùng cùng mở hội chúc mừng, chuông gỗ và chuông đất nung ngân vang suốt từ chiều tối tới bình minh.',
+        focusWords: ['celebrate', 'wood', 'chime', 'clay', 'dusk'],
+      },
+    ],
+  },
+  {
+    id: 'journal_tale_12',
+    speaker: 'Expedition Tale: Quiet Fellowship',
+    speakerRoleVi: 'Chuyện thực địa: Tình Bạn Lặng Thầm',
+    cefr: 'B2',
+    regionId: 'mosslight_hub',
+    contextTag: 'journal_tale',
+    lines: [
+      {
+        en: 'You never need perfect grammar to be understood by a loyal partner; kindness speaks first.',
+        vi: 'Bạn chẳng cần ngữ pháp hoàn hảo mới được người bạn đồng hành trung thành thấu hiểu, vì sự tử tế luôn lên tiếng trước.',
+        focusWords: ['loyal', 'partner'],
+      },
+    ],
+  },
+];
