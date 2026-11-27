@@ -117,6 +117,16 @@ export function isTileWalkable(params: {
       return false;
     }
   }
+  if (map.decorations) {
+    for (const dec of map.decorations) {
+      if (!dec.blocking) continue;
+      const w = dec.width ?? 1;
+      const h = dec.height ?? 1;
+      if (x >= dec.x && x < dec.x + w && y >= dec.y && y < dec.y + h) {
+        return false;
+      }
+    }
+  }
   return true;
 }
 

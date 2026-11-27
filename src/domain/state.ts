@@ -22,6 +22,7 @@ export function createDefaultSettings(): GameSettings {
     muted: false,
     highContrast: false,
     reducedMotion: false,
+    battleSpeed: 'normal',
     textScale: 'normal',
     touchControls: 'auto',
     keyMap: {
@@ -45,8 +46,8 @@ export function createInitialGameState(seed: number = 0x5eed2026): GameState {
     timeOfDay: 'morning',
     regionId: 'mosslight_hub',
     playerPos: {
-      x: 11,
-      y: 9,
+      x: 15,
+      y: 13,
       facing: 'up',
     },
     starterChosen: null,

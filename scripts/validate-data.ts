@@ -47,6 +47,14 @@ for (const sp of SPECIES) {
   checkPureAsciiEnglish(sp.fieldNoteEn, `species.${sp.id}.fieldNoteEn`);
   checkNoForbiddenStyle(sp.fieldNoteVi, `species.${sp.id}.fieldNoteVi`);
   checkNoForbiddenStyle(sp.titleVi, `species.${sp.id}.titleVi`);
+  assert(
+    ['common', 'uncommon', 'rare', 'mythic'].includes(sp.rarity),
+    `Species ${sp.id} has invalid rarity ${sp.rarity}`,
+  );
+  assert(
+    ['striker', 'bulwark', 'swift', 'tactician', 'guardian'].includes(sp.combatRole),
+    `Species ${sp.id} has invalid combatRole ${sp.combatRole}`,
+  );
   if (sp.evolvesTo) {
     assert(
       Boolean(SPECIES_BY_ID[sp.evolvesTo.speciesId]),
@@ -102,6 +110,16 @@ for (const map of MAPS) {
   }
   for (const prop of map.props) {
     blockedCoords.add(`${prop.x},${prop.y}`);
+  }
+  for (const dec of map.decorations ?? []) {
+    if (!dec.blocking) continue;
+    const w = dec.width ?? 1;
+    const h = dec.height ?? 1;
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        blockedCoords.add(`${dec.x + dx},${dec.y + dy}`);
+      }
+    }
   }
 
   const isWalkableForBfs = (x: number, y: number): boolean => {
@@ -245,30 +263,54 @@ assert(
 const seenLexIds = new Set<string>();
 const seenExampleEn = new Set<string>();
 const cefrCounts = { A1: 0, A2: 0, B1: 0, B2: 0 };
+let phraseCount = 0;
+let polysemyCount = 0;
 for (const lex of LEXICON_ENTRIES) {
   assert(!seenLexIds.has(lex.id), `Duplicate lexicon id: ${lex.id}`);
   seenLexIds.add(lex.id);
   assert(!seenExampleEn.has(lex.exampleEn), `Duplicate lexicon example sentence: ${lex.exampleEn}`);
   seenExampleEn.add(lex.exampleEn);
   cefrCounts[lex.cefr] += 1;
+  if (lex.pos === 'phrase') phraseCount += 1;
+  if (lex.senses && lex.senses.length >= 2) {
+    polysemyCount += 1;
+    for (const sense of lex.senses) {
+      assert(sense.contextHints.length >= 1, `Lexicon ${lex.id} sense ${sense.senseId} missing contextHints`);
+      checkPureAsciiEnglish(sense.exampleEn, `lexicon.${lex.id}.${sense.senseId}.exampleEn`);
+      checkNoForbiddenStyle(sense.meaningVi, `lexicon.${lex.id}.${sense.senseId}.meaningVi`);
+      checkNoForbiddenStyle(sense.exampleVi, `lexicon.${lex.id}.${sense.senseId}.exampleVi`);
+    }
+  }
   checkPureAsciiEnglish(lex.word, `lexicon.${lex.id}.word`);
   checkPureAsciiEnglish(lex.exampleEn, `lexicon.${lex.id}.exampleEn`);
   checkNoForbiddenStyle(lex.meaningVi, `lexicon.${lex.id}.meaningVi`);
   checkNoForbiddenStyle(lex.exampleVi, `lexicon.${lex.id}.exampleVi`);
 }
+assert(phraseCount >= 15, `Expected >= 15 multi-word phrases, got ${phraseCount}`);
+assert(polysemyCount >= 5, `Expected >= 5 polysemous entries, got ${polysemyCount}`);
 for (const band of ['A1', 'A2', 'B1', 'B2'] as const) {
   assert(cefrCounts[band] >= 25, `Expected >= 25 ${band} words, got ${cefrCounts[band]}`);
 }
 
-// 8. Dialogues (150+ contextual dialogues)
+// 8. Dialogues (150+ contextual dialogues + CEFR adaptive variants)
 assert(DIALOGUES.length >= 150, `Expected >= 150 dialogues, got ${DIALOGUES.length}`);
 const seenDlgIds = new Set<string>();
+let adaptiveVariantDialogues = 0;
 for (const dlg of DIALOGUES) {
   assert(!seenDlgIds.has(dlg.id), `Duplicate dialogue id: ${dlg.id}`);
   seenDlgIds.add(dlg.id);
+  let hasVariant = false;
   for (const line of dlg.lines) {
     checkPureAsciiEnglish(line.en, `dialogue.${dlg.id}.en`);
     checkNoForbiddenStyle(line.vi, `dialogue.${dlg.id}.vi`);
+    if (line.variants) {
+      hasVariant = true;
+      for (const [band, v] of Object.entries(line.variants)) {
+        if (!v) continue;
+        checkPureAsciiEnglish(v.en, `dialogue.${dlg.id}.variants.${band}.en`);
+        checkNoForbiddenStyle(v.vi, `dialogue.${dlg.id}.variants.${band}.vi`);
+      }
+    }
     for (const fw of line.focusWords ?? []) {
       const matched =
         Boolean(LEXICON_INDEX.bySurface[fw.toLowerCase()]) || Boolean(LEXICON_INDEX.byId[fw]);
@@ -285,7 +327,12 @@ for (const dlg of DIALOGUES) {
       }
     }
   }
+  if (hasVariant) adaptiveVariantDialogues += 1;
 }
+assert(
+  adaptiveVariantDialogues >= 15,
+  `Expected >= 15 dialogues with CEFR level variants, got ${adaptiveVariantDialogues}`,
+);
 
 if (errors.length > 0) {
   console.error(`Data validation failed with ${errors.length} error(s):`);

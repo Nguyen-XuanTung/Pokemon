@@ -25,14 +25,28 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
     contextTag: 'world_sign',
     lines: [
       {
-        en: 'Field Rule One: Never rush! Lowering a wild creature health or inducing calm sleep helps chimes resonate.',
-        vi: 'Nguyên tắc thực địa số một: Đừng vội vàng! Giảm máu sinh vật hoang hoặc ru ngủ êm sẽ giúp tiếng chuông dễ cộng hưởng.',
-        focusWords: ['wild', 'creature', 'health', 'induce', 'chime', 'resonate'],
+        en: 'Field Rule One: Take your time! Lowering a wild creature health or inducing calm sleep helps chimes resonate.',
+        vi: 'Nguyên tắc thực địa số một: Cứ thong thả! Giảm máu sinh vật hoang hoặc ru ngủ êm sẽ giúp tiếng chuông dễ cộng hưởng.',
+        variants: {
+          A1: {
+            en: 'Rule One: Take your time! Low health or calm sleep helps your chime catch a wild friend.',
+            vi: 'Nguyên tắc một: Cứ thong thả! Máu thấp hoặc giấc ngủ êm giúp chuông dễ kết bạn hoang dã.',
+          },
+          B1: {
+            en: 'Field Rule One: Take your time in tall grass! Weakening a wild partner or inducing sleep makes resonance chimes ring clear.',
+            vi: 'Nguyên tắc thực địa số một: Cứ thong thả trong cỏ cao! Làm yếu sinh vật hoặc ru ngủ sẽ giúp chuông cộng hưởng vang rõ.',
+          },
+          B2: {
+            en: 'Field Rule One: Never rush an encounter! Softening vitality or inducing calm slumber allows acoustic chimes to resonate reliably.',
+            vi: 'Nguyên tắc thực địa số một: Đừng vội vàng khi chạm trán! Giảm sinh lực hoặc đưa vào giấc ngủ êm giúp chuông cộng hưởng ổn định.',
+          },
+        },
+        focusWords: ['take your time', 'wild', 'creature', 'health', 'chime', 'resonate'],
       },
       {
-        en: 'Field Rule Two: English clues enrich your journey, and Vietnamese help is always welcome without penalty.',
-        vi: 'Nguyên tắc số hai: Manh mối tiếng Anh làm giàu hành trình, và trợ giúp tiếng Việt luôn sẵn sàng không chút phạt nào.',
-        focusWords: ['clue', 'journey', 'help'],
+        en: 'Field Rule Two: Feel free to tap any English word for help, because curiosity never carries a penalty here.',
+        vi: 'Nguyên tắc số hai: Cứ thoải mái chạm vào bất kỳ từ tiếng Anh nào để xem nghĩa, vì sự tò mò ở đây không bao giờ bị phạt.',
+        focusWords: ['feel free', 'help', 'curious'],
       },
     ],
   },
@@ -47,6 +61,20 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
       {
         en: 'Stay on the packed footpath for a safe walk, or step into swaying tall grass to meet woodland Wildkin.',
         vi: 'Đi trên đường đất nện để dạo bước an toàn, hoặc rẽ vào bụi cỏ cao đung đưa để gặp các loài rừng xanh.',
+        variants: {
+          A1: {
+            en: 'Walk on the dirt path to stay safe, or step into tall grass to meet forest friends.',
+            vi: 'Đi trên lối mòn để an toàn, hoặc bước vào cỏ cao để gặp bạn rừng xanh.',
+          },
+          B1: {
+            en: 'Keep to the winding trail if your tonics run low, or venture into tall grass to observe woodland species.',
+            vi: 'Hãy bám lối mòn uốn lượn nếu thuốc hồi sắp cạn, hoặc rẽ vào cỏ cao để quan sát các loài rừng xanh.',
+          },
+          B2: {
+            en: 'Packed trails offer safe passage back to camp, whereas swaying fern glades shelter diverse woodland Wildkin.',
+            vi: 'Đường mòn nện chặt giữ lối về trại an toàn, trong khi trảng dương xỉ đung đưa là nơi trú ngụ của nhiều loài rừng xanh.',
+          },
+        },
         focusWords: ['path', 'safe', 'walk', 'grass'],
       },
     ],
@@ -60,9 +88,23 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
     contextTag: 'world_clue',
     lines: [
       {
-        en: 'Carved note by Haru: Shellglow hides inside damp oak hollows by day and glows brightest at dusk. Check behind eastern ferns too!',
-        vi: 'Lời khắc của Haru: Shellglow trốn trong hốc sồi ẩm ban ngày và phát sáng rõ nhất lúc chạng vạng. Nhớ tìm sau bụi dương xỉ phía đông!',
-        focusWords: ['hide', 'damp', 'hollow', 'glow', 'dusk', 'fern'],
+        en: 'Carved note by Haru: Shellglow hides beneath rough oak bark by day and emerges at dusk. Check behind eastern ferns too!',
+        vi: 'Lời khắc của Haru: Shellglow trốn dưới lớp vỏ sồi sần sùi ban ngày và xuất hiện lúc chạng vạng. Nhớ tìm sau bụi dương xỉ phía đông!',
+        variants: {
+          A1: {
+            en: 'Haru note: Shellglow hides in old tree bark by day and glows at dusk. Look behind the east plants too!',
+            vi: 'Ghi chú của Haru: Shellglow trốn trong vỏ cây già ban ngày và phát sáng lúc chiều tối. Hãy tìm thêm phía đông nhé!',
+          },
+          A2: {
+            en: 'Haru trail note: Shellglow rests under oak bark during the day and glows bright at dusk. Check the eastern ferns!',
+            vi: 'Ghi chú của Haru: Shellglow nghỉ dưới vỏ cây sồi ban ngày và sáng rõ vào lúc chạng vạng. Nhớ xem bụi dương xỉ phía đông!',
+          },
+          B2: {
+            en: 'Carved note by Haru: Shellglow shelters inside damp oak hollows until twilight, glowing brightest at dusk near eastern fern thickets.',
+            vi: 'Lời khắc của Haru: Shellglow ẩn trong hốc sồi ẩm tới chiều muộn, phát sáng rực nhất lúc chạng vạng gần bụi dương xỉ phía đông.',
+          },
+        },
+        focusWords: ['hide', 'bark', 'at dusk', 'fern'],
       },
     ],
   },
@@ -90,9 +132,23 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
     contextTag: 'world_sign',
     lines: [
       {
-        en: 'Wooden bridges connect the reed islands. Lotus blossoms mark clean currents toward the northeastern Tide Arch.',
-        vi: 'Những cây cầu gỗ nối liền các đảo sậy. Hoa sen đánh dấu dòng nước sạch dẫn về Vòm Thủy Triều hướng đông bắc.',
-        focusWords: ['bridge', 'reed', 'lotus', 'current', 'arch'],
+        en: 'Wooden bridges connect the reed islands. Keep an eye on lotus blossoms that mark clean water currents toward the Tide Arch.',
+        vi: 'Những cây cầu gỗ nối liền các đảo sậy. Hãy để mắt tới hoa sen đánh dấu dòng nước sạch dẫn về Vòm Thủy Triều.',
+        variants: {
+          A1: {
+            en: 'Wood bridges link the islands. Follow the lotus flowers along the clean water current to the northeast.',
+            vi: 'Cầu gỗ nối các hòn đảo. Hãy đi theo hoa sen dọc dòng nước sạch về hướng đông bắc.',
+          },
+          A2: {
+            en: 'Cross the wooden bridges between reed islands, and keep an eye on lotus flowers leading toward the Tide Arch.',
+            vi: 'Băng qua cầu gỗ giữa các đảo sậy, và để mắt tới hoa sen dẫn lối về Vòm Thủy Triều.',
+          },
+          B2: {
+            en: 'Timber footbridges span the misty reed channels, while fragrant lotus beds trace clear currents toward the sunken Tide Arch.',
+            vi: 'Những nhịp cầu gỗ bắc qua rạch sậy mờ sương, còn thảm sen thơm vạch rõ luồng nước trong hướng về Vòm Thủy Triều.',
+          },
+        },
+        focusWords: ['bridge', 'reed', 'keep an eye on', 'lotus', 'current', 'arch'],
       },
     ],
   },
@@ -135,9 +191,23 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
     contextTag: 'world_sign',
     lines: [
       {
-        en: 'Strong updrafts sweep these steep sandstone slopes! Keep tonics handy and rest beside the central windbreak fire.',
-        vi: 'Luồng gió ngược thổi mạnh dọc sườn đá dốc! Hãy giữ thuốc hồi bên mình và nghỉ cạnh bếp lửa chắn gió trung tâm.',
-        focusWords: ['strong', 'steep', 'sand', 'slope', 'tonic', 'rest'],
+        en: 'Watch out for strong updrafts on steep sandstone slopes! Make sure to carry tonics and rest beside the central campfire.',
+        vi: 'Hãy coi chừng luồng gió ngược trên sườn đá dốc! Nhớ mang theo thuốc hồi và nghỉ bên bếp lửa trại trung tâm.',
+        variants: {
+          A1: {
+            en: 'Watch out for strong wind on the steep hill! Rest at the middle campfire when your team feels tired.',
+            vi: 'Coi chừng gió mạnh trên đồi dốc! Hãy nghỉ ở lửa trại giữa đèo khi cả đội thấm mệt.',
+          },
+          A2: {
+            en: 'Watch out on steep sandy slopes! Make sure to pack extra tonics and rest beside the central campfire.',
+            vi: 'Coi chừng trên sườn cát dốc! Nhớ mang thêm thuốc hồi và nghỉ cạnh bếp lửa trung tâm.',
+          },
+          B2: {
+            en: 'Watch out for gusting canyon updrafts along exposed sandstone ledges; replenish vitality at the central windbreak hearth.',
+            vi: 'Coi chừng luồng gió lốc hẻm núi dọc các mỏm sa thạch; hãy hồi phục sinh lực tại bếp lửa chắn gió trung tâm.',
+          },
+        },
+        focusWords: ['watch out', 'make sure', 'steep', 'slope', 'tonic', 'rest'],
       },
     ],
   },
@@ -918,6 +988,156 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
         en: 'You never need perfect grammar to be understood by a loyal partner; kindness speaks first.',
         vi: 'Bạn chẳng cần ngữ pháp hoàn hảo mới được người bạn đồng hành trung thành thấu hiểu, vì sự tử tế luôn lên tiếng trước.',
         focusWords: ['loyal', 'partner'],
+      },
+    ],
+  },
+  {
+    id: 'overlook_hub_brook',
+    speaker: 'South Brook Overlook',
+    speakerRoleVi: 'Điểm ngắm suối phía nam',
+    cefr: 'A2',
+    regionId: 'mosslight_hub',
+    contextTag: 'overlook_brook',
+    lines: [
+      {
+        en: 'Clear spring water flows beneath the wooden bridge while moored boats bob gently along the grassy bank.',
+        vi: 'Làn nước suối nguồn trong vắt chảy dưới chân cầu gỗ trong khi chiếc thuyền neo khẽ dập dềnh ven bờ cỏ.',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Clear water flows under the wood bridge. Take your time and catch your breath beside the quiet river.',
+            vi: 'Nước trong chảy dưới cầu gỗ. Cứ thong thả dừng chân nghỉ lấy hơi bên dòng suối êm.',
+          },
+          B1: {
+            en: 'Cool spring water ripples past lily pads beneath the footbridge, offering a peaceful spot to catch your breath before setting out.',
+            vi: 'Nước suối mát gợn lăn tăn qua thảm súng dưới cầu gỗ, mở ra góc bình yên để bạn nghỉ lấy hơi trước khi lên đường.',
+          },
+          B2: {
+            en: 'Crystal spring currents wind past wildflower banks toward the southern rope lift, inviting travelers to pause and reflect.',
+            vi: 'Dòng nước nguồn trong trẻo uốn quanh bờ hoa dại hướng về thang dây phía nam, mời gọi lữ khách dừng chân suy ngẫm.',
+          },
+        },
+        focusWords: ['clear', 'spring', 'bridge', 'boat', 'catch your breath'],
+      },
+    ],
+  },
+  {
+    id: 'overlook_whisperwood',
+    speaker: 'Fern Glade Overlook',
+    speakerRoleVi: 'Điểm quan sát trảng dương xỉ',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'overlook_forest',
+    lines: [
+      {
+        en: 'From this mossy rise, sunlit oak canopies stretch west toward the Whispering Stone while songbirds glide along the breeze.',
+        vi: 'Từ gò rêu cao này, vòm sồi đón nắng trải dài về phía tây hướng tới Đá Sồi Thầm khi đàn chim lướt nhẹ theo làn gió.',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Tall green trees shine in the morning light. Keep an eye on shy forest friends moving in the grass below.',
+            vi: 'Những hàng cây xanh cao đón ánh nắng sớm. Hãy để mắt tới những người bạn nhỏ đang nhúc nhích dưới thảm cỏ.',
+          },
+          B1: {
+            en: 'Filtered light dances over rough oak bark and swaying fern clearings; patient scouts often spot rare beetles here at dusk.',
+            vi: 'Ánh sáng xuyên tán nhảy múa trên vỏ sồi sần sùi và trảng dương xỉ; trinh sát kiên nhẫn thường gặp loài cánh cứng quý lúc chiều tối.',
+          },
+          B2: {
+            en: 'Layered woodland canopies shelter winding trails below, demonstrating how ancient timber and humble moss thrive in balance.',
+            vi: 'Tầng tán rừng xếp lớp che mát lối mòn uốn lượn bên dưới, cho thấy cổ thụ và rêu nhỏ cùng sinh sôi hài hòa.',
+          },
+        },
+        focusWords: ['moss', 'canopy', 'glide', 'breeze', 'in balance'],
+      },
+    ],
+  },
+  {
+    id: 'overlook_reedwater',
+    speaker: 'Lotus Basin Overlook',
+    speakerRoleVi: 'Vọng cảnh đầm hoa sen',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'overlook_fen',
+    lines: [
+      {
+        en: 'Silver mist drifts across shallow lotus channels while reed boats pass quietly between lantern piers.',
+        vi: 'Màn sương bạc trôi nhẹ qua những rạch sen nông trong khi thuyền sậy lướt êm giữa các bến đèn.',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Soft mist floats above the pond water. Small reed boats pass under the wood bridges.',
+            vi: 'Màn sương nhẹ trôi trên mặt hồ. Những chiếc thuyền sậy nhỏ đi qua dưới gầm cầu gỗ.',
+          },
+          A2: {
+            en: 'Cool mist covers the lotus pond, and light reed boats pass safely beside glowing lanterns.',
+            vi: 'Sương mát phủ mặt đầm sen, và những chiếc thuyền sậy nhẹ nhàng lướt an toàn bên ánh đèn lồng.',
+          },
+          B2: {
+            en: 'Evening mist veils the tranquil wetland labyrinth, where bioluminescent minnows trace gentle currents beneath timber bridges.',
+            vi: 'Sương chiều phủ mờ mê cung đầm lầy tĩnh lặng, nơi đàn cá phát sáng vẽ theo luồng nước dịu dưới nhịp cầu gỗ.',
+          },
+        },
+        focusWords: ['mist', 'lotus', 'reed', 'boat', 'pass', 'current'],
+      },
+    ],
+  },
+  {
+    id: 'overlook_terracotta',
+    speaker: 'Canyon Crest Overlook',
+    speakerRoleVi: 'Mỏm đá ngắm toàn cảnh hẻm núi',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'overlook_ridge',
+    lines: [
+      {
+        en: 'Warm canyon winds sweep past red clay terraces toward the high summit pass. Take a moment to catch your breath!',
+        vi: 'Gió ấm hẻm núi thổi qua những bậc thềm đất sét đỏ hướng lên đèo đỉnh núi. Hãy dừng lại nghỉ lấy hơi đôi chút!',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Warm wind blows across the red stone hill. Rest here and look at the high mountain pass.',
+            vi: 'Gió ấm thổi qua sườn đồi đá đỏ. Hãy dừng chân tại đây và ngắm lối đèo cao.',
+          },
+          A2: {
+            en: 'Warm sunlight shines on red clay cliffs. Catch your breath here before walking up the summit pass.',
+            vi: 'Nắng ấm chiếu rọi vách đất sét đỏ. Hãy nghỉ lấy hơi tại đây trước khi bước lên đèo cao.',
+          },
+          B2: {
+            en: 'Sun-baked ochre cliffs descend into terraced pottery kilns below, while soaring falcons ride thermal updrafts toward the summit pass.',
+            vi: 'Vách đá vàng đất đón nắng đổ dài xuống khu lò gốm cổ bên dưới, trong khi đàn chim ưng cưỡi luồng khí ấm bay về phía đèo cao.',
+          },
+        },
+        focusWords: ['warm', 'canyon', 'clay', 'pass', 'catch your breath'],
+      },
+    ],
+  },
+  {
+    id: 'overlook_starfall',
+    speaker: 'Celestial Terrace Overlook',
+    speakerRoleVi: 'Thềm sao ngắm toàn thung lũng',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'overlook_sanctuary',
+    lines: [
+      {
+        en: 'All four regions of Verdant Basin gleam far below beneath clear starlight, united side by side in quiet harmony.',
+        vi: 'Cả bốn vùng của Thung Lũng Rêu Xanh ánh lên phía xa dưới bầu trời sao trong vắt, gắn kết hài hòa trong tĩnh lặng.',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'You can see the whole green valley under clear starlight! Every forest, river, and hill stands in balance.',
+            vi: 'Bạn có thể nhìn thấy trọn thung lũng xanh dưới ánh sao trong! Rừng cây, dòng sông và ngọn đồi đều hài hòa.',
+          },
+          A2: {
+            en: 'Clear starlight shines over the whole valley below. Take your time enjoying how every habitat stays in balance.',
+            vi: 'Ánh sao trong sáng chiếu khắp thung lũng bên dưới. Cứ thong thả ngắm nhìn mọi sinh cảnh chung sống cân bằng.',
+          },
+          B1: {
+            en: 'From this high stone terrace, clear starlight reveals woods, marshes, and canyon ridges thriving together in balance.',
+            vi: 'Từ thềm đá cao này, ánh sao trong vắt soi tỏ rừng xanh, đầm sậy và rặng đèo cùng trù phú trong thế cân bằng.',
+          },
+        },
+        focusWords: ['basin', 'clear', 'harmony', 'in balance'],
       },
     ],
   },

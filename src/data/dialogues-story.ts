@@ -12,6 +12,20 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Welcome to Mosslight Camp! Across our green valley, ancient Resonance Stones have fallen silent, making wild creatures restless.',
         vi: 'Chào mừng tới Trại Đèn Rêu! Khắp thung lũng xanh này, những phiến Đá Cộng Hưởng cổ xưa bỗng lặng tiếng khiến các sinh vật hoang dã bất an.',
+        variants: {
+          A1: {
+            en: 'Welcome to Mosslight Camp! Old magic stones in our green valley grew quiet, so wild creatures feel worried.',
+            vi: 'Chào mừng tới Trại Đèn Rêu! Những phiến đá cổ trong thung lũng xanh bỗng im ắng khiến sinh vật hoang lo lắng.',
+          },
+          A2: {
+            en: 'Welcome to Mosslight Camp! Ancient stones across our valley have grown silent, making wild creatures restless along the paths.',
+            vi: 'Chào mừng tới Trại Đèn Rêu! Những phiến đá cổ khắp thung lũng bỗng lặng tiếng khiến sinh vật dọc đường bất an.',
+          },
+          B2: {
+            en: 'Welcome to Mosslight Camp! Throughout Verdant Basin, ancient Resonance Stones have fallen silent, leaving wild habitats restless and out of balance.',
+            vi: 'Chào mừng tới Trại Đèn Rêu! Khắp Thung Lũng Rêu Xanh, các phiến Đá Cộng Hưởng cổ đã lặng tiếng khiến sinh cảnh xao động mất cân bằng.',
+          },
+        },
         focusWords: ['camp', 'valley', 'ancient', 'silent', 'restless'],
       },
       {
@@ -115,9 +129,23 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
     contextTag: 'hub_guidance',
     lines: [
       {
-        en: 'Walk west from camp to explore Whisperwood Glen. Rest at any campfire if your team grows tired.',
-        vi: 'Hãy đi về phía tây khu trại để khám phá Thung Lũng Rừng Thầm. Nghỉ bên lửa trại nếu cả đội thấm mệt.',
-        focusWords: ['walk', 'explore', 'rest', 'tired'],
+        en: 'Set out west from camp to explore Whisperwood Glen, and head back to any campfire whenever your team grows tired.',
+        vi: 'Hãy lên đường về phía tây trại để khám phá Rừng Thầm, và quay lại lửa trại bất cứ khi nào đội thấm mệt.',
+        variants: {
+          A1: {
+            en: 'Walk west from camp to see Whisperwood Glen. Rest at any warm campfire if your team feels tired.',
+            vi: 'Đi về phía tây trại để thăm Rừng Thầm. Hãy nghỉ bên bếp lửa ấm nếu đội bạn thấy mệt.',
+          },
+          B1: {
+            en: 'Set out along the western trail into Whisperwood Glen, and keep an eye on your partner health before meeting Warden Sylvan.',
+            vi: 'Hãy khởi hành theo lối mòn phía tây vào Rừng Thầm, đồng thời để mắt tới máu của đồng hành trước khi gặp Sylvan.',
+          },
+          B2: {
+            en: 'Venture west into Whisperwood Glen to investigate the silent oak monolith, resting beside woodland hearths whenever vitality runs low.',
+            vi: 'Hãy tiến về phía tây vào Rừng Thầm khảo sát khối đá sồi lặng tiếng, nghỉ bên bếp rừng mỗi khi sinh lực vơi dần.',
+          },
+        },
+        focusWords: ['set out', 'explore', 'head back', 'rest', 'tired'],
         choices: [
           {
             labelEn: 'Ask about element strengths',
@@ -143,12 +171,22 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Well done harmonizing the Whispering Oak! With Sylvan ferry token, the eastern dock to Reedwater Fen is open.',
         vi: 'Bạn đã khôi phục Sồi Thầm rất xuất sắc! Có thẻ đò của Sylvan, bến thuyền phía đông sang Đầm Sậy đã mở.',
+        variants: {
+          A1: {
+            en: 'Great job in the forest! Now the east boat dock to Reedwater Fen is open for your team.',
+            vi: 'Bạn làm tốt lắm ở trong rừng! Giờ bến thuyền phía đông sang Đầm Sậy đã mở đón đội bạn.',
+          },
+          B2: {
+            en: 'Splendid work restoring resonance to Whisperwood! Sylvan token now grants passage across the eastern dock into misty Reedwater Fen.',
+            vi: 'Bạn khôi phục cộng hưởng cho Rừng Thầm rất tuyệt! Thẻ của Sylvan nay mở lối qua bến đông vào Đầm Sậy mờ sương.',
+          },
+        },
         focusWords: ['harmony', 'ferry', 'dock', 'open'],
       },
       {
-        en: 'Leaf and Spark partners thrive against Mirella wetland team. Take tonics and Reed Charms before crossing.',
-        vi: 'Đồng hành hệ Lá và Tia chớp rất mạnh trước đội hình đầm lầy của Mirella. Nhớ mang thuốc hồi và Chuông Sậy nhé.',
-        focusWords: ['thrive', 'tonic', 'cross'],
+        en: 'Leaf and Spark partners thrive against Mirella wetland team. Make sure to pack tonics and Reed Charms before crossing.',
+        vi: 'Đồng hành hệ Lá và Tia chớp rất mạnh trước đội hình đầm lầy của Mirella. Nhớ chuẩn bị thuốc hồi và Chuông Sậy nhé.',
+        focusWords: ['thrive', 'make sure', 'tonic', 'cross'],
       },
     ],
   },
@@ -163,6 +201,16 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Two Resonance Stones sing again! Mirella climbing rope unlocks the southern lift up to Terracotta Ridge.',
         vi: 'Hai phiến Đá Cộng Hưởng đã ngân vang trở lại! Dây leo của Mirella đã mở thang dây phía nam lên Đèo Đất Nung.',
+        variants: {
+          A1: {
+            en: 'Two magic stones sing again! Use the south rope lift to climb up to sunny Terracotta Ridge.',
+            vi: 'Hai phiến đá đã ngân vang trở lại! Hãy đi thang dây phía nam để leo lên Đèo Đất Nung đầy nắng.',
+          },
+          A2: {
+            en: 'Two stones resonate now! Mirella strong rope opens the south path up to Terracotta Ridge.',
+            vi: 'Hai phiến đá đã cộng hưởng! Dây thừng chắc của Mirella đã mở lối phía nam lên Đèo Đất Nung.',
+          },
+        },
         focusWords: ['resonance', 'climb', 'rope', 'ridge'],
       },
       {
@@ -181,9 +229,19 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
     contextTag: 'hub_guidance',
     lines: [
       {
-        en: 'All three regional beacons shine in unison! Step through the northern stone arch to ascend Starfall Sanctuary.',
+        en: 'All three regional beacons shine in unison! Pass through the northern stone arch to ascend Starfall Sanctuary.',
         vi: 'Cả ba đài cộng hưởng vùng đã cùng tỏa sáng! Hãy bước qua cổng đá phía bắc để tiến lên Thánh Địa Sao Rơi.',
-        focusWords: ['beacon', 'arch', 'ascend', 'sanctuary'],
+        variants: {
+          A1: {
+            en: 'All three beacons shine bright! Walk north through the stone gate to reach Starfall Sanctuary.',
+            vi: 'Cả ba đài đá đều sáng rực! Hãy đi về phía bắc qua cổng đá để lên Thánh Địa Sao Rơi.',
+          },
+          B2: {
+            en: 'All three regional beacons resonate in unison! Ascend through the northern stone arch to enter ancient Starfall Sanctuary.',
+            vi: 'Cả ba đài cộng hưởng vùng đã ngân vang đồng điệu! Hãy bước qua vòm đá phía bắc để tiến vào Thánh Địa Sao Rơi cổ kính.',
+          },
+        },
+        focusWords: ['beacon', 'pass', 'arch', 'ascend', 'sanctuary'],
       },
       {
         en: 'Elder Keeper Astraea awaits beside the Celestial Altar. Stock your best salves and Breeze Tea first.',
@@ -457,6 +515,17 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Warm cedar embers crackle gently. Your partners recover full health and move energy beside the hearth!',
         vi: 'Than hồng tuyết tùng nổ lách tách êm dịu. Cả đội của bạn đã hồi đầy máu và năng lượng chiêu thức bên bếp lửa!',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'The warm campfire heals your whole team right away! Every partner has full health and move energy again.',
+            vi: 'Bếp lửa trại ấm hồi sức cho cả đội ngay lập tức! Mọi người bạn đều đã đầy máu và năng lượng.',
+          },
+          B2: {
+            en: 'Fragrant cedar embers crackle beside the hearth, restoring full vitality and move energy across your expedition party.',
+            vi: 'Than tuyết tùng thơm dịu nổ khẽ bên bếp đá, khôi phục trọn vẹn sinh lực và năng lượng chiêu cho toàn đội.',
+          },
+        },
         focusWords: ['warm', 'ember', 'recover', 'health', 'hearth'],
         action: { kind: 'heal_party' },
         choices: [
@@ -495,6 +564,17 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Sunlight filters through mossy branches onto the camp stones. Your entire team feels rested and restored!',
         vi: 'Ánh nắng xuyên qua cành cây phủ rêu rọi xuống bếp đá. Toàn bộ đội hình của bạn đã khỏe khoắn trở lại!',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Soft forest light warms the camp stones. Your team rests here and feels strong again!',
+            vi: 'Ánh sáng rừng dịu ấm rọi xuống bếp đá. Đội của bạn nghỉ chân và khỏe khoắn trở lại!',
+          },
+          B2: {
+            en: 'Dappled sunlight filters through mossy oak boughs onto the hearth, leaving every companion rested and revitalized.',
+            vi: 'Nắng lốm đốm xuyên qua tán sồi phủ rêu xuống bếp lửa, giúp mọi người bạn đồng hành hồi phục trọn vẹn.',
+          },
+        },
         focusWords: ['moss', 'branch', 'rest', 'restore'],
         action: { kind: 'heal_party' },
         choices: [
@@ -533,6 +613,17 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Dry reed bundles burn with a clean golden flame above the misty water. Your team is back in peak condition!',
         vi: 'Những bó sậy khô cháy sáng rực phía trên mặt nước mờ sương. Đội của bạn đã trở lại trạng thái sung sức nhất!',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Dry reeds burn bright beside the misty pond. Your team warms up and recovers full health!',
+            vi: 'Những bó sậy khô cháy sáng bên mặt hồ sương. Đội của bạn sưởi ấm và hồi đầy máu!',
+          },
+          B2: {
+            en: 'Seasoned reed bundles burn with a steady amber flame above misty channels, restoring your party to peak readiness.',
+            vi: 'Những bó sậy phơi kỹ cháy đều ánh hổ phách trên rạch nước mờ sương, đưa cả đội về trạng thái sung sức nhất.',
+          },
+        },
         focusWords: ['reed', 'mist', 'peak'],
         action: { kind: 'heal_party' },
         choices: [
@@ -571,6 +662,17 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Sheltered behind ochre sandstone walls, the hearth restores every tired partner for the climb ahead.',
         vi: 'Nằm khuất gió sau vách sa thạch vàng đất, bếp lửa hồi phục trọn vẹn sức lực cho chặng leo phía trước.',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Behind the red rock wall, this warm fire heals your tired team for the hill climb.',
+            vi: 'Nằm sau vách đá đỏ chắn gió, bếp lửa ấm hồi sức cho cả đội trước chặng leo đồi.',
+          },
+          B2: {
+            en: 'Tucked behind wind-carved sandstone alcoves, this steady hearth replenishes every weary partner before the summit ascent.',
+            vi: 'Ẩn mình sau hốc sa thạch chắn gió, bếp lửa bền bỉ này bồi đắp trọn sức lực trước chặng leo lên đỉnh.',
+          },
+        },
         focusWords: ['shelter', 'sand', 'hearth', 'restore', 'climb'],
         action: { kind: 'heal_party' },
         choices: [
@@ -609,6 +711,17 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Silver-gold flames dance quietly inside the ancient stone brazier. Every partner feels serene and fully healed!',
         vi: 'Ngọn lửa ánh bạc nhảy múa êm đềm trong chậu đá cổ. Mọi người bạn đồng hành đều thanh tĩnh và hồi đầy sức lực!',
+        includeReencounterEcho: true,
+        variants: {
+          A1: {
+            en: 'Bright starlight fire glows in the old stone bowl. Your whole team feels calm and fully healed!',
+            vi: 'Ánh lửa sao sáng dịu trong chậu đá cổ. Cả đội cảm thấy bình tĩnh và hồi đầy máu!',
+          },
+          A2: {
+            en: 'Quiet golden flames glow inside the stone brazier. Every partner rests and recovers full health right away!',
+            vi: 'Ngọn lửa vàng êm đềm cháy trong đài đá. Mọi đồng hành đều được nghỉ ngơi và hồi đầy sức lực ngay lập tức!',
+          },
+        },
         focusWords: ['ancient', 'stone', 'serene'],
         action: { kind: 'heal_party' },
         choices: [
@@ -770,6 +883,20 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Beneath this ancient Whispering Oak, every falling leaf carries a story. Can your team listen and respond in harmony?',
         vi: 'Dưới tán Sồi Thầm cổ thụ này, mỗi chiếc lá rơi đều mang một câu chuyện. Đội của bạn đã sẵn sàng hòa nhịp chưa?',
+        variants: {
+          A1: {
+            en: 'Under this big old oak tree, my Leaf team is ready! Show me how you and your partner work together.',
+            vi: 'Dưới gốc sồi cổ thụ lớn này, đội hệ Lá của tôi đã sẵn sàng! Hãy cho tôi thấy bạn và đồng hành phối hợp ra sao.',
+          },
+          A2: {
+            en: 'Under the Whispering Oak, my Leaf partners stand ready. Remember that Ember and Gale moves beat Leaf!',
+            vi: 'Dưới gốc Sồi Thầm, đội hệ Lá của tôi đang đợi. Hãy nhớ chiêu hệ Lửa và Gió khắc chế hệ Lá nhé!',
+          },
+          B2: {
+            en: 'Beneath these ancient Whispering Oak boughs, woodland guardians test composure and elemental synergy. Shall our trial begin?',
+            vi: 'Dưới tán Sồi Thầm cổ kính này, các hộ vệ rừng xanh thử thách sự điềm tĩnh và phối hợp nguyên tố. Ta bắt đầu chứ?',
+          },
+        },
         focusWords: ['ancient', 'leaf', 'harmony'],
         choices: [
           {
@@ -903,6 +1030,20 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Water yields gently around obstacles yet carves deep stone canyons. Show me how your team adapts to shifting tides!',
         vi: 'Dòng nước mềm mại uốn quanh vật cản nhưng lại khắc nên hẻm đá sâu. Hãy cho tôi thấy đội bạn thích ứng ra sao!',
+        variants: {
+          A1: {
+            en: 'Cool water moves gently around rocks, yet my wetland team is strong! Are you ready for our trial?',
+            vi: 'Nước mát chảy êm quanh đá, nhưng đội đầm lầy của tôi rất mạnh! Bạn đã sẵn sàng bước vào bài thử chưa?',
+          },
+          A2: {
+            en: 'River currents flow gently yet shape strong stone. Tip: Leaf and Stone moves help against Water and Spark!',
+            vi: 'Dòng nước trôi dịu nhẹ nhưng bào mòn cả đá cứng. Mẹo nhỏ: chiêu Lá và Đá rất hữu ích trước hệ Nước và Điện!',
+          },
+          B2: {
+            en: 'Though water yields gracefully around every obstacle, persistent currents sculpt solid stone. Demonstrate your tactical adaptability!',
+            vi: 'Dù làn nước uyển chuyển nhường lối quanh vật cản, dòng chảy bền bỉ vẫn tạc nên đá rắn. Hãy thể hiện khả năng ứng biến của bạn!',
+          },
+        },
         focusWords: ['gentle', 'stone', 'canyon', 'tide'],
         choices: [
           {
@@ -1041,6 +1182,16 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Endurance and inner warmth forge unyielding trust! Stand before the Sunforge Beacon and show me your expedition spirit!',
         vi: 'Sức bền bỉ và ngọn lửa nội tâm rèn nên niềm tin kiên cường! Hãy đứng trước Đài Nắng Sớm và thể hiện bản lĩnh của bạn!',
+        variants: {
+          A1: {
+            en: 'Strong stone and warm fire guard this high ridge! Bring your best Water or Leaf moves to our trial!',
+            vi: 'Đá cứng và lửa ấm canh giữ đỉnh đèo này! Hãy mang những chiêu Nước hoặc Lá tốt nhất vào bài thử nhé!',
+          },
+          A2: {
+            en: 'Steady warmth and sturdy stone build true trust! Stand before the Sunforge Beacon whenever your team is ready.',
+            vi: 'Hơi ấm bền bỉ và đá vững tạo nên niềm tin! Hãy bước ra trước Đài Nắng Sớm khi đội bạn sẵn sàng.',
+          },
+        },
         focusWords: ['endure', 'warm', 'unyielding', 'trust', 'beacon'],
         choices: [
           {
@@ -1199,6 +1350,16 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
       {
         en: 'Face my sanctuary guardians in our final Resonance Trial so the Celestial Altar may awaken!',
         vi: 'Hãy đối diện những hộ vệ thánh địa trong bài khảo nghiệm Cộng Hưởng cuối cùng để đánh thức Bệ Tinh Tú!',
+        variants: {
+          A1: {
+            en: 'Meet my three strong sanctuary guardians in our final match so the starlight altar can wake up!',
+            vi: 'Hãy so tài cùng ba hộ vệ thánh địa mạnh mẽ trong trận cuối để đánh thức bệ đá ánh sao!',
+          },
+          A2: {
+            en: 'Stand side by side with your partners in our final Resonance Trial to awaken the Celestial Altar!',
+            vi: 'Hãy sát cánh cùng các bạn đồng hành trong bài thử Cộng Hưởng cuối cùng để đánh thức Bệ Tinh Tú!',
+          },
+        },
         focusWords: ['guardian', 'resonance', 'trial', 'awaken'],
         choices: [
           {

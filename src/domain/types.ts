@@ -8,6 +8,8 @@ export type CefrBand = 'A1' | 'A2' | 'B1' | 'B2';
 
 export type LanguageSupportMode = 'immersion' | 'contextual' | 'bilingual';
 
+export type BattleSpeedMode = 'normal' | 'fast' | 'instant';
+
 export type TimeOfDay = 'morning' | 'day' | 'dusk' | 'night';
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
@@ -35,6 +37,10 @@ export type TileKind =
   | 'portal'
   | 'campfire'
   | 'shrine';
+
+export type SpeciesRarity = 'common' | 'uncommon' | 'rare' | 'mythic';
+
+export type CombatRole = 'striker' | 'bulwark' | 'swift' | 'tactician' | 'guardian';
 
 export interface BaseStats {
   readonly hp: number;
@@ -89,6 +95,8 @@ export interface SpeciesDefinition {
   readonly titleVi: string;
   readonly element: CombatElement;
   readonly stage: 1 | 2 | 3;
+  readonly rarity: SpeciesRarity;
+  readonly combatRole: CombatRole;
   readonly isStarter?: boolean;
   readonly evolvesTo?: SpeciesEvolution;
   readonly baseStats: BaseStats;
@@ -154,6 +162,7 @@ export interface EncounterEntry {
   readonly minLevel: number;
   readonly maxLevel: number;
   readonly weight: number;
+  readonly isRareSpot?: boolean;
   readonly timeBonus?: ReadonlyArray<TimeOfDay>;
 }
 
@@ -171,9 +180,17 @@ export interface PortalDefinition {
   readonly labelVi: string;
 }
 
+export type PropKind =
+  | 'sign'
+  | 'chest'
+  | 'campfire'
+  | 'shrine'
+  | 'supply_post'
+  | 'overlook';
+
 export interface WorldPropDefinition {
   readonly id: string;
-  readonly kind: 'sign' | 'chest' | 'campfire' | 'shrine' | 'supply_post';
+  readonly kind: PropKind;
   readonly x: number;
   readonly y: number;
   readonly labelEn: string;
@@ -185,6 +202,28 @@ export interface WorldPropDefinition {
   readonly setsFlag?: string;
   readonly requiredFlag?: string;
   readonly requiredTime?: TimeOfDay;
+}
+
+export type MapDecorKind =
+  | 'cottage_lodge'
+  | 'cottage_greenhouse'
+  | 'tent_sage'
+  | 'boat_moored'
+  | 'fence_h'
+  | 'fence_v'
+  | 'lantern_post'
+  | 'lily_pad'
+  | 'boulder'
+  | 'stump'
+  | 'ruin_pillar';
+
+export interface MapDecoration {
+  readonly kind: MapDecorKind;
+  readonly x: number;
+  readonly y: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly blocking?: boolean;
 }
 
 export interface TrainerPartySpec {
@@ -245,6 +284,7 @@ export interface RegionMapDefinition {
   readonly rows: ReadonlyArray<string>;
   readonly portals: ReadonlyArray<PortalDefinition>;
   readonly props: ReadonlyArray<WorldPropDefinition>;
+  readonly decorations?: ReadonlyArray<MapDecoration>;
   readonly encounters: ReadonlyArray<EncounterEntry>;
 }
 
@@ -303,9 +343,16 @@ export interface DialogueChoice {
   readonly nextDialogueId?: string;
 }
 
+export interface DialogueLevelVariant {
+  readonly en: string;
+  readonly vi: string;
+}
+
 export interface DialogueLine {
   readonly en: string;
   readonly vi: string;
+  readonly variants?: Partial<Record<CefrBand, DialogueLevelVariant>>;
+  readonly includeReencounterEcho?: boolean;
   readonly focusWords?: ReadonlyArray<string>;
   readonly action?: DialogueAction;
   readonly choices?: ReadonlyArray<DialogueChoice>;
@@ -321,6 +368,15 @@ export interface DialogueNode {
   readonly lines: ReadonlyArray<DialogueLine>;
 }
 
+export interface PolysemySense {
+  readonly senseId: string;
+  readonly contextHints: ReadonlyArray<string>;
+  readonly pos: 'noun' | 'verb' | 'adj' | 'adv' | 'phrase';
+  readonly meaningVi: string;
+  readonly exampleEn: string;
+  readonly exampleVi: string;
+}
+
 export interface LexiconEntry {
   readonly id: string;
   readonly word: string;
@@ -332,6 +388,7 @@ export interface LexiconEntry {
   readonly exampleEn: string;
   readonly exampleVi: string;
   readonly topic: string;
+  readonly senses?: ReadonlyArray<PolysemySense>;
 }
 
 export interface WordMemoryRecord {
@@ -341,6 +398,10 @@ export interface WordMemoryRecord {
   savedByPlayer: boolean;
   mastery: 0 | 1 | 2 | 3;
   lastSeenStep: number;
+  lastSeenAtMs?: number;
+  nextReviewStep?: number;
+  correctReviews?: number;
+  lapses?: number;
   contextsSeen: string[];
 }
 
@@ -368,6 +429,7 @@ export interface GameSettings {
   muted: boolean;
   highContrast: boolean;
   reducedMotion: boolean;
+  battleSpeed?: BattleSpeedMode;
   textScale: 'normal' | 'large';
   touchControls: 'auto' | 'always' | 'off';
   keyMap: KeyBindingMap;

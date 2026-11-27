@@ -7,6 +7,7 @@ import { describeEffectiveness, getTypeMultiplier } from './elements.ts';
 import type { SeededRng } from './rng.ts';
 import type {
   CreatureInstance,
+  ElementType,
   InventorySlot,
   ItemDefinition,
   MoveDefinition,
@@ -36,6 +37,13 @@ export interface BattleEventLog {
     | 'defeat';
   readonly messageEn: string;
   readonly messageVi: string;
+  readonly actor?: 'player' | 'enemy';
+  readonly element?: ElementType;
+  readonly damage?: number;
+  readonly isSuperEffective?: boolean;
+  readonly isResisted?: boolean;
+  readonly shakes?: number;
+  readonly captured?: boolean;
 }
 
 export type PlayerBattleAction =
@@ -242,8 +250,11 @@ function executeMove(params: {
     };
   }
 
+  const actorSide: 'player' | 'enemy' = isPlayerAttacker ? 'player' : 'enemy';
   logs.push({
     kind: 'move',
+    actor: actorSide,
+    element: moveDef.element,
     messageEn: `${isPlayerAttacker ? '' : 'Foe '}${attackerLabel} uses ${moveDef.name}!`,
     messageVi: `${isPlayerAttacker ? '' : 'Đối phương '}${attackerLabel} dùng chiêu ${moveDef.name}!`,
   });
@@ -251,6 +262,7 @@ function executeMove(params: {
   if (moveDef.accuracy < 100 && !ctx.rng.chance(moveDef.accuracy / 100)) {
     logs.push({
       kind: 'text',
+      actor: actorSide,
       messageEn: `${defenderLabel} stepped aside and avoided the move!`,
       messageVi: `${defenderLabel} khéo léo né được đòn đánh!`,
     });
@@ -274,6 +286,11 @@ function executeMove(params: {
     const eff = describeEffectiveness(typeMult);
     logs.push({
       kind: 'damage',
+      actor: actorSide,
+      element: moveDef.element,
+      damage,
+      isSuperEffective: typeMult > 1.05,
+      isResisted: typeMult < 0.95,
       messageEn: `${defenderLabel} took ${damage} damage.${eff.messageEn ? ' ' + eff.messageEn : ''}`,
       messageVi: `${defenderLabel} mất ${damage} máu.${eff.messageVi ? ' ' + eff.messageVi : ''}`,
     });
@@ -623,6 +640,8 @@ export function stepBattleTurn(
         session.capturedCreature = structuredClone(enemy);
         logs.push({
           kind: 'capture',
+          shakes: result.shakes,
+          captured: true,
           messageEn: `Resonance chimed (${result.shakes} pulses)! ${enemySpec.name} joined your expedition!`,
           messageVi: `Chuông cộng hưởng ngân vang (${result.shakes} nhịp)! ${enemySpec.name} đã gia nhập hành trình của bạn!`,
         });
@@ -630,6 +649,8 @@ export function stepBattleTurn(
       }
       logs.push({
         kind: 'capture',
+        shakes: result.shakes,
+        captured: false,
         messageEn: `So close (${result.shakes} pulse${result.shakes > 1 ? 's' : ''})! ${enemySpec.name} broke free. Lowering health or inducing sleep helps.`,
         messageVi: `Suýt thành công (${result.shakes} nhịp)! ${enemySpec.name} đã thoát ra. Giảm máu hoặc gây ngủ sẽ tăng tỷ lệ kết nối.`,
       });
