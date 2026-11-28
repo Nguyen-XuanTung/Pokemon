@@ -216,6 +216,17 @@ export class WorldScene extends Phaser.Scene {
     this.rebuildRegionMap(this.controller.state.regionId, false);
     this.syncFromController();
 
+    const onBattleUiLayout = () => {
+      if (
+        this.controller.activeBattle &&
+        !this.tweens.isTweening(this.playerBattleSprite) &&
+        !this.tweens.isTweening(this.enemyBattleSprite)
+      ) {
+        this.enterOrLayoutBattleCamera();
+      }
+    };
+    window.addEventListener('lingowild:battle-ui-layout', onBattleUiLayout);
+
     this.scale.on('resize', () => {
       if (this.controller.activeBattle) {
         this.enterOrLayoutBattleCamera();
@@ -246,6 +257,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('lingowild:battle-ui-layout', onBattleUiLayout);
       if (this.unsubscribe) {
         this.unsubscribe();
         this.unsubscribe = null;
@@ -305,19 +317,53 @@ export class WorldScene extends Phaser.Scene {
 
     const w = Math.max(300, this.scale.width);
     const h = Math.max(260, this.scale.height);
-    const isCompact = w < 540 || h < 460;
-    const spriteScale = isCompact ? 2.15 : 3.05;
+    const isShortLandscape = h < 500;
+    const isCompact = w < 560 || isShortLandscape;
+    const spriteScale = isShortLandscape ? 1.65 : isCompact ? 2.15 : 2.75;
+
+    let hudBottom = Math.round(h * (isShortLandscape ? 0.13 : 0.11));
+    let deckTop = Math.round(h * (isShortLandscape ? 0.59 : isCompact ? 0.6 : 0.64));
+    if (typeof document !== 'undefined' && this.game.canvas) {
+      const canvasRect = this.game.canvas.getBoundingClientRect();
+      if (canvasRect.height > 0) {
+        const hudEl = document.querySelector('.lw-battle-hud');
+        if (hudEl) {
+          const hr = hudEl.getBoundingClientRect();
+          if (hr.height > 0) {
+            hudBottom = Math.max(38, Math.round(hr.bottom - canvasRect.top));
+          }
+        }
+        const deckEl = document.querySelector('[data-testid="battle-deck"]');
+        if (deckEl) {
+          const dr = deckEl.getBoundingClientRect();
+          if (dr.height > 0) {
+            deckTop = Math.min(
+              h - 72,
+              Math.max(hudBottom + 108, Math.round(dr.top - canvasRect.top)),
+            );
+          }
+        }
+      }
+    }
 
     this.battleUnderfill.setPosition(0, 0).setSize(w, h);
 
-    // Cover-scale the 384x216 artist pixel battle background cleanly across the visible arena band
+    // Cover-scale the 384x216 artist pixel battle background and keep both pads strictly above deckTop
     const bgFrame = REGION_BATTLE_BG_FRAME[this.controller.state.regionId];
-    const arenaH = Math.round(h * (isCompact ? 0.62 : 0.66));
-    const scaleCover = Math.max(w / 384, arenaH / 216);
+    const stageTop = hudBottom + 6;
+    const stageBottom = Math.max(stageTop + 96, deckTop - 8);
+    const scaleCover = Math.max(w / 384, (stageBottom + 36) / 216);
     const bgDisplayW = Math.round(384 * scaleCover);
     const bgDisplayH = Math.round(216 * scaleCover);
     const bgCenterX = Math.round(w * 0.5);
-    const bgCenterY = Math.round(arenaH * 0.48);
+
+    const shadowMargin = Math.round(7 * spriteScale);
+    const desiredPadPlayerY = Math.min(
+      stageBottom - shadowMargin,
+      Math.round(stageTop + (stageBottom - stageTop) * 0.85),
+    );
+    const bgTop = Math.min(0, Math.round(desiredPadPlayerY - bgDisplayH * 0.79));
+    const bgCenterY = Math.round(bgTop + bgDisplayH * 0.5);
 
     this.battleBgSprite
       .setFrame(bgFrame)
@@ -325,25 +371,30 @@ export class WorldScene extends Phaser.Scene {
       .setDisplaySize(bgDisplayW, bgDisplayH);
 
     const bgLeft = bgCenterX - bgDisplayW * 0.5;
-    const bgTop = bgCenterY - bgDisplayH * 0.5;
 
-    // Align creature feet directly onto the pixel-art combatant rings drawn at (0.71, 0.56) and (0.28, 0.79)
+    // Align creature feet onto the pixel-art combatant rings at (0.71, 0.56) and (0.28, 0.79), clamped inside visible stage
     const padEnemyX = Math.round(bgLeft + bgDisplayW * 0.71);
     const padEnemyY = Math.round(bgTop + bgDisplayH * 0.56);
     const padPlayerX = Math.round(bgLeft + bgDisplayW * 0.28);
-    const padPlayerY = Math.round(bgTop + bgDisplayH * 0.79);
+    const padPlayerY = Math.min(
+      stageBottom - shadowMargin,
+      Math.round(bgTop + bgDisplayH * 0.79),
+    );
+
+    const minEnemyY = stageTop + Math.round(18 * spriteScale);
+    const maxPlayerY = stageBottom - Math.round(21 * spriteScale);
 
     const enemyX = Phaser.Math.Clamp(padEnemyX, Math.round(w * 0.58), Math.round(w * 0.84));
     const enemyY = Phaser.Math.Clamp(
       padEnemyY - Math.round(16 * spriteScale),
-      Math.round(h * 0.14),
-      Math.round(arenaH * 0.56),
+      minEnemyY,
+      Math.max(minEnemyY, maxPlayerY - Math.round(14 * spriteScale)),
     );
     const playerX = Phaser.Math.Clamp(padPlayerX, Math.round(w * 0.16), Math.round(w * 0.42));
     const playerY = Phaser.Math.Clamp(
       padPlayerY - Math.round(16 * spriteScale),
-      Math.round(h * 0.26),
-      Math.round(arenaH * 0.82),
+      minEnemyY + Math.round(10 * spriteScale),
+      Math.max(minEnemyY + Math.round(10 * spriteScale), maxPlayerY),
     );
 
     this.enemyHomePos = { x: enemyX, y: enemyY };
@@ -359,6 +410,11 @@ export class WorldScene extends Phaser.Scene {
     this.enemyBattleSprite.setPosition(enemyX, enemyY).setScale(spriteScale);
     this.playerBattleSprite.setPosition(playerX, playerY).setScale(spriteScale * 1.05);
     this.gleamingAuraSprite.setPosition(enemyX, enemyY - Math.round(8 * spriteScale));
+
+    if (this.game.canvas) {
+      this.game.canvas.dataset.playerBottomY = String(Math.round(playerY + 21 * spriteScale));
+      this.game.canvas.dataset.enemyTopY = String(Math.round(enemyY - 19 * spriteScale));
+    }
   }
 
   private createBattleLayer(): void {

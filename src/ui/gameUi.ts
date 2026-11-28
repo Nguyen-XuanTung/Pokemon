@@ -278,6 +278,10 @@ export class GameUiRenderer {
     } else if (this.controller.activeModal === 'ending_banner') {
       this.overlayEl.appendChild(buildEndingBannerModal(this.controller));
     }
+
+    if (this.controller.activeBattle && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('lingowild:battle-ui-layout'));
+    }
   }
 
   private buildTitleModal(): HTMLElement {

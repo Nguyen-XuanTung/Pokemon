@@ -1,9 +1,10 @@
 # Ghi công và nguồn gốc tài nguyên
 
-## 1. Mã nguồn và thiết kế trò chơi
+## 1. Phân định giấy phép mã nguồn và giấy phép tài nguyên hình ảnh
 
-- Toàn bộ kiến trúc miền nghiệp vụ, công thức chiến đấu, hệ thống thu phục, đồng hành đi theo sau, bộ điều khiển ô lưới, giao diện sổ thực địa, từ điển bỏ túi ngoại tuyến, bộ lập lịch từ vựng thích ứng và bộ kiểm thử tự động trong kho mã này được biên soạn nguyên bản cho dự án LingoWild, phát hành theo giấy phép MIT trong tệp `LICENSE`.
-- Quá trình thiết kế và hoàn thiện trải nghiệm có nghiên cứu bố cục bản đồ, cách phân tầng cảnh vật, nhịp chiến đấu và giao diện của Pokémon Emerald, Pokémon HeartGold, Pokémon Black 2, Stardew Valley, Eastward, Cassette Beasts và Coromon. Dự án chỉ tham khảo nguyên lý thiết kế, tuyệt đối không sao chép hình ảnh, âm thanh, nhân vật hay dữ liệu thương mại.
+- Giấy phép mã nguồn phần mềm và nội dung văn bản nguyên bản: Toàn bộ mã nguồn trong `src/`, `scripts/`, `tests/`, `public/sw.js`, âm thanh tổng hợp bằng Web Audio API cùng toàn bộ dữ liệu hội thoại, từ vựng và cốt truyện biên soạn nguyên bản cho dự án LingoWild được phát hành theo giấy phép MIT trong tệp `LICENSE`.
+- Giấy phép tài nguyên hình ảnh bên thứ ba: Tệp `LICENSE` (MIT) chỉ điều chỉnh mã nguồn và các tài nguyên do dự án tự tạo mới; các gói hình ảnh mở trong `assets-src/` và phần đồ họa trích xuất vào `public/assets/sprites/` giữ nguyên giấy phép riêng của từng tác giả gốc (CC0 1.0 Universal và CC-BY 3.0 / CC-BY 4.0). Bất kỳ bản sao hoặc bản phân phối lại nào có sử dụng các bảng ảnh này đều phải giữ nguyên tệp `CREDITS.md` cùng các tệp `ATTRIBUTION.txt` đi kèm trong `assets-src/`.
+- Tham khảo thiết kế trò chơi: Quá trình thiết kế có nghiên cứu nguyên lý bố cục bản đồ, phân tầng cảnh vật, nhịp chiến đấu và giao diện của Pokémon Emerald, Pokémon HeartGold, Pokémon Black 2, Stardew Valley, Eastward, Cassette Beasts và Coromon. Dự án chỉ tham khảo nguyên lý thiết kế, tuyệt đối không sao chép hình ảnh, âm thanh, nhân vật hay dữ liệu thương mại.
 - LingoWild là tên làm việc tạm thời phục vụ phát triển và nghiên cứu, không có bất kỳ liên hệ nào với The Pokémon Company, Nintendo hay các thương hiệu bên thứ ba.
 
 ## 2. Nguồn gốc các bộ tài nguyên pixel mã mở và phần biên soạn riêng

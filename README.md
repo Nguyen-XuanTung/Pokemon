@@ -84,19 +84,24 @@ Các cơ chế an toàn dữ liệu và ngoại tuyến đã triển khai:
 - Tách bạch điều kiện đủ thời hạn và điểm ưu tiên gặp lại từ: Trong `src/domain/learning.ts`, hàm `isWordDueForReencounter` kiểm tra nghiêm ngặt khoảng cách bước đi tối thiểu kể từ lần gặp trước (`12`, `28`, `55`, `110` bước ứng với bậc thành thạo `0` đến `3`), tách rời hoàn toàn khỏi hàm xếp hạng điểm ưu tiên `computeWordReencounterPriority`. Từ vừa gặp dù có điểm ưu tiên dương cũng không bị lặp lại sớm; từ đã thành thạo bậc `3` có chu kỳ nghỉ dài để nhường chỗ cho từ mới lưu đang đến hạn.
 - Bốn bộ lọc rõ ràng và không ép kiểm tra: Sổ Từ Vựng tách riêng 4 trạng thái `Encountered`, `Saved`, `Mastered` và `Due Now`. Hoạt động ôn từ bên lửa trại là hoàn toàn tự nguyện; người chơi có thể hoàn tất 100% cốt truyện mà không cần trả lời bất kỳ câu hỏi từ vựng nào.
 
-## 6. Nguồn tài nguyên mở và giấy phép
+## 6. Nguồn tài nguyên mở, giấy phép mã nguồn và giấy phép hình ảnh
 
-Mã nguồn dự án phát hành theo giấy phép MIT ([LICENSE](LICENSE)). Các bảng ảnh trong `public/assets/sprites/` được đóng gói xác định bằng `scripts/generate-assets.ts` từ các gói tài nguyên mở đã kiểm tra giấy phép lưu tại `assets-src/` cùng phần đồ họa vẽ riêng (xem chi tiết đầy đủ trong [CREDITS.md](CREDITS.md)):
+Dự án phân biệt rõ ràng giữa giấy phép mã nguồn phần mềm và giấy phép của các gói tài nguyên hình ảnh bên thứ ba (xem đầy đủ liên kết gốc và ghi chú chỉnh sửa trong [CREDITS.md](CREDITS.md)):
 
-| Bộ tài nguyên hoặc thành phần | Tác giả | Giấy phép | Phạm vi sử dụng trong LingoWild |
+- Giấy phép mã nguồn và dữ liệu nguyên bản: Toàn bộ mã nguồn TypeScript, kịch bản kiểm thử, cấu hình đóng gói, âm thanh tổng hợp Web Audio cùng toàn bộ dữ liệu hội thoại, từ vựng và cốt truyện biên soạn mới của dự án được cấp phép theo giấy phép MIT trong tệp [LICENSE](LICENSE).
+- Giấy phép hình ảnh vẽ nguyên bản của dự án: Các bảng ảnh sinh vật chiến đấu `creatures.png`, đồng hành đi theo sau `companions.png`, dấu vết sinh cảnh, gạch đá đen cổ ngữ, đường đất đỏ tự nối và hiệu ứng riêng trong `items.png`, `vfx.png` do nhóm phát triển vẽ mới và cấp phép theo giấy phép MIT cùng mã nguồn.
+- Giấy phép hình ảnh từ các bộ tài nguyên mở bên thứ ba: Các tệp ảnh nguồn trong `assets-src/` và các khung hình trích xuất vào `tileset.png`, `structures.png`, `characters.png`, `battle-bg.png` không thuộc giấy phép MIT mà giữ nguyên giấy phép gốc của từng tác giả (gồm nhóm phạm vi công cộng CC0 1.0 và nhóm yêu cầu ghi công bắt buộc CC-BY 3.0 hoặc CC-BY 4.0 lưu tại `assets-src/sharm-tiny16-ccby/ATTRIBUTION.txt` cùng `assets-src/battle-backgrounds/ATTRIBUTION.txt`). Khi phân phối lại kho mã hoặc bản đóng gói có kèm hình ảnh, cần giữ nguyên thông tin ghi công dưới đây:
+
+| Bộ tài nguyên hoặc thành phần | Tác giả | Giấy phép áp dụng | Phạm vi sử dụng trong LingoWild |
 | --- | --- | --- | --- |
-| `Roguelike/RPG Pack` | Kenney Vleugels | CC0 1.0 | Thảm cỏ, mặt nước động, bờ nước tự nối, cầu gỗ, thuyền neo, tán cây và lửa trại trong `tileset.png` |
-| `Tiny 16: Basic` | Lanea Zimmerman (`Sharm`) | CC-BY 3.0 / 4.0 | Nhân vật bốn hướng trong `characters.png`, rương gỗ, bậc đá, đá lát rêu, vách đá phân tầng và ván cầu trong `tileset.png` |
-| `Zelda-like tilesets and sprites` | ArMM1998 | CC0 1.0 | Nhà gỗ `5x5`, chòi gỗ, quầy chợ, cổng vòm đá cổ `4x4`, đài phun nước ba nhịp, ghế gỗ, thân cây rỗng, tượng đá và thác nước `3x3` trong `structures.png` |
-| `Hazy Hills` và `Gothicvania Swamp` | Luis Zuno (`@ansimuz`) | CC-BY 3.0 và CC0 1.0 | Nền đồi rừng mờ sương và tán cây đầm lầy trong `battle-bg.png` |
+| Mã nguồn, dữ liệu ngôn ngữ và âm thanh tổng hợp | Nhóm phát triển LingoWild | MIT ([LICENSE](LICENSE)) | Toàn bộ mã trong `src/`, `scripts/`, `tests/`, `public/sw.js` và dữ liệu hội thoại, từ vựng |
+| Sinh vật, đồng hành và hiệu ứng vẽ riêng | Nhóm phát triển LingoWild | MIT ([LICENSE](LICENSE)) | 30 loài sinh vật `48x48` (`creatures.png`), 30 đồng hành `16x16` (`companions.png`), vật phẩm (`items.png`), hiệu ứng (`vfx.png`) và đường đất đỏ tự nối |
+| `Roguelike/RPG Pack` | Kenney Vleugels | CC0 1.0 Universal | Thảm cỏ, mặt nước động, bờ nước tự nối, cầu gỗ, thuyền neo, tán cây và lửa trại trong `tileset.png` |
+| `Zelda-like tilesets and sprites` | ArMM1998 | CC0 1.0 Universal | Nhà gỗ `5x5`, chòi gỗ, quầy chợ, cổng vòm đá cổ `4x4`, đài phun nước ba nhịp, ghế gỗ, thân cây rỗng, tượng đá và thác nước `3x3` trong `structures.png` |
+| `Tiny 16: Basic` | Lanea Zimmerman (`Sharm`) | CC-BY 3.0 / CC-BY 4.0 | Nhân vật bốn hướng trong `characters.png`, rương gỗ, bậc đá, đá lát rêu, vách đá phân tầng và ván cầu trong `tileset.png` |
+| `Hazy Hills` và `Gothicvania Swamp` | Luis Zuno (`@ansimuz`) | CC-BY 3.0 và CC0 1.0 | Nền đồi rừng mờ sương (CC-BY 3.0) và tán cây đầm lầy (CC0 1.0) trong `battle-bg.png` |
 | `Parallax Backgrounds` | Admurin | CC-BY 4.0 | Núi xa, đồng cỏ, bến cọc gỗ và đỉnh núi sao đêm trong `battle-bg.png` |
 | `Sunset Temple Tiles` | Pyromantic | CC0 1.0 / CC-BY 3.0 | Tầng mây hoàng hôn hẻm núi cho sân đấu Đèo Đất Nung trong `battle-bg.png` |
-| Sinh vật, đồng hành và hiệu ứng riêng | Nhóm phát triển LingoWild | MIT | 30 loài sinh vật `48x48` (`creatures.png`), 30 đồng hành `16x16` (`companions.png`), vật phẩm (`items.png`), hiệu ứng (`vfx.png`) và đường đất đỏ tự nối |
 
 ## 7. Kết quả kiểm thử thực tế, độ phủ mã nguồn và lệnh chạy
 
@@ -130,7 +135,16 @@ Tóm tắt kết quả kiểm định thực tế (báo cáo chi tiết tại [d
 - Độ phủ V8 theo đúng phạm vi được đo (`src/domain/**/*.ts` và `src/game/controller.ts`, không tính gộp giao diện DOM, cảnh Phaser hay tệp dữ liệu tĩnh): Toàn phạm vi được đo đạt `79,44%` câu lệnh, `83,31%` dòng mã, `82,77%` hàm và `73,83%` nhánh điều kiện; riêng tầng nghiệp vụ `src/domain/` đạt `88,66%` dòng mã và `92,53%` hàm, còn `src/game/controller.ts` đạt `70,55%` dòng mã.
 - Kiểm thử trình duyệt đầu cuối và tích hợp liên tục: Bộ kiểm thử Playwright trên Chromium máy tính (`1280x720`) và điện thoại Pixel 7 dọc ngang (`412x915`, `915x412`) xác nhận phá đảo thực tế từ màn hình mở đầu tới đoạn kết mà không can thiệp trạng thái ngầm, nâng cấp trình phục vụ ngoại tuyến từ bản A sang bản B, mất mạng giữa phiên chơi, đường dẫn phụ `/Pokemon/` và chạy xanh hoàn toàn trên GitHub Actions của commit cuối.
 
-## 8. Tài liệu dự án và giới hạn thực tế
+## 8. Hướng dẫn phát hành trên GitHub Pages
+
+Kho mã đã cấu hình sẵn đường dẫn tương đối `base: './'` trong `vite.config.ts`, trình phục vụ ngoại tuyến tương thích đường dẫn con `/Pokemon/` và quy trình tự động hóa tại `.github/workflows/ci-and-deploy.yml`:
+
+1. Bật nguồn phát hành trên GitHub: Chủ dự án mở trang kho mã trên GitHub, vào mục `Settings`, chọn `Pages` ở thanh bên trái, tại phần `Build and deployment` chọn `Source` là `GitHub Actions`.
+2. Duyệt và gộp nhánh phát hành: Kiểm tra pull request từ nhánh `develop/lingowild` sang `main`, xác nhận bước `verify-and-build` chạy xanh rồi bấm `Merge pull request` vào nhánh `main`.
+3. Triển khai tự động: Ngay khi `main` nhận commit mới, công việc `verify-and-build` sẽ chạy lại toàn bộ kiểm định bảo mật, sinh bảng ảnh, kiểm tra dữ liệu, đóng gói `./dist` và chạy kiểm thử đầu cuối, sau đó công việc `deploy-pages` tự động xuất bản trò chơi lên địa chỉ `https://nguyen-xuantung.github.io/Pokemon/`.
+4. Kiểm tra sau phát hành: Mở địa chỉ trang đã xuất bản trên trình duyệt máy tính hoặc điện thoại, tải lần đầu để trình phục vụ ngoại tuyến lưu đệm 14 tài nguyên tĩnh, sau đó thử tải lại trang để xác nhận chế độ ngoại tuyến hoạt động bình thường.
+
+## 9. Tài liệu dự án và giới hạn thực tế
 
 Danh mục tài liệu đi kèm:
 - [Hướng dẫn chơi chi tiết](docs/HOW_TO_PLAY.md)

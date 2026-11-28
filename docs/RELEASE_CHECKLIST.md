@@ -28,4 +28,11 @@
 - [x] Vượt qua toàn bộ `npm run validate:data`, `npm run typecheck`, `npm run lint`, `npm run test:coverage` (`26/26` bài kiểm thử, gồm phá đảo tự nhiên cả 3 starter), `npm run build` và `npm run test:e2e`.
 - [x] Chụp mới và rà soát trực quan đầy đủ bộ ảnh chụp cả 5 vùng, nhiều sân đấu pixel, giao diện sổ thực địa và di động dọc ngang trong `docs/screenshots/`.
 - [x] Quay video gameplay thực tế dài từ 1 đến 3 phút lưu tại `docs/videos/lingowild-gameplay.webm`.
-- [x] Đẩy mã lên nhánh `develop/lingowild` (không gộp vào `main`) và xác nhận trực tiếp quy trình GitHub Actions chạy xanh trên commit cuối cùng.
+- [x] Đẩy mã lên nhánh `develop/lingowild` (không tự gộp vào `main`) và xác nhận trực tiếp quy trình GitHub Actions chạy xanh trên commit cuối cùng.
+
+## 5. Quy trình xuất bản lên GitHub Pages khi chủ dự án nghiệm thu
+
+1. Mở mục `Settings` rồi chọn `Pages` trên kho GitHub `Nguyen-XuanTung/Pokemon`, tại mục `Build and deployment` đặt `Source` thành `GitHub Actions`.
+2. Rà soát và bấm `Merge pull request` đối với pull request từ nhánh `develop/lingowild` sang nhánh `main`.
+3. Chờ quy trình `.github/workflows/ci-and-deploy.yml` chạy hoàn tất hai bước `verify-and-build` và `deploy-pages` trên nhánh `main` để xuất bản gói `./dist` lên `https://nguyen-xuantung.github.io/Pokemon/`.
+4. Mở trang đã xuất bản để xác nhận tải trang, âm thanh khi tương tác, lưu tiến trình cục bộ và tải lại ngoại tuyến trên đường dẫn `/Pokemon/` hoạt động ổn định.

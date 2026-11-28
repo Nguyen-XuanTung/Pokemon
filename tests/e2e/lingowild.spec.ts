@@ -222,8 +222,39 @@ test.describe('LingoWild Browser E2E Verification', () => {
       expect(inBattle).toBe(true);
       await expect(page.getByTestId('battle-deck')).toBeVisible();
 
-      if (!isMobile && attemptLoop === 0) {
-        await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-wild-battle.png') });
+      if (attemptLoop === 0) {
+        const assertBattleNoOverlap = async () => {
+          const metrics = await page.evaluate(() => {
+            const canvas = document.querySelector('#phaser-viewport canvas') as HTMLCanvasElement | null;
+            const deck = document.querySelector('[data-testid="battle-deck"]');
+            const hud = document.querySelector('.lw-battle-hud');
+            if (!canvas || !deck || !hud) return null;
+            const cr = canvas.getBoundingClientRect();
+            const dr = deck.getBoundingClientRect();
+            const hr = hud.getBoundingClientRect();
+            return {
+              playerBottomY: Number(canvas.dataset.playerBottomY ?? 0),
+              enemyTopY: Number(canvas.dataset.enemyTopY ?? 0),
+              deckTopY: Math.round(dr.top - cr.top),
+              hudBottomY: Math.round(hr.bottom - cr.top),
+            };
+          });
+          expect(metrics).not.toBeNull();
+          expect(metrics!.playerBottomY).toBeLessThan(metrics!.deckTopY);
+          expect(metrics!.enemyTopY).toBeGreaterThanOrEqual(metrics!.hudBottomY - 16);
+        };
+
+        await assertBattleNoOverlap();
+        if (isMobile) {
+          await page.setViewportSize({ width: 915, height: 412 });
+          await page.waitForTimeout(120);
+          await assertBattleNoOverlap();
+          await page.setViewportSize({ width: 412, height: 915 });
+          await page.waitForTimeout(120);
+          await assertBattleNoOverlap();
+        } else {
+          await page.screenshot({ path: path.join(SCREENSHOT_DIR, '05-wild-battle.png') });
+        }
       }
 
       const enemyHeader = (await page.locator('.lw-plate-enemy strong').textContent()) ?? '';

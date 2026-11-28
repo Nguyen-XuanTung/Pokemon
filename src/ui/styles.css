@@ -625,6 +625,11 @@ select {
 }
 
 @media (min-width: 760px) {
+  .lw-battle-deck {
+    max-height: 36%;
+    padding: 6px 10px;
+  }
+
   .lw-battle-columns {
     display: grid;
     grid-template-columns: minmax(250px, 0.92fr) minmax(340px, 1.38fr);
@@ -634,7 +639,16 @@ select {
 
   .lw-battle-narrative-col .lw-battle-log {
     margin-bottom: 0;
-    min-height: 92px;
+    min-height: 82px;
+  }
+
+  .lw-battle-command-col .lw-move-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .lw-battle-command-col .lw-move-card {
+    padding: 4px 7px;
   }
 }
 
@@ -1006,6 +1020,11 @@ select {
   .lw-move-grid {
     grid-template-columns: 1fr;
   }
+
+  .lw-battle-deck {
+    max-height: 40%;
+    padding: 6px 8px;
+  }
 }
 
 @media (max-height: 480px) and (orientation: landscape) {
@@ -1021,9 +1040,18 @@ select {
     top: 40px;
   }
 
+  .lw-battle-hud {
+    padding: 4px 8px;
+  }
+
+  .lw-combatant-plate {
+    padding: 3px 8px;
+  }
+
   .lw-battle-deck {
-    max-height: 52%;
-    padding: 6px 9px;
+    max-height: 39%;
+    padding: 5px 8px;
+    margin: auto 6px 4px;
   }
 
   .lw-dpad {
