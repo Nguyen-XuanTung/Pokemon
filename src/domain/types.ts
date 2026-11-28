@@ -120,6 +120,7 @@ export interface CreatureInstance {
   uid: string;
   speciesId: string;
   nickname?: string;
+  isRareVariant?: boolean;
   level: number;
   exp: number;
   currentHp: number;
@@ -186,7 +187,8 @@ export type PropKind =
   | 'campfire'
   | 'shrine'
   | 'supply_post'
-  | 'overlook';
+  | 'overlook'
+  | 'trace';
 
 export interface WorldPropDefinition {
   readonly id: string;
@@ -202,16 +204,26 @@ export interface WorldPropDefinition {
   readonly setsFlag?: string;
   readonly requiredFlag?: string;
   readonly requiredTime?: TimeOfDay;
+  readonly traceSpeciesId?: string;
 }
 
 export type MapDecorKind =
   | 'cottage_lodge'
   | 'cottage_greenhouse'
+  | 'market_stall'
+  | 'fountain_plaza'
   | 'tent_sage'
   | 'boat_moored'
   | 'fence_h'
   | 'fence_v'
   | 'lantern_post'
+  | 'bench_wood'
+  | 'barrel_cluster'
+  | 'flower_box'
+  | 'fallen_log'
+  | 'waterfall_cliff'
+  | 'sanctuary_gate'
+  | 'shrub'
   | 'lily_pad'
   | 'boulder'
   | 'stump'
@@ -266,6 +278,7 @@ export interface NpcDefinition {
   readonly defaultDialogueId: string;
   readonly conditionalDialogues?: ReadonlyArray<ConditionalDialogueRule>;
   readonly trainerBattle?: TrainerBattleSpec;
+  readonly rematchBattle?: TrainerBattleSpec;
 }
 
 export interface RegionMapDefinition {
@@ -332,8 +345,8 @@ export type DialogueAction =
   | { readonly kind: 'open_camp_review' }
   | { readonly kind: 'open_supply_post' }
   | { readonly kind: 'give_item'; readonly itemId: string; readonly quantity: number; readonly onceFlag: string }
-  | { readonly kind: 'start_trainer_battle'; readonly npcId: string }
-  | { readonly kind: 'trigger_wild_encounter'; readonly speciesId: string; readonly level: number; readonly onceFlag?: string }
+  | { readonly kind: 'start_trainer_battle'; readonly npcId: string; readonly isRematch?: boolean }
+  | { readonly kind: 'trigger_wild_encounter'; readonly speciesId: string; readonly level: number; readonly onceFlag?: string; readonly guaranteedRareVariant?: boolean }
   | { readonly kind: 'cycle_time_of_day' };
 
 export interface DialogueChoice {
@@ -377,6 +390,11 @@ export interface PolysemySense {
   readonly exampleVi: string;
 }
 
+export interface LexiconExamplePair {
+  readonly en: string;
+  readonly vi: string;
+}
+
 export interface LexiconEntry {
   readonly id: string;
   readonly word: string;
@@ -387,6 +405,7 @@ export interface LexiconEntry {
   readonly meaningVi: string;
   readonly exampleEn: string;
   readonly exampleVi: string;
+  readonly examples?: ReadonlyArray<LexiconExamplePair>;
   readonly topic: string;
   readonly senses?: ReadonlyArray<PolysemySense>;
 }
@@ -400,6 +419,7 @@ export interface WordMemoryRecord {
   lastSeenStep: number;
   lastSeenAtMs?: number;
   nextReviewStep?: number;
+  nextReviewAtMs?: number;
   correctReviews?: number;
   lapses?: number;
   contextsSeen: string[];
@@ -430,6 +450,7 @@ export interface GameSettings {
   highContrast: boolean;
   reducedMotion: boolean;
   battleSpeed?: BattleSpeedMode;
+  showFollower?: boolean;
   textScale: 'normal' | 'large';
   touchControls: 'auto' | 'always' | 'off';
   keyMap: KeyBindingMap;
@@ -444,7 +465,7 @@ export interface PlayerStats {
 }
 
 export interface GameState {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   seedState: number;
   playTimeSeconds: number;
   stepCount: number;
@@ -460,6 +481,10 @@ export interface GameState {
   sanctuaryBox: CreatureInstance[];
   discoveredSpecies: string[];
   caughtSpecies: string[];
+  gleamingSpecies: string[];
+  rematchCleared: string[];
+  discoveredTraces: string[];
+  readLoreIds: string[];
   inventory: InventorySlot[];
   tokens: number;
   wardStepsRemaining: number;

@@ -121,6 +121,14 @@ select {
   transform-origin: center;
 }
 
+.sprite-creature-silhouette {
+  filter: brightness(0) contrast(1.2) opacity(0.58);
+}
+
+.sprite-creature-gleaming {
+  filter: drop-shadow(0 0 4px rgba(255, 224, 102, 0.92)) saturate(1.22);
+}
+
 .sprite-item {
   display: inline-block;
   width: 16px;
@@ -150,7 +158,8 @@ select {
   border-radius: 6px;
   padding: 5px 10px;
   box-shadow: 0 2px 0 rgba(25, 18, 12, 0.42);
-  max-width: min(640px, 68%);
+  max-width: min(640px, 70%);
+  cursor: pointer;
 }
 
 .lw-region-name {
@@ -194,6 +203,18 @@ select {
   border-color: #244a28;
 }
 
+.lw-badge-danger {
+  background: var(--terracotta);
+  color: #fffaf0;
+  border-color: var(--terracotta-dark);
+}
+
+.lw-badge-gleaming {
+  background: #e6b832;
+  color: #241b07;
+  border-color: #8c660e;
+}
+
 .lw-hud-quest {
   font-size: 0.8rem;
   color: var(--ink-muted);
@@ -201,9 +222,11 @@ select {
 }
 
 .lw-hud-quest-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
 }
 
 .lw-hud-actions {
@@ -318,8 +341,50 @@ select {
   font-weight: 600;
 }
 
+.word-token-pocket {
+  border-bottom: 1px dashed rgba(89, 78, 65, 0.35);
+}
+
 .word-token:hover {
   background: rgba(201, 152, 40, 0.25);
+}
+
+.lw-evolution-banner {
+  background: rgba(246, 238, 217, 0.98);
+  border: 2.5px solid var(--amber-gold);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  max-width: 94vw;
+}
+
+.lw-evolution-sprites {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lw-evolution-arrow {
+  color: var(--terracotta-dark);
+  font-size: 1.05rem;
+}
+
+.lw-starter-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.lw-starter-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding: 6px 10px;
 }
 
 /* Gloss Slip Popup */
@@ -821,7 +886,8 @@ select {
   touch-action: manipulation;
 }
 
-.lw-dpad-btn:active {
+.lw-dpad-btn:active,
+.lw-dpad-btn[data-active='true'] {
   background: var(--terracotta);
   color: #fffaf0;
 }

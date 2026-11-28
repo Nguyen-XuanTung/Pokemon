@@ -1141,4 +1141,104 @@ export const DIALOGUES_WORLD: ReadonlyArray<DialogueNode> = [
       },
     ],
   },
+  {
+    id: 'trace_whisperwood_shellglow',
+    speaker: 'Habitat Trace: Whisperwood',
+    speakerRoleVi: 'Dấu vết sinh cảnh Rừng Thầm',
+    cefr: 'A2',
+    regionId: 'whisperwood',
+    contextTag: 'habitat_trace',
+    lines: [
+      {
+        en: 'Wait a second! Pale green dust glows on this damp fallen log. A shy Shellglow rested here not long ago!',
+        vi: 'Chờ chút nào! Lớp bụi xanh nhạt đang phát sáng trên thân gỗ ẩm này. Một chú Shellglow nhút nhát vừa nghỉ chân tại đây cách đây không lâu!',
+        variants: {
+          A1: {
+            en: 'Look closely! Soft green light shines on this wet log. Shy Shellglow likes to rest here at dusk!',
+            vi: 'Nhìn kỹ này! Ánh sáng xanh dịu lấp lánh trên khúc gỗ ẩm. Shellglow nhút nhát rất thích nghỉ ở đây lúc chiều tối!',
+          },
+          B2: {
+            en: 'Notice the faint bioluminescent dust clinging to this mossy log! Shellglow and rare gleaming woodland Wildkin gather nearby at dusk.',
+            vi: 'Hãy chú ý lớp bụi phát quang mờ bám trên thân gỗ phủ rêu! Shellglow và biến thể Ánh Sao quý hiếm thường tụ họp quanh đây lúc chạng vạng.',
+          },
+        },
+        focusWords: ['wait', 'glow', 'damp', 'shy', 'at dusk'],
+      },
+      {
+        en: 'Recording this habitat trace sharpens your scouting instinct, making rare and gleaming encounters easier to spot in Whisperwood!',
+        vi: 'Ghi chép dấu vết sinh cảnh này giúp tăng độ nhạy quan sát, giúp bạn dễ bắt gặp loài hiếm và biến thể Ánh Sao hơn tại Rừng Thầm!',
+        focusWords: ['habitat', 'instinct', 'rare'],
+      },
+    ],
+  },
+  {
+    id: 'trace_fen_lotusbell',
+    speaker: 'Habitat Trace: Reedwater',
+    speakerRoleVi: 'Dấu vết sinh cảnh Đầm Sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'habitat_trace',
+    lines: [
+      {
+        en: 'Tiny golden ripples circle a floating lotus leaf up ahead! Glimmerfin and wetland frogs gather where fresh currents meet.',
+        vi: 'Những gợn nước ánh vàng xoay tròn quanh tàu lá sen phía trước! Glimmerfin và ếch đầm lầy thường tụ hội nơi hai luồng nước sạch giao nhau.',
+        variants: {
+          A1: {
+            en: 'Look up ahead! Bright ripples circle a pink lotus leaf. Glimmerfin loves to swim here at night!',
+            vi: 'Nhìn phía trước kìa! Những gợn nước sáng xoay quanh lá sen hồng. Glimmerfin rất thích bơi ở đây vào ban đêm!',
+          },
+          B2: {
+            en: 'Delicate golden ripples ring a floating lotus pad up ahead, revealing where Glimmerfin schools feed beneath evening mist.',
+            vi: 'Những gợn nước vàng mảnh khảnh lan quanh lá sen phía trước, tiết lộ nơi đàn Glimmerfin kiếm ăn dưới làn sương chiều.',
+          },
+        },
+        focusWords: ['up ahead', 'lotus', 'current', 'mist'],
+      },
+      {
+        en: 'With this wetland trace logged in your journal, rare and gleaming marsh partners appear more often along the reed beds!',
+        vi: 'Sau khi lưu dấu vết đầm lầy này vào sổ tay, các loài hiếm và biến thể Ánh Sao sẽ xuất hiện thường xuyên hơn dọc bãi sậy!',
+        focusWords: ['journal', 'rare', 'reed'],
+      },
+    ],
+  },
+  {
+    id: 'trace_ridge_flarecrest',
+    speaker: 'Habitat Trace: Terracotta',
+    speakerRoleVi: 'Dấu vết sinh cảnh Đèo Đất Nung',
+    cefr: 'B1',
+    regionId: 'terracotta_ridge',
+    contextTag: 'habitat_trace',
+    lines: [
+      {
+        en: 'Warm amber feathers and claw marks line this sunny sandstone ledge! No wonder canyon scouts look up before climbing.',
+        vi: 'Những chiếc lông màu hổ phách ấm áp và vết móng in dọc mỏm sa thạch đầy nắng! Thảo nào trinh sát hẻm núi luôn ngước nhìn trước khi leo.',
+        focusWords: ['warm', 'feather', 'ledge', 'no wonder', 'climb'],
+      },
+      {
+        en: 'Tracking this ridge clue helps you figure out updraft routes, boosting rare and gleaming encounters across Terracotta Ridge!',
+        vi: 'Lần theo manh mối này giúp bạn nắm bắt luồng gió bốc, tăng cơ hội gặp loài hiếm và biến thể Ánh Sao khắp Đèo Đất Nung!',
+        focusWords: ['clue', 'figure out', 'rare', 'ridge'],
+      },
+    ],
+  },
+  {
+    id: 'trace_sanctuary_solacern',
+    speaker: 'Habitat Trace: Starfall',
+    speakerRoleVi: 'Dấu vết sinh cảnh Thánh Địa',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'habitat_trace',
+    lines: [
+      {
+        en: 'Crystalline hoofprints shimmer beside the starlit pool, humming a serene chord that makes sense of old observatory legends!',
+        vi: 'Những dấu chân pha lê lấp lánh bên hồ sao trời, ngân lên hợp âm thanh bình làm sáng tỏ bao truyền thuyết cổ nơi đài quan sát!',
+        focusWords: ['shimmer', 'serene', 'make sense', 'legend'],
+      },
+      {
+        en: 'Attuning to Solacern footprints deepens your bond with Starfall Sanctuary, drawing rare and gleaming guardians into view!',
+        vi: 'Cảm nhận dấu chân của Solacern giúp làm sâu sắc mối gắn kết với Thánh Địa, thu hút các hộ vệ quý hiếm và Ánh Sao xuất hiện!',
+        focusWords: ['footprint', 'bond', 'sanctuary', 'rare', 'guardian'],
+      },
+    ],
+  },
 ];

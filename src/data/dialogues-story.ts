@@ -1468,9 +1468,229 @@ export const DIALOGUES_STORY: ReadonlyArray<DialogueNode> = [
         focusWords: ['harmony', 'basin', 'experience', 'context'],
       },
       {
-        en: 'Your expedition continues freely: explore secret chests, evolve all thirty Wildkin, or relax beside any campfire!',
-        vi: 'Chuyến thám hiểm vẫn mở rộng tự do: hãy tìm rương ẩn, tiến hóa đủ ba mươi loài hoặc thư giãn bên lửa trại nhé!',
-        focusWords: ['expedition', 'explore', 'chest', 'evolve', 'campfire'],
+        en: 'Your expedition continues freely: challenge Wardens in Mastery Rematches, inspect habitat traces for gleaming variants, or relax beside any campfire!',
+        vi: 'Hành trình hậu truyện vẫn rộng mở: hãy tái đấu bậc thầy cùng các Thủ lĩnh, lần dấu vết sinh cảnh tìm biến thể Ánh Sao hoặc thư giãn bên lửa trại!',
+        focusWords: ['expedition', 'explore', 'campfire'],
+      },
+    ],
+  },
+  {
+    id: 'rowan_postgame_mastery',
+    speaker: 'Ranger Rowan',
+    speakerRoleVi: 'Trưởng đoàn nghiên cứu',
+    cefr: 'B1',
+    regionId: 'mosslight_hub',
+    contextTag: 'postgame_hub',
+    lines: [
+      {
+        en: 'Welcome back, Basin Naturalist! By the way, all four Wardens invited you to friendly Mastery Rematches with their fully evolved partners.',
+        vi: 'Chào mừng trở lại, Nhà tự nhiên học! Nhân tiện, cả bốn Thủ lĩnh đều gửi lời mời bạn tái đấu giao hữu bậc thầy cùng đội hình tiến hóa tối đa của họ.',
+        variants: {
+          A1: {
+            en: 'Welcome back to camp! By the way, all four Wardens want a friendly rematch with their strongest teams!',
+            vi: 'Chào mừng về trại! Nhân tiện, cả bốn Thủ lĩnh đều muốn đấu giao hữu lại bằng đội hình mạnh nhất của họ!',
+          },
+          B2: {
+            en: 'Welcome home, Basin Naturalist! By the way, each regional Warden looks forward to a spirited Mastery Rematch alongside their fully evolved companions.',
+            vi: 'Chào mừng trở về, Nhà tự nhiên học! Nhân tiện, mỗi Thủ lĩnh vùng đều mong chờ trận Tái Đấu Bậc Thầy cùng những bạn đồng hành tiến hóa hoàn chỉnh.',
+          },
+        },
+        focusWords: ['welcome', 'by the way', 'invite', 'warden', 'evolve'],
+      },
+      {
+        en: 'Also keep an eye on glowing habitat traces in each region. Inspecting them helps you figure out where rare gleaming Wildkin appear!',
+        vi: 'Hãy để mắt thêm tới những dấu vết sinh cảnh phát sáng ở mỗi vùng. Khảo sát chúng sẽ giúp bạn tìm ra nơi xuất hiện biến thể Ánh Sao quý hiếm!',
+        focusWords: ['keep an eye on', 'habitat', 'figure out', 'rare'],
+        choices: [
+          {
+            labelEn: 'View Expedition Summary',
+            labelVi: 'Xem bảng tổng kết hành trình',
+            action: { kind: 'set_flag', flag: 'seen_ending_banner' },
+            nextDialogueId: 'finale_credits_summary',
+          },
+          {
+            labelEn: 'Set out on post-game trails',
+            labelVi: 'Tiếp tục dạo bước hậu truyện',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'sylvan_rematch_offer',
+    speaker: 'Warden Sylvan',
+    speakerRoleVi: 'Thủ lĩnh Rừng Thầm',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'rematch_sylvan',
+    lines: [
+      {
+        en: 'Good to see you again beneath the Whispering Oak! Since harmony returned, my woodland partners have grown stronger than ever.',
+        vi: 'Rất vui được gặp lại bạn dưới gốc Sồi Thầm! Từ khi sự hòa hợp trở lại, các bạn đồng hành rừng xanh của tôi đã trưởng thành mạnh mẽ hơn bao giờ hết.',
+        variants: {
+          A1: {
+            en: 'Good to see you once more! My forest team grew much stronger. Ready for a friendly rematch?',
+            vi: 'Rất vui gặp lại bạn một lần nữa! Đội rừng xanh của tôi đã mạnh hơn nhiều. Bạn sẵn sàng tái đấu giao hữu chứ?',
+          },
+          B2: {
+            en: 'Wonderful to meet you once more beneath these sunlit boughs! My evolved woodland team looks forward to testing your mastery.',
+            vi: 'Thật vui gặp lại bạn dưới vòm sồi đón nắng! Đội hình rừng xanh đã tiến hóa của tôi rất mong chờ thử thách bản lĩnh của bạn.',
+          },
+        },
+        focusWords: ['once more', 'harmony', 'grow', 'strong'],
+        choices: [
+          {
+            labelEn: 'Challenge Master Warden Sylvan (Lv.24-25)',
+            labelVi: 'Tái đấu Bậc thầy Sylvan (Cấp 24-25)',
+            action: { kind: 'start_trainer_battle', npcId: 'npc_sylvan', isRematch: true },
+          },
+          {
+            labelEn: 'Chat about Whisperwood trails',
+            labelVi: 'Trò chuyện về đường mòn Rừng Thầm',
+            nextDialogueId: 'chat_sylvan_trees',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'sylvan_rematch_win',
+    speaker: 'Warden Sylvan',
+    speakerRoleVi: 'Thủ lĩnh Rừng Thầm',
+    cefr: 'B1',
+    regionId: 'whisperwood',
+    contextTag: 'rematch_sylvan',
+    lines: [
+      {
+        en: 'No wonder the whole basin counts on you! Your partners move side by side with effortless trust. Safe travels, my friend!',
+        vi: 'Thảo nào cả thung lũng đều tin cậy bạn! Đội của bạn phối hợp sát cánh bên nhau đầy ăn ý. Chúc thượng lộ bình an nhé người bạn của tôi!',
+        focusWords: ['no wonder', 'count on', 'side by side', 'trust', 'safe travels'],
+      },
+    ],
+  },
+  {
+    id: 'mirella_rematch_offer',
+    speaker: 'Warden Mirella',
+    speakerRoleVi: 'Thủ lĩnh Đầm Sậy',
+    cefr: 'B1',
+    regionId: 'reedwater_fen',
+    contextTag: 'rematch_mirella',
+    lines: [
+      {
+        en: 'Welcome back to the Tide Arch! Lotusbell and Tidecrest have been looking forward to a high-level match with your team.',
+        vi: 'Chào mừng trở lại Vòm Thủy Triều! Lotusbell và Tidecrest vẫn luôn mong chờ một trận so tài đỉnh cao cùng đội của bạn.',
+        focusWords: ['welcome', 'look forward to', 'match', 'team'],
+        choices: [
+          {
+            labelEn: 'Challenge Master Warden Mirella (Lv.25-26)',
+            labelVi: 'Tái đấu Bậc thầy Mirella (Cấp 25-26)',
+            action: { kind: 'start_trainer_battle', npcId: 'npc_mirella', isRematch: true },
+          },
+          {
+            labelEn: 'Chat beside the lotus lagoon',
+            labelVi: 'Trò chuyện bên đầm hoa sen',
+            nextDialogueId: 'chat_mirella_tides',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'mirella_rematch_win',
+    speaker: 'Warden Mirella',
+    speakerRoleVi: 'Thủ lĩnh Đầm Sậy',
+    cefr: 'B2',
+    regionId: 'reedwater_fen',
+    contextTag: 'rematch_mirella',
+    lines: [
+      {
+        en: 'Splendid flow! You read every shifting tide right away and turned pressure into calm victory. Feel free to spar anytime!',
+        vi: 'Nhịp điệu tuyệt đẹp! Bạn đọc vị từng con nước chuyển dịch ngay lập tức và biến sức ép thành chiến thắng điềm tĩnh. Cứ ghé đấu tập bất cứ lúc nào nhé!',
+        focusWords: ['right away', 'calm', 'victory', 'feel free'],
+      },
+    ],
+  },
+  {
+    id: 'kaelen_rematch_offer',
+    speaker: 'Warden Kaelen',
+    speakerRoleVi: 'Thủ lĩnh Đèo Đất Nung',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'rematch_kaelen',
+    lines: [
+      {
+        en: 'The Sunforge Beacon burns brighter whenever you visit! Care to test your endurance once more against Pyrelume and Cragbastion?',
+        vi: 'Đài Nắng Sớm luôn rực sáng hơn mỗi dịp bạn ghé thăm! Bạn muốn thử sức bền thêm lần nữa trước Pyrelume và Cragbastion chứ?',
+        focusWords: ['beacon', 'visit', 'endure', 'once more'],
+        choices: [
+          {
+            labelEn: 'Challenge Master Warden Kaelen (Lv.26-27)',
+            labelVi: 'Tái đấu Bậc thầy Kaelen (Cấp 26-27)',
+            action: { kind: 'start_trainer_battle', npcId: 'npc_kaelen', isRematch: true },
+          },
+          {
+            labelEn: 'Ask about terracotta craft',
+            labelVi: 'Trò chuyện về nghề gốm đất nung',
+            nextDialogueId: 'chat_kaelen_kilns',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'kaelen_rematch_win',
+    speaker: 'Warden Kaelen',
+    speakerRoleVi: 'Thủ lĩnh Đèo Đất Nung',
+    cefr: 'B2',
+    regionId: 'terracotta_ridge',
+    contextTag: 'rematch_kaelen',
+    lines: [
+      {
+        en: 'For sure, your resolve is tougher than canyon stone! Keep going and inspire every young scout on the ridge!',
+        vi: 'Chắc chắn rồi, ý chí của bạn còn vững hơn cả đá hẻm núi! Hãy tiếp tục tiến bước và truyền lửa cho mọi trinh sát trẻ trên đèo nhé!',
+        focusWords: ['for sure', 'stone', 'keep going', 'scout'],
+      },
+    ],
+  },
+  {
+    id: 'astraea_rematch_offer',
+    speaker: 'Elder Keeper Astraea',
+    speakerRoleVi: 'Trưởng lão hộ vệ',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'rematch_astraea',
+    lines: [
+      {
+        en: 'Starlight greets you warmly, Champion of Harmony. Even Guardian Solacern stepped forward to join our Sanctuary Mastery Trial!',
+        vi: 'Ánh sao chào đón bạn thật ấm áp, Nhà vô địch Hòa Hợp. Ngay cả Linh lộc Solacern cũng bước tới góp mặt trong Khảo nghiệm Bậc thầy hôm nay!',
+        focusWords: ['star', 'harmony', 'guardian', 'join', 'trial'],
+        choices: [
+          {
+            labelEn: 'Begin Grand Sanctuary Mastery Trial (Lv.27-28)',
+            labelVi: 'Bắt đầu Đại Khảo Nghiệm Thánh Địa (Cấp 27-28)',
+            action: { kind: 'start_trainer_battle', npcId: 'npc_astraea', isRematch: true },
+          },
+          {
+            labelEn: 'Reflect beneath the stars',
+            labelVi: 'Trò chuyện dưới bầu trời sao',
+            nextDialogueId: 'chat_astraea_stars',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'astraea_rematch_win',
+    speaker: 'Elder Keeper Astraea',
+    speakerRoleVi: 'Trưởng lão hộ vệ',
+    cefr: 'B2',
+    regionId: 'starfall_sanctuary',
+    contextTag: 'rematch_astraea',
+    lines: [
+      {
+        en: 'Remarkable fellowship! Language, nature, and courage stand in balance whenever you walk side by side with your companions.',
+        vi: 'Tình bằng hữu thật đáng ngưỡng mộ! Ngôn ngữ, thiên nhiên và lòng quả cảm luôn hòa quyện cân bằng mỗi khi bạn sát cánh cùng đồng hành.',
+        focusWords: ['fellowship', 'in balance', 'side by side', 'companion'],
       },
     ],
   },

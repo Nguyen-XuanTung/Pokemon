@@ -23,6 +23,7 @@ export function createDefaultSettings(): GameSettings {
     highContrast: false,
     reducedMotion: false,
     battleSpeed: 'normal',
+    showFollower: true,
     textScale: 'normal',
     touchControls: 'auto',
     keyMap: {
@@ -39,7 +40,7 @@ export function createDefaultSettings(): GameSettings {
 
 export function createInitialGameState(seed: number = 0x5eed2026): GameState {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     seedState: seed >>> 0 || 0x5eed2026,
     playTimeSeconds: 0,
     stepCount: 0,
@@ -55,6 +56,10 @@ export function createInitialGameState(seed: number = 0x5eed2026): GameState {
     sanctuaryBox: [],
     discoveredSpecies: [],
     caughtSpecies: [],
+    gleamingSpecies: [],
+    rematchCleared: [],
+    discoveredTraces: [],
+    readLoreIds: [],
     inventory: [
       { itemId: 'moss_charm', quantity: 6 },
       { itemId: 'dew_tonic', quantity: 4 },
@@ -142,6 +147,12 @@ export function registerCapturedWildkin(
   captured.bondedRegion = bondedRegion;
   captured.uid = `wild_${captured.speciesId}_${state.stats.wildCaught + 1}_${state.stepCount}`;
   markSpeciesCaught(state, captured.speciesId);
+  if (captured.isRareVariant) {
+    const gleaming = state.gleamingSpecies ?? (state.gleamingSpecies = []);
+    if (!gleaming.includes(captured.speciesId)) {
+      gleaming.push(captured.speciesId);
+    }
+  }
   state.stats.wildCaught += 1;
 
   if (state.party.length < MAX_PARTY_SIZE) {

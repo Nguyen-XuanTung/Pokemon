@@ -151,8 +151,16 @@ export function playOutActiveBattleNaturally(
     const foeSpec = SPECIES_BY_ID[foe.speciesId]!;
     const activeSpec = SPECIES_BY_ID[active.speciesId]!;
 
-    // 1. Heal in-battle if boss/trainer fight and active partner drops below 55% HP
-    if (battle.kind === 'trainer' && active.currentHp < active.maxHp * 0.55) {
+    // 1. Heal or cure disabling status in-battle during boss/trainer fights
+    if (
+      battle.kind === 'trainer' &&
+      (active.status === 'sleep' || active.status === 'paralyze') &&
+      controller.state.inventory.some((s) => s.itemId === 'clear_herb' && s.quantity > 0)
+    ) {
+      controller.submitBattleAction({ kind: 'item', itemId: 'clear_herb' });
+      continue;
+    }
+    if (battle.kind === 'trainer' && active.currentHp < active.maxHp * 0.58) {
       const healId = getBestHealItem(controller.state);
       if (healId) {
         controller.submitBattleAction({ kind: 'item', itemId: healId });
@@ -163,13 +171,14 @@ export function playOutActiveBattleNaturally(
     // 2. Switch to a healthier elemental counter during trainer/boss battles if current matchup is poor
     if (battle.kind === 'trainer') {
       const foeVsCurrent = getTypeMultiplier(foeSpec.element, activeSpec.element);
-      if (foeVsCurrent > 1.2 && active.currentHp < active.maxHp * 0.75) {
+      if (foeVsCurrent > 1.2) {
         const betterIdx = battle.playerParty.findIndex((cand, idx) => {
           if (idx === battle.activePlayerIndex || cand.currentHp <= cand.maxHp * 0.45) return false;
+          if (cand.level < foe.level - 4) return false;
           const cSpec = SPECIES_BY_ID[cand.speciesId]!;
           const offense = cand.moves.some((m) => {
             const md = MOVES_BY_ID[m.moveId];
-            return md && m.pp > 0 && md.power > 0 && getTypeMultiplier(md.element, foeSpec.element) > 1.1;
+            return md && m.pp > 0 && md.power > 0 && getTypeMultiplier(md.element, foeSpec.element) >= 1;
           });
           return offense && getTypeMultiplier(foeSpec.element, cSpec.element) <= 1;
         });

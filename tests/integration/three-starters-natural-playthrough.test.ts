@@ -29,7 +29,7 @@ class InMemoryBrowserStorage implements StorageAdapter {
 
 function partyNeedsCampfireRest(controller: GameController): boolean {
   return controller.state.party.some((p) => {
-    const lowHp = p.currentHp < p.maxHp * 0.65;
+    const lowHp = p.currentHp < p.maxHp * 0.8;
     const lowPp = p.moves.every((m) => m.pp <= 1);
     return lowHp || lowPp;
   });
@@ -128,9 +128,19 @@ function trainInGrassNaturally(params: {
     );
   };
 
+  const targetRegion = controller.state.regionId;
   let loops = 0;
   while (loops < 480) {
     loops += 1;
+    // If a wild battle ever fainted our Lv.5 starter back to Mosslight Camp, walk back into targetRegion naturally
+    if (controller.state.regionId === 'mosslight_hub' && targetRegion === 'whisperwood') {
+      walkNaturallyToTile(controller, 0, 12);
+    } else if (
+      controller.state.regionId === 'mosslight_hub' &&
+      targetRegion === 'starfall_sanctuary'
+    ) {
+      walkNaturallyToTile(controller, 15, 0);
+    }
     if (bossElementToCounter) {
       ensureCounterInActiveParty(controller, bossElementToCounter);
     }
@@ -262,16 +272,16 @@ function runCompleteUnassistedPlaythrough(
 
   // --- ACT 1: Whisperwood Glen ---
   // Collect Brookside chest (6,20 -> +4 Moss Charms) & Hidden Fern chest (26,20 -> +2 Orchard Salves)
-  walkAdjacentAndFace(controller, 26, 20);
+  walkAdjacentAndFace(controller, 26, 20, { preferFleeWild: true });
   controller.interactFacing();
-  walkAdjacentAndFace(controller, 6, 20);
+  walkAdjacentAndFace(controller, 6, 20, { preferFleeWild: true });
   controller.interactFacing();
 
   // Talk to Woodcarver Haru (15,16) and read Hollow Trunk Clue (12,17)
-  walkAdjacentAndFace(controller, 15, 16);
+  walkAdjacentAndFace(controller, 15, 16, { preferFleeWild: true });
   controller.interactFacing();
   closeAnyOpenDialogueNaturally(controller);
-  walkAdjacentAndFace(controller, 12, 17);
+  walkAdjacentAndFace(controller, 12, 17, { preferFleeWild: true });
   controller.interactFacing();
   closeAnyOpenDialogueNaturally(controller);
 
@@ -409,7 +419,8 @@ function runCompleteUnassistedPlaythrough(
   controller.interactFacing();
   expect(controller.activeModal).toBe('supply_post');
   controller.purchaseItem('star_charm', 2);
-  controller.purchaseItem('nectar_flask', 3);
+  controller.purchaseItem('nectar_flask', 5);
+  controller.purchaseItem('clear_herb', 2);
   controller.closeModal();
   // Return north through North Arch (15,0) into Starfall Sanctuary
   walkNaturallyToTile(controller, 15, 0);
@@ -445,13 +456,13 @@ function runCompleteUnassistedPlaythrough(
     }
   }
 
-  // Train in Starfall Sanctuary grass until Lv.23 (evolves starter to Stage 3!) and 12+ species bonded
+  // Train in Starfall Sanctuary grass until Lv.24 (evolves starter to Stage 3!) and 12+ species bonded
   trainInGrassNaturally({
     controller,
     tileA: [11, 17],
     tileB: [11, 18],
     campfire: [15, 16],
-    targetLeadLevel: 23,
+    targetLeadLevel: 24,
     minCaughtCount: 12,
     mustTrainPredicate: () => {
       const st = controller.state.party.find((p) => p.bondedRegion === 'mosslight_hub');

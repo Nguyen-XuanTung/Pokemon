@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { Direction } from '../../src/domain/types.ts';
@@ -88,6 +89,13 @@ test.describe('LingoWild Browser E2E Verification', () => {
     await page.getByTestId('gloss-popup').getByRole('button', { name: 'Đóng' }).click();
     await expect(page.getByTestId('gloss-popup')).toBeHidden();
 
+    // Tap a word outside the core lexicon ("Across") to verify offline Pocket Word Assist!
+    await page.locator('.word-token-pocket', { hasText: 'Across' }).first().click();
+    await expect(page.getByTestId('gloss-popup')).toBeVisible();
+    await expect(page.getByTestId('gloss-popup')).toContainText('băng qua');
+    await page.getByTestId('gloss-popup').getByRole('button', { name: 'Đóng' }).click();
+    await expect(page.getByTestId('gloss-popup')).toBeHidden();
+
     // Advance Rowan's 3-line intro and pick Mosskit
     await page.getByTestId('btn-dialogue-next').click();
     await page.getByTestId('btn-dialogue-next').click();
@@ -120,8 +128,29 @@ test.describe('LingoWild Browser E2E Verification', () => {
 
     // Walk from Mosslight spawn (15,13) left 3 tiles to (12,13), inspect Basin Signpost (11,13) via touch/key interact,
     // then step up to row 12 and west 12 tiles into Whisperwood Glen (0,12)
-    for (let i = 0; i < 3; i++) {
-      await stepDirection(page, 'left', isMobile);
+    if (isMobile) {
+      // Verify mobile hold-to-walk: holding pointerdown on touch-left moves multiple tiles continuously!
+      const xBeforeHold =
+        (await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos.x)) ??
+        15;
+      await page.getByTestId('touch-left').dispatchEvent('pointerdown', { pointerId: 1 });
+      await page.waitForTimeout(340);
+      await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 })));
+      const xAfterHold =
+        (await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos.x)) ??
+        15;
+      expect(xBeforeHold - xAfterHold).toBeGreaterThanOrEqual(2);
+      // Walk any remaining step to (12,13) facing Signpost (11,13)
+      while (
+        ((await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos.x)) ??
+          12) > 12
+      ) {
+        await stepDirection(page, 'left', true);
+      }
+    } else {
+      for (let i = 0; i < 3; i++) {
+        await stepDirection(page, 'left', false);
+      }
     }
     await triggerInteract(page, isMobile);
     await expect(page.getByTestId('dialogue-box')).toBeVisible();
@@ -246,6 +275,9 @@ test.describe('LingoWild Browser E2E Verification', () => {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '06-field-journal-map.png') });
       await page.getByTestId('journal-tab-compendium').click();
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '07-field-journal-compendium.png') });
+      await page.getByTestId('journal-tab-lexicon').click();
+      await expect(page.getByTestId('lexicon-filter-mastered')).toBeVisible();
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '14-field-journal-lexicon.png') });
     }
 
     await page.getByTestId('journal-tab-team').click();
@@ -482,5 +514,101 @@ test.describe('LingoWild Browser E2E Verification', () => {
     await page.getByTestId('btn-new-game').click();
     await expect(page.getByTestId('dialogue-box')).toBeVisible();
     expect(failedSubpathUrls).toEqual([]);
+  });
+
+  test('upgrades service worker cleanly from Version A to Version B and resolves offline navigation fallback chain', async ({
+    browser,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'SW A->B upgrade check');
+
+    const distDir = path.join(process.cwd(), 'dist');
+    const distSwRaw = fs.readFileSync(path.join(distDir, 'sw.js'), 'utf8');
+    let serveVersion = 'v3-upgrade-a';
+
+    const mimeByExt: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
+      '.js': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.png': 'image/png',
+      '.svg': 'image/svg+xml',
+      '.webmanifest': 'application/manifest+json',
+    };
+
+    const swServer = http.createServer((req, res) => {
+      const urlObj = new URL(req.url ?? '/', 'http://127.0.0.1');
+      if (urlObj.pathname === '/sw.js') {
+        const body = distSwRaw.replace(
+          /const CACHE_VERSION = '[^']+';/,
+          `const CACHE_VERSION = '${serveVersion}';`,
+        );
+        res.writeHead(200, {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+        return;
+      }
+      const cleanPath = decodeURIComponent(urlObj.pathname).replace(/^\/+/, '') || 'index.html';
+      const diskPath = path.resolve(distDir, cleanPath);
+      if (!diskPath.startsWith(distDir) || !fs.existsSync(diskPath) || fs.statSync(diskPath).isDirectory()) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+        return;
+      }
+      const ext = path.extname(diskPath).toLowerCase();
+      res.writeHead(200, {
+        'Content-Type': mimeByExt[ext] ?? 'application/octet-stream',
+        'Cache-Control': 'no-cache',
+      });
+      res.end(fs.readFileSync(diskPath));
+    });
+
+    await new Promise<void>((resolve) => swServer.listen(0, '127.0.0.1', () => resolve()));
+    const addr = swServer.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    const origin = `http://127.0.0.1:${port}`;
+
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(origin);
+      await expect(page.getByTestId('btn-new-game')).toBeVisible();
+      await page.evaluate(async () => {
+        await navigator.serviceWorker.ready;
+      });
+      await page.reload();
+
+      const keysDuringA = await page.evaluate(() => caches.keys());
+      expect(keysDuringA).toContain('lingowild-cache-v3-upgrade-a');
+
+      // Switch origin SW to Version B, trigger real browser SW update, and verify Version A cache is purged!
+      serveVersion = 'v3-upgrade-b';
+      await page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration();
+        await new Promise<void>((resolve) => {
+          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), {
+            once: true,
+          });
+          void reg?.update();
+          setTimeout(() => resolve(), 3000);
+        });
+      });
+      await page.reload();
+
+      const keysDuringB = await page.evaluate(() => caches.keys());
+      expect(keysDuringB).toContain('lingowild-cache-v3-upgrade-b');
+      expect(keysDuringB).not.toContain('lingowild-cache-v3-upgrade-a');
+
+      // Go offline and navigate to an uncached sub-route document (/unlisted-offline-route)
+      // so cache.match(req) resolves to undefined and exercises the awaited ./index.html fallback!
+      await context.setOffline(true);
+      await page.goto(`${origin}/unlisted-offline-route`);
+      await expect(page.getByTestId('btn-new-game')).toBeVisible();
+      await context.setOffline(false);
+    } finally {
+      await context.close();
+      swServer.close();
+    }
   });
 });

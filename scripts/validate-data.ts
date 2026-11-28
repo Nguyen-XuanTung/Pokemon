@@ -7,6 +7,7 @@ import { NPCS } from '../src/data/npcs.ts';
 import { QUESTS } from '../src/data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../src/data/species.ts';
 import { COMBAT_ELEMENTS, getElementStrengthsAndWeaknesses } from '../src/domain/elements.ts';
+import { tokenizeEnglishText } from '../src/domain/learning.ts';
 import { getTileAt, offsetByDirection } from '../src/domain/world.ts';
 import type { Direction } from '../src/domain/types.ts';
 
@@ -204,6 +205,12 @@ for (const map of MAPS) {
         `Prop ${prop.id} references missing item ${prop.rewardItemId}`,
       );
     }
+    if (prop.kind === 'trace') {
+      assert(
+        Boolean(prop.traceSpeciesId && SPECIES_BY_ID[prop.traceSpeciesId]),
+        `Trace prop ${prop.id} must reference a valid traceSpeciesId`,
+      );
+    }
   }
 
   for (const enc of map.encounters) {
@@ -211,10 +218,12 @@ for (const map of MAPS) {
   }
 }
 
-// 5. NPCs & Bosses
+// 5. NPCs, Bosses & Post-Game Warden Rematches
 assert(NPCS.length >= 15, `Expected >= 15 NPCs, got ${NPCS.length}`);
 const bosses = NPCS.filter((n) => n.trainerBattle?.isBoss);
+const rematches = NPCS.filter((n) => Boolean(n.rematchBattle));
 assert(bosses.length >= 3, `Expected >= 3 bosses, got ${bosses.length}`);
+assert(rematches.length >= 4, `Expected >= 4 post-game Warden rematches, got ${rematches.length}`);
 for (const npc of NPCS) {
   assert(
     Boolean(DIALOGUES_BY_ID[npc.defaultDialogueId]),
@@ -226,19 +235,20 @@ for (const npc of NPCS) {
       `NPC ${npc.id} missing conditional dialogue ${cond.dialogueId}`,
     );
   }
-  if (npc.trainerBattle) {
+  for (const spec of [npc.trainerBattle, npc.rematchBattle]) {
+    if (!spec) continue;
     assert(
-      Boolean(DIALOGUES_BY_ID[npc.trainerBattle.preBattleDialogueId]),
-      `Trainer ${npc.id} missing preBattleDialogueId`,
+      Boolean(DIALOGUES_BY_ID[spec.preBattleDialogueId]),
+      `Trainer ${npc.id} (${spec.id}) missing preBattleDialogueId`,
     );
     assert(
-      Boolean(DIALOGUES_BY_ID[npc.trainerBattle.defeatDialogueId]),
-      `Trainer ${npc.id} missing defeatDialogueId`,
+      Boolean(DIALOGUES_BY_ID[spec.defeatDialogueId]),
+      `Trainer ${npc.id} (${spec.id}) missing defeatDialogueId`,
     );
-    for (const member of npc.trainerBattle.party) {
+    for (const member of spec.party) {
       assert(
         Boolean(SPECIES_BY_ID[member.speciesId]),
-        `Trainer ${npc.id} has unknown party species ${member.speciesId}`,
+        `Trainer ${npc.id} (${spec.id}) has unknown party species ${member.speciesId}`,
       );
     }
   }
@@ -265,11 +275,21 @@ const seenExampleEn = new Set<string>();
 const cefrCounts = { A1: 0, A2: 0, B1: 0, B2: 0 };
 let phraseCount = 0;
 let polysemyCount = 0;
+let multiExampleCount = 0;
 for (const lex of LEXICON_ENTRIES) {
   assert(!seenLexIds.has(lex.id), `Duplicate lexicon id: ${lex.id}`);
   seenLexIds.add(lex.id);
   assert(!seenExampleEn.has(lex.exampleEn), `Duplicate lexicon example sentence: ${lex.exampleEn}`);
   seenExampleEn.add(lex.exampleEn);
+  if (lex.examples && lex.examples.length >= 1) {
+    multiExampleCount += 1;
+    for (const ex of lex.examples) {
+      assert(!seenExampleEn.has(ex.en), `Duplicate secondary lexicon example: ${ex.en}`);
+      seenExampleEn.add(ex.en);
+      checkPureAsciiEnglish(ex.en, `lexicon.${lex.id}.examples.en`);
+      checkNoForbiddenStyle(ex.vi, `lexicon.${lex.id}.examples.vi`);
+    }
+  }
   cefrCounts[lex.cefr] += 1;
   if (lex.pos === 'phrase') phraseCount += 1;
   if (lex.senses && lex.senses.length >= 2) {
@@ -330,8 +350,37 @@ for (const dlg of DIALOGUES) {
   if (hasVariant) adaptiveVariantDialogues += 1;
 }
 assert(
-  adaptiveVariantDialogues >= 15,
-  `Expected >= 15 dialogues with CEFR level variants, got ${adaptiveVariantDialogues}`,
+  adaptiveVariantDialogues >= 18,
+  `Expected >= 18 dialogues with CEFR level variants, got ${adaptiveVariantDialogues}`,
+);
+assert(
+  multiExampleCount >= 20,
+  `Expected >= 20 lexicon entries with multiple independent examples, got ${multiExampleCount}`,
+);
+
+// 9. Measure Dialogue Word Lookup Coverage (Core Lexicon + Offline Pocket Dictionary + Proper Nouns)
+const properNouns = new Set<string>([
+  ...SPECIES.flatMap((s) => [s.name.toLowerCase(), `${s.name.toLowerCase()}s`]),
+  ...NPCS.flatMap((n) => n.name.toLowerCase().split(/\s+/)),
+]);
+let totalWordTokens = 0;
+let coveredWordTokens = 0;
+for (const dlg of DIALOGUES) {
+  for (const line of dlg.lines) {
+    const tokens = tokenizeEnglishText(line.en, LEXICON_INDEX);
+    for (const tok of tokens) {
+      if (!tok.isWord || tok.normalized.length <= 1) continue;
+      totalWordTokens += 1;
+      if (tok.entry || tok.pocketNote || properNouns.has(tok.normalized)) {
+        coveredWordTokens += 1;
+      }
+    }
+  }
+}
+const coveragePct = totalWordTokens > 0 ? (coveredWordTokens / totalWordTokens) * 100 : 100;
+assert(
+  coveragePct >= 90,
+  `Expected >= 90% dialogue word tap-lookup coverage, got ${coveragePct.toFixed(1)}%`,
 );
 
 if (errors.length > 0) {
@@ -343,5 +392,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Data validation passed: ${SPECIES.length} species, ${MOVES.length} moves, ${ITEMS.length} items, ${MAPS.length} maps, ${NPCS.length} NPCs (${bosses.length} bosses), ${QUESTS.length} quests, ${LEXICON_ENTRIES.length} lexicon entries (A1:${cefrCounts.A1}, A2:${cefrCounts.A2}, B1:${cefrCounts.B1}, B2:${cefrCounts.B2}), ${DIALOGUES.length} dialogues.`,
+  `Data validation passed: ${SPECIES.length} species, ${MOVES.length} moves, ${ITEMS.length} items, ${MAPS.length} maps, ${NPCS.length} NPCs (${bosses.length} bosses, ${rematches.length} rematches), ${QUESTS.length} quests, ${LEXICON_ENTRIES.length} lexicon entries (${multiExampleCount} multi-example, A1:${cefrCounts.A1}, A2:${cefrCounts.A2}, B1:${cefrCounts.B1}, B2:${cefrCounts.B2}), ${DIALOGUES.length} dialogues (${coveragePct.toFixed(1)}% word lookup coverage).`,
 );

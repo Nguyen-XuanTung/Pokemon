@@ -18,6 +18,10 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
         dialogueId: 'rowan_intro_choose_starter',
       },
       {
+        requiredFlag: 'main_story_completed',
+        dialogueId: 'rowan_postgame_mastery',
+      },
+      {
         requiredFlag: 'sanctuary_harmony_restored',
         dialogueId: 'rowan_epilogue_celebration',
       },
@@ -171,6 +175,12 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
     y: 5,
     facing: 'down',
     defaultDialogueId: 'sylvan_pre_boss',
+    conditionalDialogues: [
+      {
+        requiredFlag: 'main_story_completed',
+        dialogueId: 'sylvan_rematch_offer',
+      },
+    ],
     trainerBattle: {
       id: 'boss_sylvan',
       isBoss: true,
@@ -187,6 +197,23 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
       setsFlag: 'warden_sylvan_cleared',
       preBattleDialogueId: 'sylvan_pre_boss',
       defeatDialogueId: 'sylvan_post_boss',
+    },
+    rematchBattle: {
+      id: 'rematch_sylvan',
+      isBoss: true,
+      titleEn: 'Master Warden Sylvan',
+      titleVi: 'Thủ lĩnh bậc thầy Sylvan',
+      party: [
+        { speciesId: 'canopyhorn', level: 24 },
+        { speciesId: 'stormplume', level: 24 },
+        { speciesId: 'verdantag', level: 25 },
+      ],
+      rewardTokens: 280,
+      rewardItemId: 'star_charm',
+      rewardQuantity: 2,
+      setsFlag: 'rematch_sylvan_cleared',
+      preBattleDialogueId: 'sylvan_rematch_offer',
+      defeatDialogueId: 'sylvan_rematch_win',
     },
   },
   {
@@ -252,6 +279,12 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
     y: 4,
     facing: 'down',
     defaultDialogueId: 'mirella_pre_boss',
+    conditionalDialogues: [
+      {
+        requiredFlag: 'main_story_completed',
+        dialogueId: 'mirella_rematch_offer',
+      },
+    ],
     trainerBattle: {
       id: 'boss_mirella',
       isBoss: true,
@@ -268,6 +301,23 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
       setsFlag: 'warden_mirella_cleared',
       preBattleDialogueId: 'mirella_pre_boss',
       defeatDialogueId: 'mirella_post_boss',
+    },
+    rematchBattle: {
+      id: 'rematch_mirella',
+      isBoss: true,
+      titleEn: 'Master Warden Mirella',
+      titleVi: 'Thủ lĩnh bậc thầy Mirella',
+      party: [
+        { speciesId: 'lotusbell', level: 25 },
+        { speciesId: 'surgecoil', level: 25 },
+        { speciesId: 'tidecrest', level: 26 },
+      ],
+      rewardTokens: 320,
+      rewardItemId: 'star_charm',
+      rewardQuantity: 2,
+      setsFlag: 'rematch_mirella_cleared',
+      preBattleDialogueId: 'mirella_rematch_offer',
+      defeatDialogueId: 'mirella_rematch_win',
     },
   },
   {
@@ -334,6 +384,12 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
     y: 18,
     facing: 'left',
     defaultDialogueId: 'kaelen_pre_boss',
+    conditionalDialogues: [
+      {
+        requiredFlag: 'main_story_completed',
+        dialogueId: 'kaelen_rematch_offer',
+      },
+    ],
     trainerBattle: {
       id: 'boss_kaelen',
       isBoss: true,
@@ -350,6 +406,23 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
       setsFlag: 'warden_kaelen_cleared',
       preBattleDialogueId: 'kaelen_pre_boss',
       defeatDialogueId: 'kaelen_post_boss',
+    },
+    rematchBattle: {
+      id: 'rematch_kaelen',
+      isBoss: true,
+      titleEn: 'Master Warden Kaelen',
+      titleVi: 'Thủ lĩnh bậc thầy Kaelen',
+      party: [
+        { speciesId: 'cragbastion', level: 26 },
+        { speciesId: 'flarecrest', level: 26 },
+        { speciesId: 'pyrelume', level: 27 },
+      ],
+      rewardTokens: 360,
+      rewardItemId: 'nectar_flask',
+      rewardQuantity: 2,
+      setsFlag: 'rematch_kaelen_cleared',
+      preBattleDialogueId: 'kaelen_rematch_offer',
+      defeatDialogueId: 'kaelen_rematch_win',
     },
   },
   {
@@ -426,6 +499,12 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
     y: 5,
     facing: 'down',
     defaultDialogueId: 'astraea_pre_trial',
+    conditionalDialogues: [
+      {
+        requiredFlag: 'main_story_completed',
+        dialogueId: 'astraea_rematch_offer',
+      },
+    ],
     trainerBattle: {
       id: 'boss_astraea',
       isBoss: true,
@@ -442,6 +521,23 @@ export const NPCS: ReadonlyArray<NpcDefinition> = [
       setsFlag: 'sanctuary_harmony_restored',
       preBattleDialogueId: 'astraea_pre_trial',
       defeatDialogueId: 'astraea_post_trial',
+    },
+    rematchBattle: {
+      id: 'rematch_astraea',
+      isBoss: true,
+      titleEn: 'Grand Custodian Astraea',
+      titleVi: 'Đại hộ vệ Astraea',
+      party: [
+        { speciesId: 'lotusbell', level: 27 },
+        { speciesId: 'astraloom', level: 27 },
+        { speciesId: 'solacern', level: 28 },
+      ],
+      rewardTokens: 520,
+      rewardItemId: 'star_charm',
+      rewardQuantity: 3,
+      setsFlag: 'rematch_astraea_cleared',
+      preBattleDialogueId: 'astraea_rematch_offer',
+      defeatDialogueId: 'astraea_rematch_win',
     },
   },
 ];

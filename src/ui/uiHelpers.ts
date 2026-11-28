@@ -26,8 +26,23 @@ export function el(tag: string, className: string, textContent?: string): HTMLEl
   return node;
 }
 
-export function createCreatureSpriteSpan(dexNumber: number, large: boolean = false): HTMLElement {
-  const span = el('span', large ? 'sprite-creature sprite-creature-lg' : 'sprite-creature');
+export interface CreatureSpriteOptions {
+  readonly large?: boolean;
+  readonly silhouette?: boolean;
+  readonly gleaming?: boolean;
+}
+
+export function createCreatureSpriteSpan(
+  dexNumber: number,
+  optionsOrLarge: boolean | CreatureSpriteOptions = false,
+): HTMLElement {
+  const opts: CreatureSpriteOptions =
+    typeof optionsOrLarge === 'boolean' ? { large: optionsOrLarge } : optionsOrLarge;
+  const classes = ['sprite-creature'];
+  if (opts.large) classes.push('sprite-creature-lg');
+  if (opts.silhouette) classes.push('sprite-creature-silhouette');
+  if (opts.gleaming) classes.push('sprite-creature-gleaming');
+  const span = el('span', classes.join(' '));
   const frameIdx = (dexNumber - 1) * 2;
   const col = frameIdx % 10;
   const row = Math.floor(frameIdx / 10);
@@ -51,24 +66,42 @@ export function renderInteractiveEnglish(
   const frag = document.createDocumentFragment();
   const tokens = tokenizeEnglishText(text, LEXICON_INDEX);
   for (const tok of tokens) {
-    if (!tok.isWord || !tok.entry) {
+    if (!tok.isWord || (!tok.entry && !tok.pocketNote)) {
       frag.appendChild(document.createTextNode(tok.raw));
       continue;
     }
-    const highlighted = shouldHighlightToken(tok.entry, controller.state, focusWords);
-    const btn = el(
-      'button',
-      highlighted ? 'word-token word-token-focus lw-interactive' : 'word-token lw-interactive',
-      tok.raw,
-    ) as HTMLButtonElement;
-    btn.type = 'button';
-    btn.title = `${tok.entry.word}: ${tok.entry.meaningVi}`;
-    const entryRef = tok.entry;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      controller.inspectGlossWord(entryRef, contextTag, text);
-    });
-    frag.appendChild(btn);
+    if (tok.entry) {
+      const highlighted = shouldHighlightToken(tok.entry, controller.state, focusWords);
+      const btn = el(
+        'button',
+        highlighted ? 'word-token word-token-focus lw-interactive' : 'word-token lw-interactive',
+        tok.raw,
+      ) as HTMLButtonElement;
+      btn.type = 'button';
+      btn.title = `${tok.entry.word}: ${tok.entry.meaningVi}`;
+      const entryRef = tok.entry;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        controller.inspectGlossWord(entryRef, contextTag, text);
+      });
+      frag.appendChild(btn);
+      continue;
+    }
+    if (tok.pocketNote) {
+      const noteRef = tok.pocketNote;
+      const btn = el(
+        'button',
+        'word-token word-token-pocket lw-interactive',
+        tok.raw,
+      ) as HTMLButtonElement;
+      btn.type = 'button';
+      btn.title = `${noteRef.base}: ${noteRef.meaningVi}`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        controller.inspectPocketWord(tok.raw, noteRef, text);
+      });
+      frag.appendChild(btn);
+    }
   }
   return frag;
 }

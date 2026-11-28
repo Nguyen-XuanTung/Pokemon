@@ -1,0 +1,7 @@
+Title: Zelda-like tilesets and sprites
+Author: ArMM1998
+Source: https://opengameart.org/content/zelda-like-tilesets-and-sprites
+License: CC0 1.0 Universal (Public Domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Files used in LingoWild:
+- Overworld.png (16x16 cottages, market stall awning, animated village fountain, cliffs, waterfalls, wooden and stone bridges, sanctuary gate, benches, barrels, flowerpots, layered forest canopies)
+- objects.png (16x16 boulders, stumps, foliage details)

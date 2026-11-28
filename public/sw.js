@@ -1,15 +1,18 @@
 const CACHE_PREFIX = 'lingowild-cache-';
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3-dev';
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`;
 
-// __PRECACHE_MANIFEST__ is populated at build time by scripts/inject-sw-manifest.ts
+// Populated deterministically at build time by scripts/inject-sw-manifest.ts
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './assets/sprites/tileset.png',
+  './assets/sprites/battle-bg.png',
   './assets/sprites/characters.png',
+  './assets/sprites/companions.png',
   './assets/sprites/creatures.png',
   './assets/sprites/items.png',
+  './assets/sprites/structures.png',
+  './assets/sprites/tileset.png',
   './assets/sprites/vfx.png',
 ];
 
@@ -38,8 +41,15 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
     void self.skipWaiting();
+  } else if (event.data.type === 'GET_CACHE_INFO' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({
+      cacheName: CACHE_NAME,
+      version: CACHE_VERSION,
+      precacheCount: PRECACHE_URLS.length,
+    });
   }
 });
 
@@ -49,6 +59,19 @@ function isNavigationDocumentRequest(req) {
   }
   const accept = req.headers.get('accept') || '';
   return accept.includes('text/html') && !req.destination;
+}
+
+async function matchOfflineDocumentFallback(cache, req) {
+  const exact = await cache.match(req, { ignoreSearch: true });
+  if (exact) return exact;
+  const indexDoc = await cache.match('./index.html');
+  if (indexDoc) return indexDoc;
+  const rootDoc = await cache.match('./');
+  if (rootDoc) return rootDoc;
+  return new Response('Offline document unavailable', {
+    status: 503,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 
 self.addEventListener('fetch', (event) => {
@@ -71,24 +94,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkRes;
         })
-        .catch(() =>
-          caches
-            .open(CACHE_NAME)
-            .then(
-              (cache) =>
-                cache.match(req, { ignoreSearch: true }) ||
-                cache.match('./index.html') ||
-                cache.match('./'),
-            )
-            .then(
-              (cached) =>
-                cached ||
-                new Response('Offline document unavailable', {
-                  status: 503,
-                  headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-                }),
-            ),
-        ),
+        .catch(() => caches.open(CACHE_NAME).then((cache) => matchOfflineDocumentFallback(cache, req))),
     );
     return;
   }
@@ -98,7 +104,6 @@ self.addEventListener('fetch', (event) => {
     caches.open(CACHE_NAME).then(async (cache) => {
       const cached = await cache.match(req);
       if (cached) {
-        // Refresh in background if online, return cached immediately for snappy cold/offline load
         void fetch(req)
           .then((netRes) => {
             if (netRes && netRes.ok) {

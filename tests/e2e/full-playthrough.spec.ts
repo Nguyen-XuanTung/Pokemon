@@ -94,42 +94,67 @@ function computeReadOnlyBfsPath(
 
 async function resolveBrowserBattle(
   page: Page,
-  opts: { tryCapture?: boolean; fleeWild?: boolean; captureElement?: string } = {},
+  opts: {
+    tryCapture?: boolean;
+    fleeWild?: boolean;
+    captureElement?: string;
+    screenshotPath?: string;
+  } = {},
 ): Promise<boolean> {
   let guard = 0;
   let switchedCount = 0;
   let charmsThrown = 0;
+  let tookScreenshot = false;
   const caughtBefore = (await readSnap(page)).caughtCount;
   while (guard < 85) {
     guard += 1;
     const snap = await readSnap(page);
     if (!snap.hasActiveBattle) return snap.caughtCount > caughtBefore;
 
-    const finishBtn = page.getByTestId('btn-battle-finish');
-    if (await finishBtn.isVisible()) {
-      await finishBtn.click();
+    if (opts.screenshotPath && !tookScreenshot) {
+      tookScreenshot = true;
+      await expect(page.getByTestId('battle-deck')).toBeVisible();
+      await page.screenshot({ path: opts.screenshotPath });
+    }
+
+    const domState = await page.evaluate(() => {
+      const finishVisible = Boolean(document.querySelector('[data-testid="btn-battle-finish"]'));
+      const enemyPlate = document.querySelector('.lw-plate-enemy');
+      const enemyStrong = enemyPlate?.querySelector('strong')?.textContent ?? '';
+      const enemyFull = enemyPlate?.textContent ?? '';
+      const enemyEl = enemyPlate?.querySelector('.lw-badge-element')?.textContent?.trim() ?? '';
+      const playerFull = document.querySelector('.lw-combatant-plate')?.textContent ?? '';
+      const moveTexts = Array.from(document.querySelectorAll('.lw-move-card')).map(
+        (el) => el.textContent ?? '',
+      );
+      const movesTabActive =
+        document
+          .querySelector('[data-testid="battle-tab-moves"]')
+          ?.classList.contains('lw-btn-primary') ?? false;
+      return {
+        finishVisible,
+        isWild: enemyStrong.startsWith('Wild '),
+        alreadyBonded: enemyFull.includes('Bonded'),
+        enemyElement: enemyEl,
+        playerFull,
+        moveTexts,
+        movesTabActive,
+      };
+    });
+
+    if (domState.finishVisible) {
+      await page.getByTestId('btn-battle-finish').click();
       await dismissAnyDialogue(page);
       return (await readSnap(page)).caughtCount > caughtBefore;
     }
 
-    const isWild = await page
-      .locator('.lw-plate-enemy strong')
-      .textContent()
-      .then((t) => Boolean(t?.startsWith('Wild ')))
-      .catch(() => false);
-    const alreadyBonded = await page
-      .locator('.lw-plate-enemy')
-      .textContent()
-      .then((t) => Boolean(t?.includes('Bonded')))
-      .catch(() => false);
-    const enemyElement = await page
-      .locator('.lw-plate-enemy .lw-badge-element')
-      .textContent()
-      .then((t) => t?.trim() ?? '')
-      .catch(() => '');
+    const { isWild, alreadyBonded, enemyElement, playerFull: playerPlateFoot } = domState;
+
+    let switchedAwayFromMoves = false;
 
     if (isWild && opts.fleeWild) {
       await page.getByTestId('battle-tab-tactics').click();
+      switchedAwayFromMoves = true;
       const fleeBtn = page.getByTestId('btn-battle-flee');
       if (await fleeBtn.isVisible()) {
         await fleeBtn.click();
@@ -140,6 +165,7 @@ async function resolveBrowserBattle(
     const matchesWantedElement = !opts.captureElement || enemyElement === opts.captureElement;
     if (isWild && opts.tryCapture && !alreadyBonded && matchesWantedElement && charmsThrown < 3) {
       await page.getByTestId('battle-tab-bag').click();
+      switchedAwayFromMoves = true;
       const charmBtn = page
         .locator('[data-testid^="btn-battle-item-"][class*="lw-btn-moss"]')
         .first();
@@ -150,11 +176,13 @@ async function resolveBrowserBattle(
       }
     }
 
-    // Cure sleep/paralysis in trainer battles so Astraloom's dusk_lull never locks out turns
-    const playerPlateFoot =
-      (await page.locator('.lw-combatant-plate').first().textContent()) ?? '';
-    if (!isWild && (playerPlateFoot.includes('SLEEP') || playerPlateFoot.includes('STATIC'))) {
+    // Cure turn-blocking sleep/paralysis in trainer battles so Astraloom's dusk_lull never locks out turns
+    if (
+      !isWild &&
+      (playerPlateFoot.includes('SLEEP') || playerPlateFoot.includes('PARALYZE'))
+    ) {
       await page.getByTestId('battle-tab-bag').click();
+      switchedAwayFromMoves = true;
       const herbBtn = page.getByTestId('btn-battle-item-clear_herb');
       if (await herbBtn.isVisible()) {
         await herbBtn.click();
@@ -166,9 +194,10 @@ async function resolveBrowserBattle(
     const hpNumbers = playerPlateFoot.match(/HP\s+(\d+)\/(\d+)/);
     const curHp = hpNumbers ? Number(hpNumbers[1]) : 100;
     const maxHp = hpNumbers ? Number(hpNumbers[2]) : 100;
-    const healThreshold = isWild ? 0.32 : 0.48;
+    const healThreshold = isWild ? 0.35 : 0.62;
     if (curHp <= maxHp * healThreshold) {
       await page.getByTestId('battle-tab-bag').click();
+      switchedAwayFromMoves = true;
       let usedTonic = false;
       for (const itemId of ['nectar_flask', 'orchard_salve', 'dew_tonic']) {
         const btn = page.getByTestId(`btn-battle-item-${itemId}`);
@@ -189,14 +218,19 @@ async function resolveBrowserBattle(
       }
     }
 
-    await page.getByTestId('battle-tab-moves').click();
+    let moveTexts = domState.moveTexts;
+    if (!domState.movesTabActive || switchedAwayFromMoves) {
+      await page.getByTestId('battle-tab-moves').click();
+      moveTexts = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.lw-move-card')).map((el) => el.textContent ?? ''),
+      );
+    }
+
     // Prefer a move tagged "Effective" with remaining PP, else highest-index learned move with PP
-    const moveCards = page.locator('.lw-move-card');
-    const count = await moveCards.count();
     let chosenIdx = 0;
     let bestScore = -999;
-    for (let i = 0; i < count; i++) {
-      const cardText = (await moveCards.nth(i).textContent()) ?? '';
+    for (let i = 0; i < moveTexts.length; i++) {
+      const cardText = moveTexts[i] ?? '';
       if (cardText.includes('(0/')) continue;
       let score = i * 5;
       if (cardText.includes('Support')) {
@@ -330,7 +364,9 @@ async function walkBrowserAdjacentAndInteract(
   objX: number,
   objY: number,
   chooseFirstChoice: boolean = false,
-  battleOpts: { tryCapture?: boolean; fleeWild?: boolean } = { tryCapture: true },
+  battleOpts: { tryCapture?: boolean; fleeWild?: boolean; screenshotPath?: string } = {
+    tryCapture: true,
+  },
 ): Promise<void> {
   const snap = await readSnap(page);
   const candidates: Array<{ sx: number; sy: number; face: Direction; len: number }> = [];
@@ -453,12 +489,15 @@ async function trainBrowserNearCampfire(
   await walkBrowserAdjacentAndInteract(page, campfire[0], campfire[1], false, { fleeWild: true });
 }
 
+test.use({ trace: 'off' });
+
 test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => {
+
   test('plays from Title Screen New Expedition to Starfall Sanctuary Ending using real browser inputs only', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-desktop', 'Full playthrough runs on desktop');
-    test.setTimeout(540_000);
+    test.setTimeout(900_000);
 
     const consoleErrors: string[] = [];
     page.on('console', (m) => {
@@ -529,16 +568,20 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await walkBrowserTo(page, 15, 23);
     expect((await readSnap(page)).regionId).toBe('terracotta_ridge');
 
-    // Promote caught Water partner to Lead via real Journal Team UI, train to Lv.19, defeat Kaelen (27,18)
+    // Promote caught Water partner to Lead via real Journal Team UI, train to Lv.21 (Lotusbell / Tidecrest!), defeat Kaelen (27,18)
     const promotedWater = await makePartyElementLeadViaUi(page, '(Water |');
     expect(promotedWater).toBe(true);
-    await trainBrowserNearCampfire(page, [8, 2], [9, 2], [15, 5], 19, 3);
-    await walkBrowserAdjacentAndInteract(page, 27, 18, true, { fleeWild: true });
+    await trainBrowserNearCampfire(page, [21, 2], [22, 2], [15, 5], 21, 3);
+    await walkBrowserAdjacentAndInteract(page, 27, 18, true, {
+      fleeWild: true,
+      screenshotPath: path.join(SCREENSHOT_DIR, '15-terracotta-boss-battle.png'),
+    });
     expect((await readSnap(page)).regionId).toBe('terracotta_ridge');
 
     // Ascend High Summit Pass (31,6) into Starfall Sanctuary
     await walkBrowserTo(page, 31, 6, { fleeWild: true });
     expect((await readSnap(page)).regionId).toBe('starfall_sanctuary');
+    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '16-starfall-sanctuary.png') });
 
     // Capture Campfire Review screenshot at Starlight Brazier (15,16) then close without answering!
     await walkBrowserTo(page, 15, 17, { fleeWild: true });
@@ -549,12 +592,14 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '08-campfire-review.png') });
     await page.keyboard.press('Escape');
 
-    // Open Sanctuary Vault chest (27,3), train Water lead to Lv.21, then switch Leaf starter to Lead and train to Lv.22 (Verdantag!), defeat Astraea (15,5)
+    // Open Sanctuary Vault chest (27,3), train Water lead to Lv.23, put Briarpaw in front against Astraea's Water opener, and defeat Astraea (15,5)
     await walkBrowserAdjacentAndInteract(page, 27, 3, false, { fleeWild: true });
-    await trainBrowserNearCampfire(page, [11, 17], [11, 18], [15, 16], 21, 3);
-    await makePartyElementLeadViaUi(page, '(Leaf |');
-    await trainBrowserNearCampfire(page, [11, 17], [11, 18], [15, 16], 22, 3);
-    await walkBrowserAdjacentAndInteract(page, 15, 5, true, { fleeWild: true });
+    await trainBrowserNearCampfire(page, [11, 17], [11, 18], [15, 16], 23, 3);
+    await makePartyElementLeadViaUi(page, 'Briarpaw');
+    await walkBrowserAdjacentAndInteract(page, 15, 5, true, {
+      fleeWild: true,
+      screenshotPath: path.join(SCREENSHOT_DIR, '17-starfall-final-trial.png'),
+    });
     expect((await readSnap(page)).regionId).toBe('starfall_sanctuary');
 
     // Walk around Astraea (15,5) to Celestial Harmony Altar (15,3) and complete the story!

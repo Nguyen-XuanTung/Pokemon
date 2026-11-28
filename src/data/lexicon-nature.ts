@@ -11,6 +11,16 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'khu rừng',
     exampleEn: 'Tall oak trees shade the quiet forest path.',
     exampleVi: 'Những cây sồi cao che mát lối mòn yên tĩnh trong khu rừng.',
+    examples: [
+      {
+        en: 'Morning birdsong echoes softly through the deep green forest.',
+        vi: 'Tiếng chim buổi sớm ngân vang êm dịu khắp khu rừng xanh thẳm.',
+      },
+      {
+        en: 'Stay on the lantern trail when walking through the forest at night.',
+        vi: 'Hãy bám theo lối có đèn khi đi bộ xuyên qua khu rừng vào ban đêm.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -23,6 +33,16 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'dòng sông',
     exampleEn: 'Cold water flows down the mountain river.',
     exampleVi: 'Nước mát chảy xuôi theo dòng sông từ trên núi.',
+    examples: [
+      {
+        en: 'Wooden boats cross the calm river every morning.',
+        vi: 'Những con thuyền gỗ băng qua dòng sông êm đềm mỗi sáng.',
+      },
+      {
+        en: 'We followed the winding river all the way back to camp.',
+        vi: 'Chúng tôi men theo dòng sông uốn lượn suốt chặng đường về trại.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -35,6 +55,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'cây lớn',
     exampleEn: 'A small bird rests high in the old tree.',
     exampleVi: 'Một chú chim nhỏ đậu nghỉ tít trên ngọn cây già.',
+    examples: [
+      {
+        en: 'Let us sit under this shady tree and drink some warm tea.',
+        vi: 'Chúng ta hãy ngồi dưới tán cây râm mát này và uống chút trà ấm.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -47,6 +73,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'chiếc lá',
     exampleEn: 'Raindrops shine on every green leaf.',
     exampleVi: 'Những giọt mưa lấp lánh trên từng chiếc lá xanh.',
+    examples: [
+      {
+        en: 'Autumn wind swept a golden leaf across the wooden bench.',
+        vi: 'Gió thu cuốn một chiếc lá vàng bay ngang ghế gỗ.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -59,6 +91,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'bông hoa',
     exampleEn: 'Yellow flowers open beside the warm camp.',
     exampleVi: 'Những bông hoa vàng nở rộ ngay cạnh khu trại ấm.',
+    examples: [
+      {
+        en: 'Linh planted fresh mountain flowers in wooden boxes outside her cabin.',
+        vi: 'Linh trồng những khóm hoa núi tươi tắn trong bồn gỗ trước hiên nhà.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -71,6 +109,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'thảm cỏ',
     exampleEn: 'Shy creatures hide inside the tall grass.',
     exampleVi: 'Các sinh vật nhút nhát ẩn mình trong thảm cỏ cao.',
+    examples: [
+      {
+        en: 'Morning dew makes the meadow grass cool beneath our boots.',
+        vi: 'Sương sớm làm thảm cỏ đồng nội mát lạnh dưới bước giày.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -83,6 +127,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'nước',
     exampleEn: 'Clear water fills the stone basin after rain.',
     exampleVi: 'Làn nước trong làm đầy lòng hồ đá sau cơn mưa.',
+    examples: [
+      {
+        en: 'Remember to refill your water flask before climbing the sunny ridge.',
+        vi: 'Hãy nhớ châm đầy bình nước trước khi leo lên sống đèo nắng ấm.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -95,6 +145,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'cơn mưa',
     exampleEn: 'Gentle rain cools the dry canyon stones.',
     exampleVi: 'Cơn mưa dịu làm mát những tảng đá khô nơi hẻm núi.',
+    examples: [
+      {
+        en: 'Fresh forest herbs smell wonderful right after summer rain.',
+        vi: 'Thảo mộc rừng dậy mùi thơm dễ chịu ngay sau cơn mưa mùa hạ.',
+      },
+    ],
     topic: 'weather',
   },
   {
@@ -107,6 +163,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'ngọn gió',
     exampleEn: 'A cool wind carries pine scent down the slope.',
     exampleVi: 'Ngọn gió mát mang hương thông xuôi theo sườn đồi.',
+    examples: [
+      {
+        en: 'Wooden chimes ring softly whenever evening wind brushes the porch.',
+        vi: 'Chuông gỗ ngân khẽ mỗi khi ngọn gió chiều lướt qua hiên nhà.',
+      },
+    ],
     topic: 'weather',
   },
   {
@@ -119,6 +181,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'mặt trời, ánh nắng',
     exampleEn: 'Morning sunlight warms the red clay cliffs.',
     exampleVi: 'Ánh nắng buổi sớm sưởi ấm vách đất sét đỏ.',
+    examples: [
+      {
+        en: 'Golden sunbeams filter through the oak leaves onto our map.',
+        vi: 'Những tia nắng vàng xuyên qua kẽ lá sồi rọi xuống tấm bản đồ.',
+      },
+    ],
     topic: 'weather',
   },
   {
@@ -131,6 +199,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'ngôi sao',
     exampleEn: 'Bright stars reflect on the sanctuary pool.',
     exampleVi: 'Những ngôi sao sáng phản chiếu trên mặt hồ thánh địa.',
+    examples: [
+      {
+        en: 'Travelers use the northern star to find their way after dark.',
+        vi: 'Người đi đường nhìn ngôi sao phương bắc để định hướng khi trời tối.',
+      },
+    ],
     topic: 'nature',
   },
   {
@@ -143,6 +217,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'ban đêm',
     exampleEn: 'Owls wake up when night settles over the valley.',
     exampleVi: 'Loài cú thức giấc khi màn đêm buông xuống thung lũng.',
+    examples: [
+      {
+        en: 'Camp lanterns keep the village plaza bright all night.',
+        vi: 'Đèn lồng giữ cho quảng trường nhỏ sáng ấm suốt ban đêm.',
+      },
+    ],
     topic: 'weather',
   },
   {
@@ -155,6 +235,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'buổi sáng',
     exampleEn: 'Birds sing clearly in the crisp morning air.',
     exampleVi: 'Chim chóc hót vang trong bầu không khí buổi sáng trong lành.',
+    examples: [
+      {
+        en: 'Tomas opens the market stall early every morning.',
+        vi: 'Tomas mở quầy tiếp tế từ rất sớm mỗi buổi sáng.',
+      },
+    ],
     topic: 'weather',
   },
   {
@@ -167,6 +253,12 @@ export const LEXICON_NATURE: ReadonlyArray<LexiconEntry> = [
     meaningVi: 'tảng đá, viên đá',
     exampleEn: 'Flat stepping stones cross the shallow creek.',
     exampleVi: 'Những phiến đá phẳng bắc ngang qua con lạch cạn.',
+    examples: [
+      {
+        en: 'Carved stone pillars frame the ancient observatory terrace.',
+        vi: 'Những cột đá chạm khắc bao quanh thềm đài quan sát cổ xưa.',
+      },
+    ],
     topic: 'nature',
   },
   {

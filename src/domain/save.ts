@@ -1,7 +1,8 @@
 import { MAX_ACTIVE_MOVES, MAX_CREATURE_LEVEL, MAX_PARTY_SIZE } from './creatures.ts';
 import type { GameState } from './types.ts';
 
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
+export const LEGACY_SAVE_SCHEMA_VERSION = 1;
 export const PRIMARY_SAVE_KEY = 'lingowild_save_v1';
 export const BACKUP_SAVE_KEY = 'lingowild_save_v1_backup';
 export const MAX_SAVE_BYTES = 262_144;
@@ -22,11 +23,13 @@ export interface SaveValidationRegistry {
   readonly validQuestIds: ReadonlySet<string>;
   readonly validWordIds: ReadonlySet<string>;
   readonly mapBounds: Readonly<Record<string, { readonly width: number; readonly height: number }>>;
+  readonly regionSpawns?: Readonly<Record<string, { readonly x: number; readonly y: number }>>;
+  readonly isPositionSafe?: (regionId: string, x: number, y: number, state: GameState) => boolean;
 }
 
 export interface SaveEnvelope {
   readonly magic: typeof SAVE_MAGIC;
-  readonly version: typeof SAVE_SCHEMA_VERSION;
+  readonly version: 1 | 2;
   readonly sequence: number;
   readonly savedAtMs: number;
   readonly savedAtIso: string;
@@ -83,6 +86,22 @@ function isPlainObject(val: unknown): val is Record<string, unknown> {
   return Boolean(val) && typeof val === 'object' && !Array.isArray(val);
 }
 
+function validateStringList(
+  candidate: unknown,
+  maxLen: number,
+  validSet?: ReadonlySet<string>,
+): boolean {
+  if (!Array.isArray(candidate) || candidate.length > maxLen) return false;
+  const seen = new Set<string>();
+  for (const item of candidate) {
+    if (typeof item !== 'string' || item.length === 0 || item.length > 80) return false;
+    if (seen.has(item)) return false;
+    if (validSet && !validSet.has(item)) return false;
+    seen.add(item);
+  }
+  return true;
+}
+
 function validateCreatureInstance(
   candidate: unknown,
   seenUids: Set<string>,
@@ -104,6 +123,9 @@ function validateCreatureInstance(
       candidate.nickname.length === 0 ||
       candidate.nickname.length > 32)
   ) {
+    return false;
+  }
+  if (candidate.isRareVariant !== undefined && typeof candidate.isRareVariant !== 'boolean') {
     return false;
   }
   if (!isIntInRange(candidate.level, 1, MAX_CREATURE_LEVEL)) return false;
@@ -138,7 +160,10 @@ function validateCreatureInstance(
     if (!isIntInRange(slot.pp, 0, slot.maxPp)) return false;
   }
 
-  if (candidate.status !== null && (typeof candidate.status !== 'string' || !VALID_STATUS.has(candidate.status))) {
+  if (
+    candidate.status !== null &&
+    (typeof candidate.status !== 'string' || !VALID_STATUS.has(candidate.status))
+  ) {
     return false;
   }
   if (!isIntInRange(candidate.statusTurns, 0, 10)) return false;
@@ -153,7 +178,12 @@ export function validateGameStateShape(
   registry?: SaveValidationRegistry,
 ): candidate is GameState {
   if (!isPlainObject(candidate)) return false;
-  if (candidate.schemaVersion !== SAVE_SCHEMA_VERSION) return false;
+  if (
+    candidate.schemaVersion !== LEGACY_SAVE_SCHEMA_VERSION &&
+    candidate.schemaVersion !== SAVE_SCHEMA_VERSION
+  ) {
+    return false;
+  }
   if (!isIntInRange(candidate.seedState, 0, 0xffffffff)) return false;
   if (
     typeof candidate.playTimeSeconds !== 'number' ||
@@ -184,7 +214,10 @@ export function validateGameStateShape(
     }
     if (registry) {
       if (!registry.validSpeciesIds.has(candidate.starterChosen)) return false;
-      if (registry.starterSpeciesIds.size > 0 && !registry.starterSpeciesIds.has(candidate.starterChosen)) {
+      if (
+        registry.starterSpeciesIds.size > 0 &&
+        !registry.starterSpeciesIds.has(candidate.starterChosen)
+      ) {
         return false;
       }
     }
@@ -219,6 +252,25 @@ export function validateGameStateShape(
     caughtSet.add(spId);
   }
 
+  if (
+    candidate.gleamingSpecies !== undefined &&
+    !validateStringList(candidate.gleamingSpecies, 60, registry?.validSpeciesIds)
+  ) {
+    return false;
+  }
+  if (candidate.rematchCleared !== undefined && !validateStringList(candidate.rematchCleared, 30)) {
+    return false;
+  }
+  if (
+    candidate.discoveredTraces !== undefined &&
+    !validateStringList(candidate.discoveredTraces, 100)
+  ) {
+    return false;
+  }
+  if (candidate.readLoreIds !== undefined && !validateStringList(candidate.readLoreIds, 250)) {
+    return false;
+  }
+
   if (!Array.isArray(candidate.inventory) || candidate.inventory.length > 100) return false;
   const seenItems = new Set<string>();
   for (const slot of candidate.inventory) {
@@ -247,7 +299,7 @@ export function validateGameStateShape(
     if (typeof tr !== 'string' || tr.length === 0 || tr.length > 64) return false;
   }
 
-  if (!Array.isArray(candidate.openedProps) || candidate.openedProps.length > 200) {
+  if (!Array.isArray(candidate.openedProps) || candidate.openedProps.length > 250) {
     return false;
   }
   for (const pr of candidate.openedProps) {
@@ -276,7 +328,16 @@ export function validateGameStateShape(
     if (wVal.lastSeenAtMs !== undefined && !isIntInRange(wVal.lastSeenAtMs, 0, 9_999_999_999_999)) {
       return false;
     }
-    if (wVal.nextReviewStep !== undefined && !isIntInRange(wVal.nextReviewStep, 0, MAX_STEP_COUNT + 10_000)) {
+    if (
+      wVal.nextReviewStep !== undefined &&
+      !isIntInRange(wVal.nextReviewStep, 0, MAX_STEP_COUNT + 10_000)
+    ) {
+      return false;
+    }
+    if (
+      wVal.nextReviewAtMs !== undefined &&
+      !isIntInRange(wVal.nextReviewAtMs, 0, 9_999_999_999_999)
+    ) {
       return false;
     }
     if (wVal.correctReviews !== undefined && !isIntInRange(wVal.correctReviews, 0, 100_000)) {
@@ -306,16 +367,32 @@ export function validateGameStateShape(
   const s = candidate.settings;
   if (typeof s.cefrBand !== 'string' || !VALID_CEFR.has(s.cefrBand)) return false;
   if (typeof s.supportMode !== 'string' || !VALID_SUPPORT.has(s.supportMode)) return false;
-  if (typeof s.bgmVolume !== 'number' || !Number.isFinite(s.bgmVolume) || s.bgmVolume < 0 || s.bgmVolume > 1) {
+  if (
+    typeof s.bgmVolume !== 'number' ||
+    !Number.isFinite(s.bgmVolume) ||
+    s.bgmVolume < 0 ||
+    s.bgmVolume > 1
+  ) {
     return false;
   }
-  if (typeof s.sfxVolume !== 'number' || !Number.isFinite(s.sfxVolume) || s.sfxVolume < 0 || s.sfxVolume > 1) {
+  if (
+    typeof s.sfxVolume !== 'number' ||
+    !Number.isFinite(s.sfxVolume) ||
+    s.sfxVolume < 0 ||
+    s.sfxVolume > 1
+  ) {
     return false;
   }
   if (typeof s.muted !== 'boolean') return false;
   if (typeof s.highContrast !== 'boolean') return false;
   if (typeof s.reducedMotion !== 'boolean') return false;
-  if (s.battleSpeed !== undefined && (typeof s.battleSpeed !== 'string' || !VALID_BATTLE_SPEED.has(s.battleSpeed))) {
+  if (
+    s.battleSpeed !== undefined &&
+    (typeof s.battleSpeed !== 'string' || !VALID_BATTLE_SPEED.has(s.battleSpeed))
+  ) {
+    return false;
+  }
+  if (s.showFollower !== undefined && typeof s.showFollower !== 'boolean') {
     return false;
   }
   if (typeof s.textScale !== 'string' || !VALID_TEXT_SCALE.has(s.textScale)) return false;
@@ -332,13 +409,141 @@ export function validateGameStateShape(
   return true;
 }
 
-export function serializeSaveEnvelope(state: GameState, sequence: number = 1): string {
+function relocatePlayerToSafeTile(
+  state: GameState,
+  registry?: SaveValidationRegistry,
+): boolean {
+  if (!registry) return false;
+  const bounds = registry.mapBounds[state.regionId];
+  if (!bounds) return false;
+
+  const origX = state.playerPos.x;
+  const origY = state.playerPos.y;
+  const inBounds =
+    Number.isInteger(origX) &&
+    Number.isInteger(origY) &&
+    origX >= 0 &&
+    origX < bounds.width &&
+    origY >= 0 &&
+    origY < bounds.height;
+
+  if (inBounds && (!registry.isPositionSafe || registry.isPositionSafe(state.regionId, origX, origY, state))) {
+    return false;
+  }
+
+  const clampedX = Math.max(0, Math.min(bounds.width - 1, Math.floor(origX)));
+  const clampedY = Math.max(0, Math.min(bounds.height - 1, Math.floor(origY)));
+
+  if (registry.isPositionSafe) {
+    for (let radius = 0; radius <= 8; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          const nx = clampedX + dx;
+          const ny = clampedY + dy;
+          if (nx < 0 || ny < 0 || nx >= bounds.width || ny >= bounds.height) continue;
+          if (registry.isPositionSafe(state.regionId, nx, ny, state)) {
+            state.playerPos.x = nx;
+            state.playerPos.y = ny;
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  const fallback = registry.regionSpawns?.[state.regionId] ?? {
+    x: Math.min(15, bounds.width - 1),
+    y: Math.min(13, bounds.height - 1),
+  };
+  state.playerPos.x = fallback.x;
+  state.playerPos.y = fallback.y;
+  return true;
+}
+
+export function migrateAndNormalizeSaveState(
+  rawCandidate: unknown,
+  envelopeVersion: number,
+  registry?: SaveValidationRegistry,
+): { readonly ok: true; readonly state: GameState; readonly migrated: boolean } | { readonly ok: false } {
+  if (!isPlainObject(rawCandidate)) return { ok: false };
+  const cloned = structuredClone(rawCandidate);
+  const isLegacy =
+    envelopeVersion === LEGACY_SAVE_SCHEMA_VERSION ||
+    cloned.schemaVersion === LEGACY_SAVE_SCHEMA_VERSION;
+
+  let migrated = false;
+
+  if (isLegacy) {
+    // Allow legacy 1.0/1.1 coordinates slightly outside resized/reshaped maps to clamp cleanly before validation
+    if (
+      typeof cloned.regionId === 'string' &&
+      VALID_REGIONS.has(cloned.regionId) &&
+      isPlainObject(cloned.playerPos) &&
+      typeof cloned.playerPos.x === 'number' &&
+      Number.isInteger(cloned.playerPos.x) &&
+      cloned.playerPos.x >= 0 &&
+      cloned.playerPos.x < 64 &&
+      typeof cloned.playerPos.y === 'number' &&
+      Number.isInteger(cloned.playerPos.y) &&
+      cloned.playerPos.y >= 0 &&
+      cloned.playerPos.y < 64
+    ) {
+      const bounds = registry?.mapBounds[cloned.regionId];
+      if (bounds && (cloned.playerPos.x >= bounds.width || cloned.playerPos.y >= bounds.height)) {
+        const spawn = registry?.regionSpawns?.[cloned.regionId] ?? {
+          x: Math.min(cloned.playerPos.x, bounds.width - 1),
+          y: Math.min(cloned.playerPos.y, bounds.height - 1),
+        };
+        cloned.playerPos.x = spawn.x;
+        cloned.playerPos.y = spawn.y;
+        migrated = true;
+      }
+    }
+
+    // Prune only obsolete lexicon IDs removed across 1.0 -> 1.2 vocabulary curation while keeping valid records intact
+    if (registry && isPlainObject(cloned.lexicon)) {
+      for (const wordKey of Object.keys(cloned.lexicon)) {
+        if (!registry.validWordIds.has(wordKey)) {
+          delete cloned.lexicon[wordKey];
+          migrated = true;
+        }
+      }
+    }
+    cloned.schemaVersion = SAVE_SCHEMA_VERSION;
+    migrated = true;
+  }
+
+  if (!validateGameStateShape(cloned, registry)) {
+    return { ok: false };
+  }
+
+  cloned.schemaVersion = SAVE_SCHEMA_VERSION;
+  cloned.settings.battleSpeed = cloned.settings.battleSpeed ?? 'normal';
+  cloned.settings.showFollower = cloned.settings.showFollower ?? true;
+  cloned.gleamingSpecies = cloned.gleamingSpecies ?? [];
+  cloned.rematchCleared = cloned.rematchCleared ?? [];
+  cloned.discoveredTraces = cloned.discoveredTraces ?? [];
+  cloned.readLoreIds = cloned.readLoreIds ?? [];
+
+  if (relocatePlayerToSafeTile(cloned, registry)) {
+    migrated = true;
+  }
+
+  return { ok: true, state: cloned, migrated };
+}
+
+export function serializeSaveEnvelope(
+  state: GameState,
+  sequence: number = 1,
+  version: 1 | 2 = SAVE_SCHEMA_VERSION,
+): string {
   const stateJson = JSON.stringify(state);
   const checksum = computeFnv1aChecksum(stateJson);
   const nowMs = Date.now();
   const envelope: SaveEnvelope = {
     magic: SAVE_MAGIC,
-    version: SAVE_SCHEMA_VERSION,
+    version,
     sequence,
     savedAtMs: nowMs,
     savedAtIso: new Date(nowMs).toISOString(),
@@ -360,6 +565,7 @@ export type ParseSaveResult =
       readonly sequence: number;
       readonly savedAtMs: number;
       readonly savedAtIso: string;
+      readonly migratedFromLegacy: boolean;
     }
   | { readonly ok: false; readonly reason: string };
 
@@ -386,19 +592,27 @@ export function deserializeSaveEnvelope(
   if (parsed.magic !== SAVE_MAGIC) {
     return { ok: false, reason: 'Missing LingoWild save header' };
   }
-  if (parsed.version !== SAVE_SCHEMA_VERSION) {
+  if (
+    parsed.version !== LEGACY_SAVE_SCHEMA_VERSION &&
+    parsed.version !== SAVE_SCHEMA_VERSION
+  ) {
     return { ok: false, reason: `Unsupported save schema version: ${String(parsed.version)}` };
   }
   if (typeof parsed.checksum !== 'number') {
     return { ok: false, reason: 'Missing integrity checksum' };
   }
-  if (!validateGameStateShape(parsed.state, registry)) {
-    return { ok: false, reason: 'Save state failed deep schema and reference validation' };
-  }
+
+  // Verify checksum against exact original state JSON before applying schema migration
   const expectedChecksum = computeFnv1aChecksum(JSON.stringify(parsed.state));
   if (expectedChecksum !== (parsed.checksum >>> 0)) {
     return { ok: false, reason: 'Save checksum mismatch (data corrupted or modified)' };
   }
+
+  const normalized = migrateAndNormalizeSaveState(parsed.state, parsed.version, registry);
+  if (!normalized.ok) {
+    return { ok: false, reason: 'Save state failed deep schema and reference validation' };
+  }
+
   const sequence =
     typeof parsed.sequence === 'number' && Number.isInteger(parsed.sequence) && parsed.sequence >= 0
       ? parsed.sequence
@@ -408,21 +622,20 @@ export function deserializeSaveEnvelope(
       ? parsed.savedAtMs
       : 0;
 
-  const stateClone = structuredClone(parsed.state);
-  stateClone.settings.battleSpeed = stateClone.settings.battleSpeed ?? 'normal';
-
   return {
     ok: true,
-    state: stateClone,
+    state: normalized.state,
     sequence,
     savedAtMs,
     savedAtIso: typeof parsed.savedAtIso === 'string' ? parsed.savedAtIso : '',
+    migratedFromLegacy: normalized.migrated,
   };
 }
 
 export interface SaveOperationResult {
   readonly ok: boolean;
   readonly usedMemoryFallback: boolean;
+  readonly conflictWithNewerTab?: boolean;
   readonly warning?: string;
 }
 
@@ -431,6 +644,8 @@ export class SaveRepository {
   private readonly registry?: SaveValidationRegistry;
   private memorySlot: string | null = null;
   private nextSequence = 1;
+  private lastSyncedStorageSequence = 0;
+  public hasMultiTabConflict = false;
 
   public constructor(storage?: StorageAdapter | null, registry?: SaveValidationRegistry) {
     this.registry = registry;
@@ -446,17 +661,20 @@ export class SaveRepository {
       this.storage = null;
     }
 
-    // Seed sequence above any existing stored envelope
     const existingRaw = this.safeGet(PRIMARY_SAVE_KEY);
     if (existingRaw) {
       const parsed = deserializeSaveEnvelope(existingRaw, this.registry);
       if (parsed.ok) {
+        this.lastSyncedStorageSequence = parsed.sequence;
         this.nextSequence = parsed.sequence + 1;
       }
     }
   }
 
-  public save(state: GameState): SaveOperationResult {
+  public save(
+    state: GameState,
+    options?: { readonly resolveTabConflict?: 'overwrite' },
+  ): SaveOperationResult {
     if (!validateGameStateShape(state, this.registry)) {
       return {
         ok: false,
@@ -465,6 +683,36 @@ export class SaveRepository {
       };
     }
 
+    const previousPrimary = this.safeGet(PRIMARY_SAVE_KEY);
+    const parsedExistingPrimary = previousPrimary
+      ? deserializeSaveEnvelope(previousPrimary, this.registry)
+      : null;
+
+    // Detect if another open browser tab wrote newer progress since this tab last synced
+    if (
+      parsedExistingPrimary?.ok &&
+      parsedExistingPrimary.sequence > this.lastSyncedStorageSequence &&
+      options?.resolveTabConflict !== 'overwrite'
+    ) {
+      this.hasMultiTabConflict = true;
+      const localSeq = this.nextSequence++;
+      try {
+        this.memorySlot = serializeSaveEnvelope(state, localSeq);
+      } catch {
+        // ignore serialization error in fallback
+      }
+      return {
+        ok: true,
+        usedMemoryFallback: true,
+        conflictWithNewerTab: true,
+        warning:
+          'Newer progress was saved in another browser tab. Open Settings to load the newer tab save or export a JSON copy.',
+      };
+    }
+
+    if (parsedExistingPrimary?.ok && parsedExistingPrimary.sequence >= this.nextSequence) {
+      this.nextSequence = parsedExistingPrimary.sequence + 1;
+    }
     const seq = this.nextSequence++;
     let serialized: string;
     try {
@@ -488,26 +736,35 @@ export class SaveRepository {
       };
     }
 
-    const previousPrimary = this.safeGet(PRIMARY_SAVE_KEY);
+    const previousBackup = this.safeGet(BACKUP_SAVE_KEY);
     try {
-      if (previousPrimary) {
-        const prevValid = deserializeSaveEnvelope(previousPrimary, this.registry);
-        if (prevValid.ok) {
-          this.storage.setItem(BACKUP_SAVE_KEY, previousPrimary);
-        }
+      if (previousPrimary && parsedExistingPrimary?.ok) {
+        this.storage.setItem(BACKUP_SAVE_KEY, previousPrimary);
       }
       this.storage.setItem(PRIMARY_SAVE_KEY, serialized);
+      this.lastSyncedStorageSequence = seq;
+      this.hasMultiTabConflict = false;
       return { ok: true, usedMemoryFallback: false };
     } catch {
       try {
         this.storage.removeItem(BACKUP_SAVE_KEY);
         this.storage.setItem(PRIMARY_SAVE_KEY, serialized);
+        this.lastSyncedStorageSequence = seq;
+        this.hasMultiTabConflict = false;
         return {
           ok: true,
           usedMemoryFallback: false,
           warning: 'Storage nearly full; backup slot cleared to preserve primary save.',
         };
       } catch {
+        // Restore previous backup best-effort so a failed write never destroys an intact backup!
+        if (previousBackup !== null) {
+          try {
+            this.storage.setItem(BACKUP_SAVE_KEY, previousBackup);
+          } catch {
+            // quota prevented restoring backup too; primary and memorySlot remain intact
+          }
+        }
         return {
           ok: true,
           usedMemoryFallback: true,
@@ -518,10 +775,27 @@ export class SaveRepository {
     }
   }
 
+  public syncFromNewerStorage(): {
+    readonly ok: boolean;
+    readonly state: GameState | null;
+    readonly sequence: number;
+  } {
+    const rawPrimary = this.safeGet(PRIMARY_SAVE_KEY);
+    if (!rawPrimary) return { ok: false, state: null, sequence: this.lastSyncedStorageSequence };
+    const parsed = deserializeSaveEnvelope(rawPrimary, this.registry);
+    if (!parsed.ok) return { ok: false, state: null, sequence: this.lastSyncedStorageSequence };
+    this.memorySlot = rawPrimary;
+    this.lastSyncedStorageSequence = parsed.sequence;
+    this.nextSequence = Math.max(this.nextSequence, parsed.sequence + 1);
+    this.hasMultiTabConflict = false;
+    return { ok: true, state: parsed.state, sequence: parsed.sequence };
+  }
+
   public load(): {
     readonly state: GameState | null;
     readonly recoveredFromBackup: boolean;
     readonly usedNewerMemoryFallback?: boolean;
+    readonly migratedFromLegacy?: boolean;
     readonly warning?: string;
   } {
     const rawMemory = this.memorySlot;
@@ -531,6 +805,10 @@ export class SaveRepository {
     const parsedPrimary = rawPrimary ? deserializeSaveEnvelope(rawPrimary, this.registry) : null;
 
     if (parsedMemory?.ok && parsedPrimary?.ok) {
+      this.lastSyncedStorageSequence = Math.max(
+        this.lastSyncedStorageSequence,
+        parsedPrimary.sequence,
+      );
       const memoryIsNewer =
         parsedMemory.sequence > parsedPrimary.sequence ||
         (parsedMemory.sequence === parsedPrimary.sequence &&
@@ -540,14 +818,27 @@ export class SaveRepository {
           state: parsedMemory.state,
           recoveredFromBackup: false,
           usedNewerMemoryFallback: true,
+          migratedFromLegacy: parsedMemory.migratedFromLegacy,
           warning: 'Loaded newer in-memory session progress.',
         };
       }
-      return { state: parsedPrimary.state, recoveredFromBackup: false };
+      return {
+        state: parsedPrimary.state,
+        recoveredFromBackup: false,
+        migratedFromLegacy: parsedPrimary.migratedFromLegacy,
+      };
     }
 
     if (parsedPrimary?.ok) {
-      return { state: parsedPrimary.state, recoveredFromBackup: false };
+      this.lastSyncedStorageSequence = Math.max(
+        this.lastSyncedStorageSequence,
+        parsedPrimary.sequence,
+      );
+      return {
+        state: parsedPrimary.state,
+        recoveredFromBackup: false,
+        migratedFromLegacy: parsedPrimary.migratedFromLegacy,
+      };
     }
 
     if (parsedMemory?.ok) {
@@ -555,6 +846,7 @@ export class SaveRepository {
         state: parsedMemory.state,
         recoveredFromBackup: false,
         usedNewerMemoryFallback: true,
+        migratedFromLegacy: parsedMemory.migratedFromLegacy,
       };
     }
 
@@ -564,9 +856,14 @@ export class SaveRepository {
       if (rawBackup) {
         const parsedBackup = deserializeSaveEnvelope(rawBackup, this.registry);
         if (parsedBackup.ok) {
+          this.lastSyncedStorageSequence = Math.max(
+            this.lastSyncedStorageSequence,
+            parsedBackup.sequence,
+          );
           return {
             state: parsedBackup.state,
             recoveredFromBackup: true,
+            migratedFromLegacy: parsedBackup.migratedFromLegacy,
             warning: `Primary save was damaged (${failReason}). Restored clean backup automatically.`,
           };
         }
@@ -582,9 +879,14 @@ export class SaveRepository {
     if (rawBackupOnly) {
       const parsedBackup = deserializeSaveEnvelope(rawBackupOnly, this.registry);
       if (parsedBackup.ok) {
+        this.lastSyncedStorageSequence = Math.max(
+          this.lastSyncedStorageSequence,
+          parsedBackup.sequence,
+        );
         return {
           state: parsedBackup.state,
           recoveredFromBackup: true,
+          migratedFromLegacy: parsedBackup.migratedFromLegacy,
           warning: 'Primary save missing; restored from backup slot.',
         };
       }
@@ -605,6 +907,7 @@ export class SaveRepository {
   public importJson(rawJson: string): {
     readonly ok: boolean;
     readonly state?: GameState;
+    readonly migratedFromLegacy?: boolean;
     readonly error?: string;
   } {
     const parsed = deserializeSaveEnvelope(rawJson, this.registry);
@@ -612,11 +915,15 @@ export class SaveRepository {
       // Never mutate primary, backup, or memorySlot on invalid import!
       return { ok: false, error: parsed.reason };
     }
-    const saveRes = this.save(parsed.state);
+    const saveRes = this.save(parsed.state, { resolveTabConflict: 'overwrite' });
     if (!saveRes.ok) {
       return { ok: false, error: saveRes.warning ?? 'Could not persist imported save' };
     }
-    return { ok: true, state: parsed.state };
+    return {
+      ok: true,
+      state: parsed.state,
+      migratedFromLegacy: parsed.migratedFromLegacy,
+    };
   }
 
   private safeGet(key: string): string | null {

@@ -5,6 +5,7 @@ import { LEXICON_INDEX } from '../data/lexicon.ts';
 import { MAPS, MAPS_BY_ID } from '../data/maps.ts';
 import { MOVES_BY_ID } from '../data/moves.ts';
 import { NPCS, NPCS_BY_ID } from '../data/npcs.ts';
+import type { PocketWordNote } from '../data/pocket-dict.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../data/species.ts';
 import {
@@ -54,8 +55,17 @@ import type {
 import {
   attemptPlayerStep,
   inspectFacingTile,
+  isTileWalkable,
   nextTimeOfDay,
+  offsetByDirection,
 } from '../domain/world.ts';
+
+const OPPOSITE_DIR: Readonly<Record<Direction, Direction>> = {
+  up: 'down',
+  down: 'up',
+  left: 'right',
+  right: 'left',
+};
 
 export const GAME_SAVE_VALIDATION_REGISTRY: SaveValidationRegistry = {
   validSpeciesIds: new Set(SPECIES.map((s) => s.id)),
@@ -65,6 +75,15 @@ export const GAME_SAVE_VALIDATION_REGISTRY: SaveValidationRegistry = {
   validQuestIds: new Set(QUESTS.map((q) => q.id)),
   validWordIds: new Set(Object.keys(LEXICON_INDEX.byId)),
   mapBounds: Object.fromEntries(MAPS.map((m) => [m.id, { width: m.width, height: m.height }])),
+  regionSpawns: Object.fromEntries(
+    MAPS.map((m) => [m.id, { x: m.spawnX, y: m.spawnY }]),
+  ) as SaveValidationRegistry['regionSpawns'],
+  isPositionSafe: (regionId, x, y, state) => {
+    const map = (MAPS_BY_ID as Readonly<Record<string, (typeof MAPS)[number]>>)[regionId];
+    if (!map) return false;
+    const npcsInRegion = NPCS.filter((n) => n.regionId === regionId);
+    return isTileWalkable({ map, npcsInRegion, state, x, y });
+  },
 };
 
 export interface ActiveDialogueState {
@@ -110,6 +129,19 @@ export type JournalTab =
   | 'lexicon'
   | 'settings';
 
+export interface PocketGlossState {
+  readonly surface: string;
+  readonly note: PocketWordNote;
+  readonly sentenceEn: string;
+}
+
+export interface EvolutionCelebrationState {
+  readonly fromSpeciesId: string;
+  readonly toSpeciesId: string;
+  readonly newLevel: number;
+  readonly triggeredAtStep: number;
+}
+
 export class GameController {
   public state: GameState;
   public readonly rng: SeededRng;
@@ -121,13 +153,17 @@ export class GameController {
   public activeDialogue: ActiveDialogueState | null = null;
   public activeBattle: BattleSession | null = null;
   public activeTrainerNpc: NpcDefinition | null = null;
+  public activeBattleIsRematch = false;
   public battleLogs: BattleEventLog[] = [];
   public lastBattleAnim: 'none' | 'player_attack' | 'enemy_attack' | 'capture' | 'heal' = 'none';
   public lastBattleVisual: BattleVisualCue | null = null;
   public activeGlossEntry: LexiconEntry | null = null;
+  public activePocketGloss: PocketGlossState | null = null;
   public activeGlossContextTag: string = '';
   public activeGlossSentenceEn: string = '';
   public activeGlossNoteVi: string = '';
+  public activeEvolution: EvolutionCelebrationState | null = null;
+  public followerPos: { x: number; y: number; facing: Direction };
   public campPrompts: CampfireReviewPrompt[] = [];
   public campPromptIndex = 0;
   public toasts: ToastBanner[] = [];
@@ -154,11 +190,26 @@ export class GameController {
       }
     }
     this.rng = new SeededRng(this.state.seedState);
+    this.followerPos = this.computeDefaultFollowerPos();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
       sfxVolume: this.state.settings.sfxVolume,
       muted: this.state.settings.muted,
     });
+  }
+
+  private computeDefaultFollowerPos(): { x: number; y: number; facing: Direction } {
+    const map = MAPS_BY_ID[this.state.regionId];
+    const behind = offsetByDirection(
+      this.state.playerPos.x,
+      this.state.playerPos.y,
+      OPPOSITE_DIR[this.state.playerPos.facing],
+    );
+    const npcsInRegion = NPCS.filter((n) => n.regionId === this.state.regionId);
+    if (isTileWalkable({ map, npcsInRegion, state: this.state, x: behind.x, y: behind.y })) {
+      return { x: behind.x, y: behind.y, facing: this.state.playerPos.facing };
+    }
+    return { ...this.state.playerPos };
   }
 
   public startPlaytimeClock(): void {
@@ -197,9 +248,13 @@ export class GameController {
     this.rng.setSeedState(this.state.seedState);
     this.activeBattle = null;
     this.activeTrainerNpc = null;
+    this.activeBattleIsRematch = false;
     this.activeDialogue = null;
     this.activeGlossEntry = null;
+    this.activePocketGloss = null;
+    this.activeEvolution = null;
     this.lastBattleVisual = null;
+    this.followerPos = this.computeDefaultFollowerPos();
     this.activeModal = 'none';
     this.sound.unlock();
     this.syncRegionMusic();
@@ -213,6 +268,7 @@ export class GameController {
     if (loaded.state) {
       this.state = loaded.state;
       this.rng.setSeedState(this.state.seedState);
+      this.followerPos = this.computeDefaultFollowerPos();
       if (loaded.warning) {
         this.pushToast('Save Restored', loaded.warning);
       }
@@ -245,6 +301,8 @@ export class GameController {
       return;
     }
     this.sound.unlock();
+    const prevX = this.state.playerPos.x;
+    const prevY = this.state.playerPos.y;
     const map = MAPS_BY_ID[this.state.regionId];
     const npcsInRegion = NPCS.filter((n) => n.regionId === this.state.regionId);
     const step = attemptPlayerStep({
@@ -262,6 +320,12 @@ export class GameController {
     }
 
     this.sound.playSfx('step');
+    if (
+      this.activeEvolution &&
+      this.state.stepCount - this.activeEvolution.triggeredAtStep >= 3
+    ) {
+      this.activeEvolution = null;
+    }
 
     if (step.kind === 'portal_blocked') {
       if (step.portal.blockedDialogueId) {
@@ -274,6 +338,7 @@ export class GameController {
     }
 
     if (step.kind === 'portal_entered') {
+      this.followerPos = this.computeDefaultFollowerPos();
       const destMap = MAPS_BY_ID[this.state.regionId];
       this.pushToast(`Entered ${destMap.nameEn}`, `Đã tới ${destMap.nameVi}`);
       this.syncQuestsAndNotify();
@@ -283,8 +348,10 @@ export class GameController {
       return;
     }
 
+    this.followerPos = { x: prevX, y: prevY, facing: direction };
+
     if (step.kind === 'wild_encounter') {
-      this.startWildEncounter(step.speciesId, step.level);
+      this.startWildEncounter(step.speciesId, step.level, Boolean(step.isRareVariant));
       this.emitChange();
       return;
     }
@@ -349,6 +416,21 @@ export class GameController {
         return;
       }
 
+      if (prop.kind === 'trace') {
+        const firstTime = !this.state.discoveredTraces.includes(prop.id);
+        if (firstTime) {
+          this.state.discoveredTraces.push(prop.id);
+          if (prop.traceSpeciesId) {
+            markSpeciesDiscovered(this.state, prop.traceSpeciesId);
+          }
+          this.sound.playSfx('quest');
+          this.pushToast(
+            `Habitat Trace Logged: ${prop.labelEn}`,
+            `Đã ghi nhận dấu vết sinh cảnh: ${prop.labelVi}`,
+          );
+        }
+      }
+
       if (prop.setsFlag) {
         this.state.flags[prop.setsFlag] = true;
         this.syncQuestsAndNotify();
@@ -406,6 +488,16 @@ export class GameController {
   public openDialogueById(dialogueId: string): void {
     const node = DIALOGUES_BY_ID[dialogueId];
     if (!node) return;
+    if (
+      (dialogueId.startsWith('lore_') ||
+        dialogueId.startsWith('logbook_') ||
+        dialogueId.startsWith('journal_tale_') ||
+        dialogueId.startsWith('field_story_') ||
+        node.contextTag === 'ranger_dispatch') &&
+      !this.state.readLoreIds.includes(dialogueId)
+    ) {
+      this.state.readLoreIds.push(dialogueId);
+    }
     this.activateDialogueLine(node, 0);
   }
 
@@ -472,7 +564,11 @@ export class GameController {
     this.emitChange();
   }
 
-  public startWildEncounter(speciesId: string, level: number): void {
+  public startWildEncounter(
+    speciesId: string,
+    level: number,
+    isRareVariant: boolean = false,
+  ): void {
     const spec = SPECIES_BY_ID[speciesId];
     if (!spec || this.state.party.length === 0) return;
     markSpeciesDiscovered(this.state, spec.id);
@@ -482,22 +578,30 @@ export class GameController {
       level,
       bondedRegion: this.state.regionId,
       movesById: MOVES_BY_ID,
+      isRareVariant,
     });
     this.activeTrainerNpc = null;
+    this.activeBattleIsRematch = false;
+    const gleamPrefixEn = isRareVariant ? 'Gleaming ' : '';
+    const gleamSuffixVi = isRareVariant ? ' Ánh Sao' : '';
     this.activeBattle = createBattleSession({
       kind: 'wild',
       isBoss: false,
-      opponentTitleEn: `Wild ${spec.name}`,
-      opponentTitleVi: `${spec.name} hoang dã`,
-      rewardTokens: Math.max(12, level * 3),
+      opponentTitleEn: `Wild ${gleamPrefixEn}${spec.name}`,
+      opponentTitleVi: `${spec.name}${gleamSuffixVi} hoang dã`,
+      rewardTokens: Math.max(12, level * (isRareVariant ? 5 : 3)),
       playerParty: this.state.party,
       enemyParty: [wildEnemy],
     });
     this.battleLogs = [
       {
         kind: 'text',
-        messageEn: `A wild ${spec.name} (${spec.titleEn}) stepped out from the brush!`,
-        messageVi: `Một ${spec.name} (${spec.titleVi}) xuất hiện từ bụi cỏ!`,
+        messageEn: isRareVariant
+          ? `A rare gleaming ${spec.name} (${spec.titleEn}) sparkled into view!`
+          : `A wild ${spec.name} (${spec.titleEn}) stepped out from the brush!`,
+        messageVi: isRareVariant
+          ? `Một ${spec.name} biến thể Ánh Sao quý hiếm lấp lánh xuất hiện!`
+          : `Một ${spec.name} (${spec.titleVi}) xuất hiện từ bụi cỏ!`,
       },
     ];
     recordSentenceExposure(
@@ -512,18 +616,19 @@ export class GameController {
     this.syncQuestsAndNotify();
   }
 
-  public startTrainerEncounter(npcId: string): void {
+  public startTrainerEncounter(npcId: string, isRematch: boolean = false): void {
     const npc = NPCS_BY_ID[npcId];
-    if (!npc?.trainerBattle || this.state.party.length === 0) return;
+    const battleSpec = isRematch && npc?.rematchBattle ? npc.rematchBattle : npc?.trainerBattle;
+    if (!npc || !battleSpec || this.state.party.length === 0) return;
     if (this.state.party.every((c) => c.currentHp <= 0)) {
       healPartyInState(this.state, MOVES_BY_ID);
     }
-    const specList = npc.trainerBattle.party;
+    const specList = battleSpec.party;
     const enemyParty = specList.map((entry, idx) => {
       const sp = SPECIES_BY_ID[entry.speciesId]!;
       markSpeciesDiscovered(this.state, sp.id);
       return createCreatureInstance({
-        uid: `trainer_${npc.id}_${idx}`,
+        uid: `trainer_${npc.id}_${isRematch ? 'rematch_' : ''}${idx}`,
         species: sp,
         level: entry.level,
         bondedRegion: npc.regionId,
@@ -532,12 +637,13 @@ export class GameController {
     });
 
     this.activeTrainerNpc = npc;
+    this.activeBattleIsRematch = Boolean(isRematch && npc.rematchBattle);
     this.activeBattle = createBattleSession({
       kind: 'trainer',
-      isBoss: npc.trainerBattle.isBoss,
-      opponentTitleEn: npc.trainerBattle.titleEn,
-      opponentTitleVi: npc.trainerBattle.titleVi,
-      rewardTokens: npc.trainerBattle.rewardTokens,
+      isBoss: battleSpec.isBoss,
+      opponentTitleEn: battleSpec.titleEn,
+      opponentTitleVi: battleSpec.titleVi,
+      rewardTokens: battleSpec.rewardTokens,
       playerParty: this.state.party,
       enemyParty,
     });
@@ -545,13 +651,13 @@ export class GameController {
     this.battleLogs = [
       {
         kind: 'text',
-        messageEn: `${npc.trainerBattle.titleEn} sent out ${firstEnemySpec.name}!`,
-        messageVi: `${npc.trainerBattle.titleVi} đưa ${firstEnemySpec.name} ra sân!`,
+        messageEn: `${battleSpec.titleEn} sent out ${firstEnemySpec.name}!`,
+        messageVi: `${battleSpec.titleVi} đưa ${firstEnemySpec.name} ra sân!`,
       },
     ];
     this.lastBattleAnim = 'none';
     this.lastBattleVisual = null;
-    this.sound.playTrack(npc.trainerBattle.isBoss ? 'boss_battle' : 'wild_battle');
+    this.sound.playTrack(battleSpec.isBoss ? 'boss_battle' : 'wild_battle');
     this.syncQuestsAndNotify();
   }
 
@@ -655,6 +761,7 @@ export class GameController {
     if (!this.activeBattle || this.activeBattle.outcome === 'ongoing') return;
     const outcome = this.activeBattle.outcome;
     const defeatedTrainer = this.activeTrainerNpc;
+    const wasRematch = this.activeBattleIsRematch;
     const wasAltarSolacern =
       Boolean(this.state.flags.main_story_completed) &&
       Boolean(this.state.flags.met_altar_solacern) &&
@@ -663,17 +770,29 @@ export class GameController {
 
     this.activeBattle = null;
     this.activeTrainerNpc = null;
+    this.activeBattleIsRematch = false;
     this.lastBattleAnim = 'none';
     this.lastBattleVisual = null;
     this.syncRegionMusic();
 
-    if (outcome === 'player_victory' && defeatedTrainer?.trainerBattle) {
-      this.openDialogueById(defeatedTrainer.trainerBattle.defeatDialogueId);
+    if (outcome === 'player_victory' && defeatedTrainer) {
+      const spec =
+        wasRematch && defeatedTrainer.rematchBattle
+          ? defeatedTrainer.rematchBattle
+          : defeatedTrainer.trainerBattle;
+      if (spec) {
+        this.openDialogueById(spec.defeatDialogueId);
+      }
     } else if (wasAltarSolacern) {
       this.state.flags.seen_ending_banner = true;
       this.activeModal = 'ending_banner';
     }
     this.persistState();
+    this.emitChange();
+  }
+
+  public dismissEvolutionBanner(): void {
+    this.activeEvolution = null;
     this.emitChange();
   }
 
@@ -686,6 +805,16 @@ export class GameController {
         this.state.caughtSpecies.includes(expRes.evolvedToSpeciesId) ||
           this.state.caughtSpecies.push(expRes.evolvedToSpeciesId);
         markSpeciesDiscovered(this.state, expRes.evolvedToSpeciesId);
+        const preEvo = SPECIES.find((s) => s.evolvesTo?.speciesId === expRes.evolvedToSpeciesId);
+        if (preEvo) {
+          this.activeEvolution = {
+            fromSpeciesId: preEvo.id,
+            toSpeciesId: expRes.evolvedToSpeciesId,
+            newLevel: expRes.newLevel,
+            triggeredAtStep: this.state.stepCount,
+          };
+          this.sound.playSfx('caught');
+        }
       }
     }
 
@@ -696,6 +825,12 @@ export class GameController {
         session.capturedCreature,
         this.state.regionId,
       );
+      if (
+        session.capturedCreature.isRareVariant &&
+        !this.state.gleamingSpecies.includes(session.capturedCreature.speciesId)
+      ) {
+        this.state.gleamingSpecies.push(session.capturedCreature.speciesId);
+      }
       const sp = SPECIES_BY_ID[session.capturedCreature.speciesId];
       this.state.tokens += Math.max(10, Math.round(session.rewardTokens * 0.7));
       this.battleLogs.push({
@@ -717,20 +852,29 @@ export class GameController {
     if (session.outcome === 'player_victory') {
       this.state.stats.battlesWon += 1;
       this.state.tokens += session.rewardTokens;
-      if (this.activeTrainerNpc?.trainerBattle) {
-        const tb = this.activeTrainerNpc.trainerBattle;
-        if (!this.state.defeatedTrainers.includes(tb.id)) {
-          this.state.defeatedTrainers.push(tb.id);
+      const activeSpec =
+        this.activeBattleIsRematch && this.activeTrainerNpc?.rematchBattle
+          ? this.activeTrainerNpc.rematchBattle
+          : this.activeTrainerNpc?.trainerBattle;
+      if (activeSpec) {
+        if (this.activeBattleIsRematch) {
+          if (!this.state.rematchCleared.includes(activeSpec.id)) {
+            this.state.rematchCleared.push(activeSpec.id);
+          }
+        } else if (!this.state.defeatedTrainers.includes(activeSpec.id)) {
+          this.state.defeatedTrainers.push(activeSpec.id);
         }
-        this.state.flags[tb.setsFlag] = true;
-        if (tb.rewardItemId) {
-          addItemToState(this.state, tb.rewardItemId, tb.rewardQuantity ?? 1);
-          const itemDef = ITEMS_BY_ID[tb.rewardItemId];
+        const firstClear = !this.state.flags[activeSpec.setsFlag];
+        this.state.flags[activeSpec.setsFlag] = true;
+        if (activeSpec.rewardItemId && (firstClear || this.activeBattleIsRematch)) {
+          const qty = this.activeBattleIsRematch && !firstClear ? 1 : (activeSpec.rewardQuantity ?? 1);
+          addItemToState(this.state, activeSpec.rewardItemId, qty);
+          const itemDef = ITEMS_BY_ID[activeSpec.rewardItemId];
           if (itemDef) {
             this.battleLogs.push({
               kind: 'victory',
-              messageEn: `Received ${tb.rewardQuantity ?? 1}x ${itemDef.nameEn} and ${tb.rewardTokens} Field Tokens!`,
-              messageVi: `Nhận được ${tb.rewardQuantity ?? 1} ${itemDef.nameVi} và ${tb.rewardTokens} Huy hiệu thực địa!`,
+              messageEn: `Received ${qty}x ${itemDef.nameEn} and ${activeSpec.rewardTokens} Field Tokens!`,
+              messageVi: `Nhận được ${qty} ${itemDef.nameVi} và ${activeSpec.rewardTokens} Huy hiệu thực địa!`,
             });
           }
         }
@@ -758,6 +902,7 @@ export class GameController {
       const hub = MAPS_BY_ID.mosslight_hub;
       this.state.regionId = 'mosslight_hub';
       this.state.playerPos = { x: hub.spawnX, y: hub.spawnY, facing: 'up' };
+      this.followerPos = { x: hub.spawnX, y: hub.spawnY + 1, facing: 'up' };
       this.persistState();
     }
   }
@@ -765,6 +910,7 @@ export class GameController {
   public inspectGlossWord(entry: LexiconEntry, contextTag: string, sentenceEn: string = ''): void {
     this.sound.playSfx('gloss');
     recordWordLookup(this.state, entry.id, contextTag);
+    this.activePocketGloss = null;
     this.activeGlossEntry = entry;
     this.activeGlossContextTag = contextTag;
     this.activeGlossSentenceEn = sentenceEn;
@@ -772,8 +918,21 @@ export class GameController {
     this.emitChange();
   }
 
+  public inspectPocketWord(
+    surface: string,
+    note: PocketWordNote,
+    sentenceEn: string = '',
+  ): void {
+    this.sound.playSfx('gloss');
+    this.activeGlossEntry = null;
+    this.activePocketGloss = { surface, note, sentenceEn };
+    this.activeGlossNoteVi = '';
+    this.emitChange();
+  }
+
   public closeGlossPopup(): void {
     this.activeGlossEntry = null;
+    this.activePocketGloss = null;
     this.activeGlossContextTag = '';
     this.activeGlossSentenceEn = '';
     this.activeGlossNoteVi = '';
@@ -781,13 +940,34 @@ export class GameController {
   }
 
   public pronounceActiveGloss(): void {
-    if (!this.activeGlossEntry) return;
-    const res = this.sound.speakEnglishWord(
-      this.activeGlossEntry.word,
-      this.activeGlossEntry.phonetic,
-    );
-    this.activeGlossNoteVi = res.fallbackMessageVi;
-    this.emitChange();
+    if (this.activeGlossEntry) {
+      const res = this.sound.speakEnglishWord(
+        this.activeGlossEntry.word,
+        this.activeGlossEntry.phonetic,
+      );
+      this.activeGlossNoteVi = res.fallbackMessageVi;
+      this.emitChange();
+      return;
+    }
+    if (this.activePocketGloss) {
+      const res = this.sound.speakEnglishWord(this.activePocketGloss.surface, '');
+      this.activeGlossNoteVi = res.fallbackMessageVi;
+      this.emitChange();
+    }
+  }
+
+  public syncNewerTabSave(): void {
+    const res = this.saveRepo.syncFromNewerStorage();
+    if (res.state) {
+      this.state = res.state;
+      this.rng.setSeedState(this.state.seedState);
+      this.followerPos = this.computeDefaultFollowerPos();
+      this.pushToast(
+        'Synced latest progress from newer tab.',
+        'Đã đồng bộ tiến trình mới nhất từ tab khác.',
+      );
+      this.emitChange();
+    }
   }
 
   public toggleSaveActiveGloss(): void {
@@ -957,6 +1137,7 @@ export class GameController {
               species: sp,
               movesById: MOVES_BY_ID,
             });
+            this.followerPos = this.computeDefaultFollowerPos();
             this.sound.playSfx('caught');
             this.syncQuestsAndNotify();
             this.persistState();
@@ -1020,7 +1201,7 @@ export class GameController {
         break;
       }
       case 'start_trainer_battle': {
-        this.startTrainerEncounter(action.npcId);
+        this.startTrainerEncounter(action.npcId, Boolean(action.isRematch));
         break;
       }
       case 'trigger_wild_encounter': {
@@ -1028,7 +1209,11 @@ export class GameController {
           if (action.onceFlag) {
             this.state.flags[action.onceFlag] = true;
           }
-          this.startWildEncounter(action.speciesId, action.level);
+          this.startWildEncounter(
+            action.speciesId,
+            action.level,
+            Boolean(action.guaranteedRareVariant),
+          );
         } else {
           this.pushToast(
             'Guardian Solacern gazes peacefully across the sanctuary.',

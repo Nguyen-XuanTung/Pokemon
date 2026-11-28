@@ -29,10 +29,10 @@ const DIR_WALK_COLS: Readonly<Record<Direction, readonly [number, number, number
 };
 
 const TIME_TINT: Readonly<Record<TimeOfDay, { color: number; alpha: number }>> = {
-  morning: { color: 0xffe6b8, alpha: 0.07 },
+  morning: { color: 0xffe8ba, alpha: 0.06 },
   day: { color: 0xffffff, alpha: 0 },
-  dusk: { color: 0xd97538, alpha: 0.2 },
-  night: { color: 0x10223d, alpha: 0.36 },
+  dusk: { color: 0xd97538, alpha: 0.19 },
+  night: { color: 0x10223d, alpha: 0.34 },
 };
 
 const ELEMENT_VFX_FRAME: Readonly<Record<ElementType, number>> = {
@@ -45,71 +45,20 @@ const ELEMENT_VFX_FRAME: Readonly<Record<ElementType, number>> = {
   neutral: 6,
 };
 
-const REGION_ARENA_PALETTE: Readonly<
-  Record<
-    RegionId,
-    {
-      skyTop: number;
-      skyHorizon: number;
-      distantHill: number;
-      groundMain: number;
-      groundRim: number;
-      padFill: number;
-      padBorder: number;
-      particleColor: number;
-    }
-  >
-> = {
-  mosslight_hub: {
-    skyTop: 0x4f8464,
-    skyHorizon: 0x93bf8a,
-    distantHill: 0x355c42,
-    groundMain: 0x497a49,
-    groundRim: 0x325936,
-    padFill: 0xc9ab7d,
-    padBorder: 0x7d613e,
-    particleColor: 0xf7e699,
-  },
-  whisperwood: {
-    skyTop: 0x284d38,
-    skyHorizon: 0x5c8c62,
-    distantHill: 0x1d3b2a,
-    groundMain: 0x3a6b42,
-    groundRim: 0x254a2c,
-    padFill: 0x8fb36d,
-    padBorder: 0x466b38,
-    particleColor: 0xbaf299,
-  },
-  reedwater_fen: {
-    skyTop: 0x2c5c6e,
-    skyHorizon: 0x7bb0b8,
-    distantHill: 0x224654,
-    groundMain: 0x366d78,
-    groundRim: 0x224b54,
-    padFill: 0x8cc4b8,
-    padBorder: 0x3d736e,
-    particleColor: 0xc7f7ff,
-  },
-  terracotta_ridge: {
-    skyTop: 0x8c442b,
-    skyHorizon: 0xe09b63,
-    distantHill: 0x69311f,
-    groundMain: 0xb86642,
-    groundRim: 0x804126,
-    padFill: 0xe3b888,
-    padBorder: 0x8f5534,
-    particleColor: 0xffe094,
-  },
-  starfall_sanctuary: {
-    skyTop: 0x162238,
-    skyHorizon: 0x354d73,
-    distantHill: 0x223352,
-    groundMain: 0x2d3f5e,
-    groundRim: 0x1c2940,
-    padFill: 0x8ea4c9,
-    padBorder: 0x52688f,
-    particleColor: 0xfff5b8,
-  },
+const REGION_BATTLE_BG_FRAME: Readonly<Record<RegionId, number>> = {
+  mosslight_hub: 0,
+  whisperwood: 1,
+  reedwater_fen: 2,
+  terracotta_ridge: 3,
+  starfall_sanctuary: 4,
+};
+
+const REGION_PARTICLE_COLOR: Readonly<Record<RegionId, number>> = {
+  mosslight_hub: 0xfff0a6,
+  whisperwood: 0xc4f59d,
+  reedwater_fen: 0xc7f7ff,
+  terracotta_ridge: 0xffe094,
+  starfall_sanctuary: 0xfff5b8,
 };
 
 function speedFactor(mode: BattleSpeedMode): number {
@@ -122,35 +71,45 @@ export class WorldScene extends Phaser.Scene {
   private readonly controller: GameController;
   private renderedRegion: RegionId | null = null;
   private groundLayer!: Phaser.GameObjects.Container;
+  private shadowLayer!: Phaser.GameObjects.Container;
   private objectLayer!: Phaser.GameObjects.Container;
   private canopyLayer!: Phaser.GameObjects.Container;
   private ambientLayer!: Phaser.GameObjects.Container;
+  private lightGlowLayer!: Phaser.GameObjects.Container;
   private battleContainer!: Phaser.GameObjects.Container;
-  private battleSceneryGraphics!: Phaser.GameObjects.Graphics;
+  private battleUnderfill!: Phaser.GameObjects.Rectangle;
+  private battleBgSprite!: Phaser.GameObjects.Sprite;
+  private playerShadow!: Phaser.GameObjects.Ellipse;
+  private companionShadow!: Phaser.GameObjects.Ellipse;
+  private companionSprite!: Phaser.GameObjects.Sprite;
   private playerSprite!: Phaser.GameObjects.Sprite;
   private timeOverlay!: Phaser.GameObjects.Rectangle;
   private regionFadeRect!: Phaser.GameObjects.Rectangle;
 
   private animatedTiles: Array<{
     sprite: Phaser.GameObjects.Sprite;
-    frameA: number;
-    frameB: number;
+    frames: ReadonlyArray<number | string>;
   }> = [];
   private ambientMotes: Array<{
     dot: Phaser.GameObjects.Arc;
     vx: number;
     vy: number;
   }> = [];
+  private mistBands: Array<{
+    rect: Phaser.GameObjects.Rectangle;
+    vx: number;
+  }> = [];
   private propSprites = new Map<string, Phaser.GameObjects.Sprite>();
 
-  private enemyPlatform!: Phaser.GameObjects.Ellipse;
-  private playerPlatform!: Phaser.GameObjects.Ellipse;
+  private enemyShadow!: Phaser.GameObjects.Ellipse;
+  private playerBattleShadow!: Phaser.GameObjects.Ellipse;
   private enemyBattleSprite!: Phaser.GameObjects.Sprite;
   private playerBattleSprite!: Phaser.GameObjects.Sprite;
+  private gleamingAuraSprite!: Phaser.GameObjects.Sprite;
   private vfxSprite!: Phaser.GameObjects.Sprite;
   private damagePopupText!: Phaser.GameObjects.Text;
 
-  private animFrameToggle = 0;
+  private animCycleStep = 0;
   private lastStepRendered = -1;
   private lastVisualCueId = 0;
   private wasInBattle = false;
@@ -169,6 +128,11 @@ export class WorldScene extends Phaser.Scene {
       frameWidth: 16,
       frameHeight: 16,
     });
+    this.load.image('structures', './assets/sprites/structures.png');
+    this.load.spritesheet('battle-bg', './assets/sprites/battle-bg.png', {
+      frameWidth: 384,
+      frameHeight: 216,
+    });
     this.load.spritesheet('characters', './assets/sprites/characters.png', {
       frameWidth: 16,
       frameHeight: 16,
@@ -176,6 +140,10 @@ export class WorldScene extends Phaser.Scene {
     this.load.spritesheet('creatures', './assets/sprites/creatures.png', {
       frameWidth: 48,
       frameHeight: 48,
+    });
+    this.load.spritesheet('companions', './assets/sprites/companions.png', {
+      frameWidth: 16,
+      frameHeight: 16,
     });
     this.load.spritesheet('items', './assets/sprites/items.png', {
       frameWidth: 16,
@@ -187,9 +155,41 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  private registerStructureFrames(): void {
+    const tex = this.textures.get('structures');
+    if (!tex || tex.has('lodge_roof')) return;
+    tex.add('lodge_roof', 0, 0, 0, 80, 32);
+    tex.add('lodge_body', 0, 0, 32, 80, 48);
+    tex.add('cabin_roof', 0, 80, 0, 32, 16);
+    tex.add('cabin_body', 0, 80, 16, 32, 32);
+    tex.add('stall_awning', 0, 112, 0, 80, 32);
+    tex.add('stall_counter', 0, 112, 32, 80, 48);
+    tex.add('arch_top', 0, 192, 0, 64, 32);
+    tex.add('arch_base', 0, 192, 32, 64, 32);
+    tex.add('fountain_0', 0, 0, 80, 48, 48);
+    tex.add('fountain_1', 0, 48, 80, 48, 48);
+    tex.add('fountain_2', 0, 96, 80, 48, 48);
+    tex.add('bench_back', 0, 144, 80, 48, 16);
+    tex.add('bench_seat', 0, 144, 96, 48, 16);
+    tex.add('fallen_log', 0, 192, 80, 48, 16);
+    tex.add('statue_top', 0, 192, 96, 32, 16);
+    tex.add('statue_base', 0, 192, 112, 32, 32);
+    tex.add('waterfall_3x3', 0, 0, 128, 48, 48);
+    tex.add('tree_cluster_2x2', 0, 48, 128, 32, 32);
+  }
+
   public create(): void {
+    this.registerStructureFrames();
     this.groundLayer = this.add.container(0, 0).setDepth(1);
+    this.shadowLayer = this.add.container(0, 0).setDepth(3);
     this.objectLayer = this.add.container(0, 0).setDepth(5);
+    this.companionShadow = this.add.ellipse(8, 14, 10, 4, 0x0e1410, 0.28).setDepth(8);
+    this.companionSprite = this.add
+      .sprite(0, 0, 'companions', 0)
+      .setOrigin(0, 0)
+      .setDepth(9)
+      .setVisible(false);
+    this.playerShadow = this.add.ellipse(8, 15, 11, 4.5, 0x0e1410, 0.32).setDepth(9);
     this.playerSprite = this.add.sprite(0, 0, 'characters', 1).setOrigin(0, 0).setDepth(10);
     this.canopyLayer = this.add.container(0, 0).setDepth(15);
     this.ambientLayer = this.add.container(0, 0).setDepth(18);
@@ -198,6 +198,8 @@ export class WorldScene extends Phaser.Scene {
       .rectangle(0, 0, 2048, 2048, 0x000000, 0)
       .setOrigin(0, 0)
       .setDepth(22);
+
+    this.lightGlowLayer = this.add.container(0, 0).setDepth(24);
 
     this.regionFadeRect = this.add
       .rectangle(0, 0, 2048, 2048, 0x101812, 0)
@@ -217,14 +219,18 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.time.addEvent({
-      delay: 460,
+      delay: 420,
       loop: true,
       callback: () => {
         if (this.controller.state.settings.reducedMotion) return;
-        this.animFrameToggle = 1 - this.animFrameToggle;
+        this.animCycleStep = (this.animCycleStep + 1) % 6;
         for (const item of this.animatedTiles) {
-          item.sprite.setFrame(this.animFrameToggle === 0 ? item.frameA : item.frameB);
+          const nextFrame = item.frames[this.animCycleStep % item.frames.length];
+          if (nextFrame !== undefined) {
+            item.sprite.setFrame(nextFrame);
+          }
         }
+        this.refreshCompanionFollower(false);
         this.refreshBattleCreatureFrames();
       },
     });
@@ -258,6 +264,12 @@ export class WorldScene extends Phaser.Scene {
         if (m.dot.y < 0) m.dot.y += maxH;
         if (m.dot.y > maxH) m.dot.y -= maxH;
       }
+      for (const band of this.mistBands) {
+        band.rect.x += band.vx * dt;
+        if (band.rect.x > maxW + 120) {
+          band.rect.x = -140;
+        }
+      }
     }
   }
 
@@ -287,100 +299,75 @@ export class WorldScene extends Phaser.Scene {
 
     const w = Math.max(300, this.scale.width);
     const h = Math.max(260, this.scale.height);
-    const isCompact = w < 520 || h < 460;
-    const spriteScale = isCompact ? 2.1 : 3.0;
+    const isCompact = w < 540 || h < 460;
+    const spriteScale = isCompact ? 2.15 : 3.05;
 
-    // Frame creatures cleanly in the upper-middle arena band above the battle deck
-    const arenaTop = Math.round(h * 0.08);
-    const arenaBottom = Math.round(h * 0.56);
-    const spanH = Math.max(120, arenaBottom - arenaTop);
+    this.battleUnderfill.setPosition(0, 0).setSize(w, h);
 
-    const enemyX = Math.round(w * (isCompact ? 0.72 : 0.7));
-    const enemyY = Math.round(arenaTop + spanH * 0.34);
-    const playerX = Math.round(w * (isCompact ? 0.28 : 0.3));
-    const playerY = Math.round(arenaTop + spanH * 0.72);
+    // Cover-scale the 384x216 artist pixel battle background cleanly across the visible arena band
+    const bgFrame = REGION_BATTLE_BG_FRAME[this.controller.state.regionId];
+    const arenaH = Math.round(h * (isCompact ? 0.62 : 0.66));
+    const scaleCover = Math.max(w / 384, arenaH / 216);
+    const bgDisplayW = Math.round(384 * scaleCover);
+    const bgDisplayH = Math.round(216 * scaleCover);
+    const bgCenterX = Math.round(w * 0.5);
+    const bgCenterY = Math.round(arenaH * 0.48);
+
+    this.battleBgSprite
+      .setFrame(bgFrame)
+      .setPosition(bgCenterX, bgCenterY)
+      .setDisplaySize(bgDisplayW, bgDisplayH);
+
+    const bgLeft = bgCenterX - bgDisplayW * 0.5;
+    const bgTop = bgCenterY - bgDisplayH * 0.5;
+
+    // Align creature feet directly onto the pixel-art combatant rings drawn at (0.71, 0.56) and (0.28, 0.79)
+    const padEnemyX = Math.round(bgLeft + bgDisplayW * 0.71);
+    const padEnemyY = Math.round(bgTop + bgDisplayH * 0.56);
+    const padPlayerX = Math.round(bgLeft + bgDisplayW * 0.28);
+    const padPlayerY = Math.round(bgTop + bgDisplayH * 0.79);
+
+    const enemyX = Phaser.Math.Clamp(padEnemyX, Math.round(w * 0.58), Math.round(w * 0.84));
+    const enemyY = Phaser.Math.Clamp(
+      padEnemyY - Math.round(16 * spriteScale),
+      Math.round(h * 0.14),
+      Math.round(arenaH * 0.56),
+    );
+    const playerX = Phaser.Math.Clamp(padPlayerX, Math.round(w * 0.16), Math.round(w * 0.42));
+    const playerY = Phaser.Math.Clamp(
+      padPlayerY - Math.round(16 * spriteScale),
+      Math.round(h * 0.26),
+      Math.round(arenaH * 0.82),
+    );
 
     this.enemyHomePos = { x: enemyX, y: enemyY };
     this.playerHomePos = { x: playerX, y: playerY };
 
-    this.drawRegionalBattleBackdrop(w, h, this.controller.state.regionId);
-
-    const pal = REGION_ARENA_PALETTE[this.controller.state.regionId];
-    const padScale = isCompact ? 0.8 : 1.15;
-    this.enemyPlatform
-      .setPosition(enemyX, enemyY + Math.round(20 * spriteScale * 0.42))
-      .setSize(Math.round(118 * padScale), Math.round(32 * padScale))
-      .setFillStyle(pal.padFill, 1)
-      .setStrokeStyle(3, pal.padBorder, 1);
-
-    this.playerPlatform
-      .setPosition(playerX, playerY + Math.round(21 * spriteScale * 0.42))
-      .setSize(Math.round(134 * padScale), Math.round(36 * padScale))
-      .setFillStyle(pal.padFill, 1)
-      .setStrokeStyle(3, pal.padBorder, 1);
+    this.enemyShadow
+      .setPosition(enemyX, enemyY + Math.round(17 * spriteScale))
+      .setSize(Math.round(30 * spriteScale), Math.round(8 * spriteScale));
+    this.playerBattleShadow
+      .setPosition(playerX, playerY + Math.round(18 * spriteScale))
+      .setSize(Math.round(34 * spriteScale), Math.round(9 * spriteScale));
 
     this.enemyBattleSprite.setPosition(enemyX, enemyY).setScale(spriteScale);
     this.playerBattleSprite.setPosition(playerX, playerY).setScale(spriteScale * 1.05);
-  }
-
-  private drawRegionalBattleBackdrop(w: number, h: number, regionId: RegionId): void {
-    const pal = REGION_ARENA_PALETTE[regionId];
-    const g = this.battleSceneryGraphics;
-    g.clear();
-
-    const horizonY = Math.round(h * 0.34);
-    g.fillStyle(pal.skyTop, 1);
-    g.fillRect(0, 0, w, Math.round(horizonY * 0.6));
-    g.fillStyle(pal.skyHorizon, 1);
-    g.fillRect(0, Math.round(horizonY * 0.6), w, Math.round(horizonY * 0.45));
-
-    // Distant biome silhouettes so every region has unmistakable combat atmosphere
-    g.fillStyle(pal.distantHill, 1);
-    if (regionId === 'terracotta_ridge') {
-      for (let sx = 0; sx < w; sx += 96) {
-        g.fillRect(sx + 8, horizonY - 46, 68, 48);
-        g.fillRect(sx + 22, horizonY - 62, 40, 18);
-      }
-    } else if (regionId === 'starfall_sanctuary') {
-      for (let sx = 24; sx < w; sx += 110) {
-        g.fillRect(sx, horizonY - 58, 14, 58);
-        g.fillRect(sx + 44, horizonY - 58, 14, 58);
-        g.fillRect(sx - 4, horizonY - 66, 66, 10);
-      }
-      g.fillStyle(0xfff4b8, 0.85);
-      for (let st = 18; st < w; st += 53) {
-        g.fillRect(st, 16 + ((st * 17) % Math.max(24, horizonY - 44)), 3, 3);
-      }
-    } else if (regionId === 'whisperwood') {
-      for (let sx = -10; sx < w + 30; sx += 54) {
-        g.fillTriangle(sx, horizonY + 4, sx + 28, horizonY - 58, sx + 56, horizonY + 4);
-      }
-    } else if (regionId === 'reedwater_fen') {
-      for (let sx = 0; sx < w; sx += 72) {
-        g.fillEllipse(sx + 36, horizonY, 92, 34);
-      }
-      g.fillStyle(0x9be0d8, 0.35);
-      g.fillRect(0, horizonY - 6, w, 12);
-    } else {
-      for (let sx = -20; sx < w + 40; sx += 88) {
-        g.fillEllipse(sx + 44, horizonY + 4, 116, 48);
-      }
-    }
-
-    // Ground plane & subtle horizon rim
-    g.fillStyle(pal.groundRim, 1);
-    g.fillRect(0, horizonY, w, 8);
-    g.fillStyle(pal.groundMain, 1);
-    g.fillRect(0, horizonY + 8, w, h - horizonY);
+    this.gleamingAuraSprite.setPosition(enemyX, enemyY - Math.round(8 * spriteScale));
   }
 
   private createBattleLayer(): void {
     this.battleContainer = this.add.container(0, 0).setDepth(40).setVisible(false);
-    this.battleSceneryGraphics = this.add.graphics();
-    this.enemyPlatform = this.add.ellipse(248, 112, 112, 30, 0xc7a77b, 1);
-    this.playerPlatform = this.add.ellipse(98, 168, 124, 34, 0xc7a77b, 1);
+    this.battleUnderfill = this.add.rectangle(0, 0, 1280, 820, 0x1a261e, 1).setOrigin(0, 0);
+    this.battleBgSprite = this.add.sprite(192, 108, 'battle-bg', 0).setOrigin(0.5, 0.5);
+    this.enemyShadow = this.add.ellipse(248, 112, 84, 22, 0x0b120d, 0.36);
+    this.playerBattleShadow = this.add.ellipse(98, 168, 96, 24, 0x0b120d, 0.38);
     this.enemyBattleSprite = this.add.sprite(248, 86, 'creatures', 0);
     this.playerBattleSprite = this.add.sprite(98, 140, 'creatures', 0).setFlipX(true);
+    this.gleamingAuraSprite = this.add
+      .sprite(248, 72, 'vfx', 8)
+      .setScale(1.8)
+      .setAlpha(0.85)
+      .setVisible(false);
     this.vfxSprite = this.add.sprite(0, 0, 'vfx', 0).setScale(2.2).setVisible(false);
     this.damagePopupText = this.add
       .text(0, 0, '', {
@@ -395,11 +382,13 @@ export class WorldScene extends Phaser.Scene {
       .setVisible(false);
 
     this.battleContainer.add([
-      this.battleSceneryGraphics,
-      this.enemyPlatform,
-      this.playerPlatform,
+      this.battleUnderfill,
+      this.battleBgSprite,
+      this.enemyShadow,
+      this.playerBattleShadow,
       this.enemyBattleSprite,
       this.playerBattleSprite,
+      this.gleamingAuraSprite,
       this.vfxSprite,
       this.damagePopupText,
     ]);
@@ -445,19 +434,34 @@ export class WorldScene extends Phaser.Scene {
     return hash === 0 ? [38, 39] : [36, 37];
   }
 
+  private addWarmLightHalo(px: number, py: number, radius: number, color: number = 0xffcb70): void {
+    const outer = this.add.circle(px, py, radius, color, 0.14);
+    const inner = this.add.circle(px, py, radius * 0.52, 0xfff2b8, 0.2);
+    this.lightGlowLayer.add([outer, inner]);
+  }
+
   private rebuildRegionMap(regionId: RegionId, playFade: boolean): void {
     this.renderedRegion = regionId;
     this.groundLayer.removeAll(true);
+    this.shadowLayer.removeAll(true);
     this.objectLayer.removeAll(true);
     this.canopyLayer.removeAll(true);
     this.ambientLayer.removeAll(true);
+    this.lightGlowLayer.removeAll(true);
     this.animatedTiles = [];
     this.ambientMotes = [];
+    this.mistBands = [];
     this.propSprites.clear();
 
     const map = MAPS_BY_ID[regionId];
     const baseGroundFrame =
-      regionId === 'terracotta_ridge' ? 27 : regionId === 'starfall_sanctuary' ? 29 : 0;
+      regionId === 'terracotta_ridge'
+        ? 27
+        : regionId === 'starfall_sanctuary'
+          ? 78
+          : regionId === 'reedwater_fen'
+            ? 113
+            : 0;
 
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
@@ -470,9 +474,11 @@ export class WorldScene extends Phaser.Scene {
           const grassFrame =
             regionId === 'terracotta_ridge'
               ? 27
-              : (x + y) % 5 === 0
-                ? 1
-                : 0;
+              : regionId === 'reedwater_fen' && (x + y) % 3 === 0
+                ? 113
+                : (x + y) % 4 === 0
+                  ? 1
+                  : 0;
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', grassFrame).setOrigin(0, 0));
         } else if (kind === 'flowers') {
           const flFrame = 2 + ((x + y) % 3);
@@ -480,16 +486,21 @@ export class WorldScene extends Phaser.Scene {
         } else if (kind === 'tall_grass') {
           const tg = this.add.sprite(px, py, 'tileset', 5).setOrigin(0, 0);
           this.groundLayer.add(tg);
-          this.animatedTiles.push({ sprite: tg, frameA: 5, frameB: 6 });
+          this.animatedTiles.push({ sprite: tg, frames: [5, 6] });
         } else if (kind === 'water') {
           const wFrame = this.pickShoreOrWaterFrame(map, x, y);
           const ws = this.add.sprite(px, py, 'tileset', wFrame).setOrigin(0, 0);
           this.groundLayer.add(ws);
           if (wFrame === 7) {
-            this.animatedTiles.push({ sprite: ws, frameA: 7, frameB: 8 });
+            this.animatedTiles.push({ sprite: ws, frames: [7, 8] });
           }
         } else if (kind === 'path') {
-          const pFrame = regionId === 'terracotta_ridge' ? 28 : this.pickRoadFrame(map, x, y);
+          const pFrame =
+            regionId === 'terracotta_ridge'
+              ? 28
+              : regionId === 'reedwater_fen'
+                ? 112
+                : this.pickRoadFrame(map, x, y);
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', pFrame).setOrigin(0, 0));
         } else if (kind === 'bridge') {
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', 26).setOrigin(0, 0));
@@ -498,11 +509,17 @@ export class WorldScene extends Phaser.Scene {
             this.add.sprite(px, py, 'tileset', hash === 0 ? 28 : 27).setOrigin(0, 0),
           );
         } else if (kind === 'stone_floor') {
-          this.groundLayer.add(this.add.sprite(px, py, 'tileset', 29).setOrigin(0, 0));
+          const stoneFrame =
+            regionId === 'starfall_sanctuary'
+              ? 78
+              : regionId === 'whisperwood' || regionId === 'reedwater_fen'
+                ? 79
+                : 29;
+          this.groundLayer.add(this.add.sprite(px, py, 'tileset', stoneFrame).setOrigin(0, 0));
         } else if (kind === 'reed_marsh') {
           const rm = this.add.sprite(px, py, 'tileset', 30).setOrigin(0, 0);
           this.groundLayer.add(rm);
-          this.animatedTiles.push({ sprite: rm, frameA: 30, frameB: 31 });
+          this.animatedTiles.push({ sprite: rm, frames: [30, 31] });
         } else if (kind === 'wall') {
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', 32).setOrigin(0, 0));
         } else if (kind === 'cliff') {
@@ -512,10 +529,12 @@ export class WorldScene extends Phaser.Scene {
           );
         } else if (kind === 'tree') {
           this.groundLayer.add(
-            this.add.sprite(px, py, 'tileset', baseGroundFrame === 29 ? 0 : baseGroundFrame).setOrigin(0, 0),
+            this.add
+              .sprite(px, py, 'tileset', regionId === 'terracotta_ridge' ? 27 : 0)
+              .setOrigin(0, 0),
           );
-          if (hash === 3 && x > 1 && y > 1 && x < map.width - 2 && y < map.height - 2) {
-            // Mix occasional berry shrubs & stumps along inner woodland edges for organic variety
+          this.shadowLayer.add(this.add.ellipse(px + 9, py + 14, 15, 6, 0x0c140e, 0.25));
+          if (hash === 3 && x > 2 && y > 2 && x < map.width - 3 && y < map.height - 3) {
             this.objectLayer.add(this.add.sprite(px, py, 'tileset', 44).setOrigin(0, 0));
           } else {
             const [topF, botF] = this.pickTreeFramesForBiome(regionId, x, y);
@@ -527,14 +546,25 @@ export class WorldScene extends Phaser.Scene {
             }
           }
         } else if (kind === 'portal') {
-          const pUnder = regionId === 'terracotta_ridge' ? 28 : this.pickRoadFrame(map, x, y);
+          const pUnder =
+            regionId === 'terracotta_ridge'
+              ? 28
+              : regionId === 'reedwater_fen'
+                ? 112
+                : this.pickRoadFrame(map, x, y);
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', pUnder).setOrigin(0, 0));
           this.objectLayer.add(this.add.sprite(px, py, 'tileset', 73).setOrigin(0, 0));
         } else if (kind === 'campfire') {
           const adjStone =
             getTileAt(map, x - 1, y) === 'stone_floor' ||
             getTileAt(map, x + 1, y) === 'stone_floor';
-          const cfFloor = adjStone ? 29 : baseGroundFrame;
+          const cfFloor = adjStone
+            ? regionId === 'starfall_sanctuary'
+              ? 78
+              : 29
+            : baseGroundFrame === 78
+              ? 0
+              : baseGroundFrame;
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', cfFloor).setOrigin(0, 0));
           const isSanctuary = regionId === 'starfall_sanctuary';
           const cf = this.add
@@ -543,17 +573,24 @@ export class WorldScene extends Phaser.Scene {
           this.objectLayer.add(cf);
           this.animatedTiles.push({
             sprite: cf,
-            frameA: isSanctuary ? 54 : 52,
-            frameB: isSanctuary ? 55 : 53,
+            frames: isSanctuary ? [54, 55] : [52, 53],
           });
+          this.addWarmLightHalo(
+            px + 8,
+            py + 8,
+            34,
+            isSanctuary ? 0x8fd3ff : 0xffbe66,
+          );
         } else if (kind === 'shrine') {
-          this.groundLayer.add(this.add.sprite(px, py, 'tileset', 29).setOrigin(0, 0));
+          const shFloor = regionId === 'starfall_sanctuary' ? 78 : 29;
+          this.groundLayer.add(this.add.sprite(px, py, 'tileset', shFloor).setOrigin(0, 0));
           this.objectLayer.add(this.add.sprite(px, py, 'tileset', 57).setOrigin(0, 0));
           if (y > 0) {
             this.canopyLayer.add(
               this.add.sprite(px, (y - 1) * 16, 'tileset', 56).setOrigin(0, 0),
             );
           }
+          this.addWarmLightHalo(px + 8, py + 4, 28, 0x9ee6ff);
         }
       }
     }
@@ -564,7 +601,6 @@ export class WorldScene extends Phaser.Scene {
 
     for (const prop of map.props) {
       if (prop.kind === 'campfire' || prop.kind === 'shrine') {
-        // Already rendered on map tile, unless placed on plain ground
         const underlying = getTileAt(map, prop.x, prop.y);
         if (underlying === prop.kind) continue;
       }
@@ -579,12 +615,9 @@ export class WorldScene extends Phaser.Scene {
         frame = 57;
       } else if (prop.kind === 'supply_post') {
         frame = 60;
-        this.canopyLayer.add(
-          this.add.sprite((prop.x - 1) * 16, (prop.y - 1) * 16, 'tileset', 58).setOrigin(0, 0),
-        );
-        this.canopyLayer.add(
-          this.add.sprite(prop.x * 16, (prop.y - 1) * 16, 'tileset', 59).setOrigin(0, 0),
-        );
+      } else if (prop.kind === 'trace') {
+        frame = 77;
+        this.addWarmLightHalo(prop.x * 16 + 8, prop.y * 16 + 8, 18, 0xffe98a);
       }
       const pSprite = this.add.sprite(prop.x * 16, prop.y * 16, 'tileset', frame).setOrigin(0, 0);
       pSprite.setVisible(isPropVisible(prop, this.controller.state));
@@ -594,25 +627,16 @@ export class WorldScene extends Phaser.Scene {
 
     const npcsHere = NPCS.filter((n) => n.regionId === regionId);
     for (const npc of npcsHere) {
+      this.shadowLayer.add(
+        this.add.ellipse(npc.x * 16 + 8, npc.y * 16 + 15, 11, 4, 0x0c140e, 0.28),
+      );
       const row = Math.min(5, npc.spriteVariant + 1);
       const frame = row * 12 + DIR_IDLE_COL[npc.facing];
       const nSprite = this.add.sprite(npc.x * 16, npc.y * 16, 'characters', frame).setOrigin(0, 0);
       this.objectLayer.add(nSprite);
     }
 
-    // Spawn subtle floating biome motes (pollen, fireflies, canyon dust, or starlight)
-    const pal = REGION_ARENA_PALETTE[regionId];
-    for (let i = 0; i < 14; i++) {
-      const mx = ((i * 73) % (map.width * 16));
-      const my = ((i * 59) % (map.height * 16));
-      const dot = this.add.circle(mx, my, i % 3 === 0 ? 1.6 : 1.1, pal.particleColor, 0.55);
-      this.ambientLayer.add(dot);
-      this.ambientMotes.push({
-        dot,
-        vx: (i % 2 === 0 ? 1 : -1) * (4 + (i % 5)),
-        vy: -3 - (i % 4),
-      });
-    }
+    this.buildBiomeAtmosphere(regionId, map);
 
     const worldW = map.width * 16;
     const worldH = map.height * 16;
@@ -624,13 +648,69 @@ export class WorldScene extends Phaser.Scene {
     }
 
     if (playFade && !this.controller.state.settings.reducedMotion) {
-      this.regionFadeRect.setAlpha(0.75);
+      this.regionFadeRect.setAlpha(0.72);
       this.tweens.killTweensOf(this.regionFadeRect);
       this.tweens.add({
         targets: this.regionFadeRect,
         alpha: 0,
-        duration: 260,
+        duration: 250,
         ease: 'Quad.easeOut',
+      });
+    }
+  }
+
+  private buildBiomeAtmosphere(regionId: RegionId, map: RegionMapDefinition): void {
+    const worldW = map.width * 16;
+    const worldH = map.height * 16;
+
+    // Whisperwood: golden dappled sunbeams piercing the layered canopy!
+    if (regionId === 'whisperwood') {
+      const g = this.add.graphics();
+      g.fillStyle(0xfff4b2, 0.09);
+      for (const [bx, by] of [
+        [108, 44],
+        [248, 72],
+        [368, 128],
+        [176, 224],
+        [318, 256],
+      ] as const) {
+        g.fillPoints(
+          [
+            new Phaser.Geom.Point(bx, by),
+            new Phaser.Geom.Point(bx + 36, by),
+            new Phaser.Geom.Point(bx + 68, by + 92),
+            new Phaser.Geom.Point(bx + 24, by + 92),
+          ],
+          true,
+        );
+      }
+      this.ambientLayer.add(g);
+    }
+
+    // Reedwater Fen: drifting translucent silver marsh mist bands!
+    if (regionId === 'reedwater_fen') {
+      for (let i = 0; i < 6; i++) {
+        const mw = 160 + (i % 3) * 48;
+        const mh = 22 + (i % 2) * 10;
+        const mx = ((i * 97) % worldW) - 40;
+        const my = 38 + i * 56;
+        const rect = this.add.rectangle(mx, my, mw, mh, 0xd8f5f2, 0.14).setOrigin(0, 0);
+        this.ambientLayer.add(rect);
+        this.mistBands.push({ rect, vx: 6 + (i % 3) * 2.5 });
+      }
+    }
+
+    // Floating regional motes (fireflies, forest pollen, marsh glow, canyon dust, starlight)
+    const particleColor = REGION_PARTICLE_COLOR[regionId];
+    for (let i = 0; i < 16; i++) {
+      const mx = (i * 73) % worldW;
+      const my = (i * 59) % worldH;
+      const dot = this.add.circle(mx, my, i % 3 === 0 ? 1.6 : 1.1, particleColor, 0.56);
+      this.ambientLayer.add(dot);
+      this.ambientMotes.push({
+        dot,
+        vx: (i % 2 === 0 ? 1 : -1) * (4 + (i % 5)),
+        vy: -3 - (i % 4),
       });
     }
   }
@@ -640,26 +720,90 @@ export class WorldScene extends Phaser.Scene {
     const py = dec.y * 16;
     switch (dec.kind) {
       case 'cottage_lodge': {
-        // 3x2 cottage + 3-wide pitched roof on canopy layer above
-        this.canopyLayer.add(this.add.sprite(px, py - 16, 'tileset', 64).setOrigin(0, 0));
-        this.canopyLayer.add(this.add.sprite(px + 16, py - 16, 'tileset', 65).setOrigin(0, 0));
-        this.canopyLayer.add(this.add.sprite(px + 32, py - 16, 'tileset', 66).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px, py, 'tileset', 69).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px + 16, py, 'tileset', 70).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px + 32, py, 'tileset', 72).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px, py + 16, 'tileset', 69).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px + 16, py + 16, 'tileset', 71).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px + 32, py + 16, 'tileset', 72).setOrigin(0, 0));
+        this.shadowLayer.add(this.add.ellipse(px + 42, py + 44, 84, 16, 0x0c140e, 0.28));
+        this.objectLayer.add(this.add.sprite(px, py, 'structures', 'lodge_body').setOrigin(0, 0));
+        this.canopyLayer.add(
+          this.add.sprite(px, py - 32, 'structures', 'lodge_roof').setOrigin(0, 0),
+        );
+        this.addWarmLightHalo(px + 20, py + 28, 22, 0xffd27d);
+        this.addWarmLightHalo(px + 60, py + 28, 22, 0xffd27d);
         break;
       }
       case 'cottage_greenhouse':
       case 'tent_sage': {
-        this.canopyLayer.add(this.add.sprite(px, py, 'tileset', 67).setOrigin(0, 0));
-        this.canopyLayer.add(this.add.sprite(px + 16, py, 'tileset', 68).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px, py + 16, 'tileset', 70).setOrigin(0, 0));
-        this.objectLayer.add(this.add.sprite(px + 16, py + 16, 'tileset', 71).setOrigin(0, 0));
+        this.shadowLayer.add(this.add.ellipse(px + 17, py + 29, 34, 10, 0x0c140e, 0.26));
+        this.objectLayer.add(this.add.sprite(px, py, 'structures', 'cabin_body').setOrigin(0, 0));
+        this.canopyLayer.add(
+          this.add.sprite(px, py - 16, 'structures', 'cabin_roof').setOrigin(0, 0),
+        );
         break;
       }
+      case 'market_stall': {
+        this.shadowLayer.add(this.add.ellipse(px + 40, py + 42, 82, 14, 0x0c140e, 0.25));
+        this.objectLayer.add(
+          this.add.sprite(px, py, 'structures', 'stall_counter').setOrigin(0, 0),
+        );
+        this.canopyLayer.add(
+          this.add.sprite(px, py - 32, 'structures', 'stall_awning').setOrigin(0, 0),
+        );
+        break;
+      }
+      case 'sanctuary_gate': {
+        this.shadowLayer.add(this.add.ellipse(px + 32, py + 30, 66, 12, 0x090e1a, 0.32));
+        this.objectLayer.add(this.add.sprite(px, py, 'structures', 'arch_base').setOrigin(0, 0));
+        this.canopyLayer.add(
+          this.add.sprite(px, py - 32, 'structures', 'arch_top').setOrigin(0, 0),
+        );
+        break;
+      }
+      case 'fountain_plaza': {
+        this.shadowLayer.add(this.add.ellipse(px + 24, py + 42, 50, 14, 0x0c140e, 0.25));
+        const ftn = this.add.sprite(px, py, 'structures', 'fountain_0').setOrigin(0, 0);
+        this.objectLayer.add(ftn);
+        this.animatedTiles.push({
+          sprite: ftn,
+          frames: ['fountain_0', 'fountain_1', 'fountain_2'],
+        });
+        break;
+      }
+      case 'bench_wood': {
+        this.objectLayer.add(this.add.sprite(px, py, 'structures', 'bench_seat').setOrigin(0, 0));
+        this.canopyLayer.add(
+          this.add.sprite(px, py - 16, 'structures', 'bench_back').setOrigin(0, 0),
+        );
+        break;
+      }
+      case 'fallen_log': {
+        this.shadowLayer.add(this.add.ellipse(px + 24, py + 14, 48, 7, 0x0c140e, 0.26));
+        this.objectLayer.add(this.add.sprite(px, py, 'structures', 'fallen_log').setOrigin(0, 0));
+        break;
+      }
+      case 'waterfall_cliff': {
+        this.objectLayer.add(
+          this.add.sprite(px, py, 'structures', 'waterfall_3x3').setOrigin(0, 0),
+        );
+        for (let dx = 0; dx < 3; dx++) {
+          const splash = this.add
+            .sprite(px + dx * 16, py + 32, 'tileset', 117)
+            .setOrigin(0, 0)
+            .setAlpha(0.85);
+          this.objectLayer.add(splash);
+          this.animatedTiles.push({ sprite: splash, frames: [117, 118] });
+        }
+        break;
+      }
+      case 'barrel_cluster': {
+        const f = (dec.x + dec.y) % 2 === 0 ? 115 : 116;
+        this.shadowLayer.add(this.add.ellipse(px + 8, py + 14, 14, 5, 0x0c140e, 0.24));
+        this.objectLayer.add(this.add.sprite(px, py, 'tileset', f).setOrigin(0, 0));
+        break;
+      }
+      case 'flower_box':
+        this.objectLayer.add(this.add.sprite(px, py, 'tileset', 114).setOrigin(0, 0));
+        break;
+      case 'shrub':
+        this.objectLayer.add(this.add.sprite(px, py, 'tileset', 44).setOrigin(0, 0));
+        break;
       case 'boat_moored':
         this.objectLayer.add(this.add.sprite(px, py, 'tileset', 61).setOrigin(0, 0));
         break;
@@ -671,20 +815,88 @@ export class WorldScene extends Phaser.Scene {
         break;
       case 'lantern_post':
         this.objectLayer.add(this.add.sprite(px, py, 'tileset', 74).setOrigin(0, 0));
+        this.addWarmLightHalo(px + 8, py + 6, 26, 0xffcf75);
         break;
       case 'lily_pad':
         this.groundLayer.add(this.add.sprite(px, py, 'tileset', 46).setOrigin(0, 0));
         break;
       case 'boulder':
+        this.shadowLayer.add(this.add.ellipse(px + 8, py + 14, 15, 5, 0x0c140e, 0.25));
         this.objectLayer.add(this.add.sprite(px, py, 'tileset', 47).setOrigin(0, 0));
         break;
       case 'stump':
         this.objectLayer.add(this.add.sprite(px, py, 'tileset', 45).setOrigin(0, 0));
         break;
       case 'ruin_pillar':
-        this.objectLayer.add(this.add.sprite(px, py, 'tileset', 76).setOrigin(0, 0));
-        this.canopyLayer.add(this.add.sprite(px, py - 16, 'tileset', 75).setOrigin(0, 0));
+        if ((dec.width ?? 1) >= 2) {
+          this.shadowLayer.add(this.add.ellipse(px + 16, py + 30, 32, 9, 0x090e1a, 0.3));
+          this.objectLayer.add(
+            this.add.sprite(px, py, 'structures', 'statue_base').setOrigin(0, 0),
+          );
+          this.canopyLayer.add(
+            this.add.sprite(px, py - 16, 'structures', 'statue_top').setOrigin(0, 0),
+          );
+        } else {
+          this.objectLayer.add(this.add.sprite(px, py, 'tileset', 76).setOrigin(0, 0));
+          this.canopyLayer.add(this.add.sprite(px, py - 16, 'tileset', 75).setOrigin(0, 0));
+        }
         break;
+    }
+  }
+
+  private refreshCompanionFollower(animateTween: boolean): void {
+    const state = this.controller.state;
+    const lead = state.party[0];
+    const dist =
+      Math.abs(this.controller.followerPos.x - state.playerPos.x) +
+      Math.abs(this.controller.followerPos.y - state.playerPos.y);
+    const shouldShow =
+      state.settings.showFollower !== false && Boolean(lead) && dist >= 1 && dist <= 2;
+
+    if (!shouldShow || !lead) {
+      this.companionSprite.setVisible(false);
+      this.companionShadow.setVisible(false);
+      return;
+    }
+
+    const sp = SPECIES_BY_ID[lead.speciesId];
+    if (!sp) return;
+
+    const frame = (sp.dexNumber - 1) * 2 + (this.animCycleStep % 2);
+    this.companionSprite.setFrame(frame).setVisible(true);
+    this.companionShadow.setVisible(true);
+    if (lead.isRareVariant) {
+      this.companionSprite.setTint(0xfff4a8);
+    } else {
+      this.companionSprite.clearTint();
+    }
+
+    const fx = this.controller.followerPos.x * 16;
+    const fy = this.controller.followerPos.y * 16;
+    if (
+      !animateTween ||
+      state.settings.reducedMotion ||
+      Math.abs(this.companionSprite.x - fx) > 24 ||
+      Math.abs(this.companionSprite.y - fy) > 24
+    ) {
+      this.companionSprite.setPosition(fx, fy);
+      this.companionShadow.setPosition(fx + 8, fy + 14);
+    } else {
+      this.tweens.killTweensOf([this.companionSprite, this.companionShadow]);
+      this.tweens.add({
+        targets: this.companionSprite,
+        x: fx,
+        y: fy,
+        duration: 96,
+        ease: 'Linear',
+      });
+      this.tweens.add({
+        targets: this.companionShadow,
+        x: fx + 8,
+        y: fy + 14,
+        duration: 96,
+        ease: 'Linear',
+      });
     }
   }
 
@@ -710,6 +922,7 @@ export class WorldScene extends Phaser.Scene {
 
     const targetX = state.playerPos.x * 16;
     const targetY = state.playerPos.y * 16;
+    const stepped = this.lastStepRendered !== state.stepCount;
     if (
       state.settings.reducedMotion ||
       Math.abs(this.playerSprite.x - targetX) > 24 ||
@@ -717,8 +930,9 @@ export class WorldScene extends Phaser.Scene {
       this.lastStepRendered < 0
     ) {
       this.playerSprite.setPosition(targetX, targetY);
-    } else if (this.lastStepRendered !== state.stepCount) {
-      this.tweens.killTweensOf(this.playerSprite);
+      this.playerShadow.setPosition(targetX + 8, targetY + 15);
+    } else if (stepped) {
+      this.tweens.killTweensOf([this.playerSprite, this.playerShadow]);
       this.tweens.add({
         targets: this.playerSprite,
         x: targetX,
@@ -726,11 +940,28 @@ export class WorldScene extends Phaser.Scene {
         duration: 92,
         ease: 'Linear',
       });
+      this.tweens.add({
+        targets: this.playerShadow,
+        x: targetX + 8,
+        y: targetY + 15,
+        duration: 92,
+        ease: 'Linear',
+      });
     }
+    this.refreshCompanionFollower(stepped && this.lastStepRendered >= 0);
     this.lastStepRendered = state.stepCount;
 
     const tint = TIME_TINT[state.timeOfDay];
     this.timeOverlay.setFillStyle(tint.color, tint.alpha);
+    this.lightGlowLayer.setAlpha(
+      state.timeOfDay === 'night'
+        ? 1
+        : state.timeOfDay === 'dusk'
+          ? 0.72
+          : state.timeOfDay === 'morning'
+            ? 0.25
+            : 0.14,
+    );
 
     const battle = this.controller.activeBattle;
     if (battle) {
@@ -750,6 +981,7 @@ export class WorldScene extends Phaser.Scene {
     } else if (this.wasInBattle) {
       this.wasInBattle = false;
       this.battleContainer.setVisible(false);
+      this.gleamingAuraSprite.setVisible(false);
       this.vfxSprite.setVisible(false);
       this.damagePopupText.setVisible(false);
       this.configureWorldCamera();
@@ -759,24 +991,39 @@ export class WorldScene extends Phaser.Scene {
   private refreshBattleCreatureFrames(): void {
     const battle = this.controller.activeBattle;
     if (!battle) return;
+    const toggle = this.animCycleStep % 2;
     const playerCreature = battle.playerParty[battle.activePlayerIndex];
     const enemyCreature = battle.enemyParty[battle.activeEnemyIndex];
     if (playerCreature) {
       const pSpec = SPECIES_BY_ID[playerCreature.speciesId];
       if (pSpec) {
         const baseFrame = (pSpec.dexNumber - 1) * 2;
-        this.playerBattleSprite.setFrame(baseFrame + this.animFrameToggle);
+        this.playerBattleSprite.setFrame(baseFrame + toggle);
         this.playerBattleSprite.setAlpha(playerCreature.currentHp > 0 ? 1 : 0.35);
+        if (playerCreature.isRareVariant) {
+          this.playerBattleSprite.setTint(0xfff5b2);
+        } else {
+          this.playerBattleSprite.clearTint();
+        }
       }
     }
     if (enemyCreature) {
       const eSpec = SPECIES_BY_ID[enemyCreature.speciesId];
       if (eSpec) {
         const baseFrame = (eSpec.dexNumber - 1) * 2;
-        this.enemyBattleSprite.setFrame(baseFrame + this.animFrameToggle);
+        this.enemyBattleSprite.setFrame(baseFrame + toggle);
         this.enemyBattleSprite.setAlpha(
           battle.outcome === 'captured' ? 0.18 : enemyCreature.currentHp > 0 ? 1 : 0.28,
         );
+        if (enemyCreature.isRareVariant) {
+          this.enemyBattleSprite.setTint(0xfff5b2);
+          this.gleamingAuraSprite
+            .setVisible(battle.outcome === 'ongoing')
+            .setAngle((this.animCycleStep * 30) % 360);
+        } else {
+          this.enemyBattleSprite.clearTint();
+          this.gleamingAuraSprite.setVisible(false);
+        }
       }
     }
   }
@@ -807,7 +1054,7 @@ export class WorldScene extends Phaser.Scene {
 
       this.tweens.add({
         targets: attacker,
-        x: startPos.x + (isPlayer ? 26 : -26),
+        x: startPos.x + (isPlayer ? 28 : -28),
         y: startPos.y + (isPlayer ? -10 : 10),
         yoyo: true,
         duration: Math.round(115 * factor),
@@ -818,7 +1065,7 @@ export class WorldScene extends Phaser.Scene {
         .setFrame(vfxFrame)
         .setPosition(startPos.x, startPos.y)
         .setAlpha(1)
-        .setScale(cue.isSuperEffective ? 2.6 : 2.0)
+        .setScale(cue.isSuperEffective ? 2.7 : 2.1)
         .setVisible(true);
 
       this.tweens.add({
@@ -830,7 +1077,7 @@ export class WorldScene extends Phaser.Scene {
         onComplete: () => {
           this.tweens.add({
             targets: this.vfxSprite,
-            scale: cue.isSuperEffective ? 3.2 : 2.4,
+            scale: cue.isSuperEffective ? 3.3 : 2.4,
             alpha: 0,
             duration: Math.round(120 * factor),
             onComplete: () => this.vfxSprite.setVisible(false),
@@ -857,7 +1104,7 @@ export class WorldScene extends Phaser.Scene {
           .setVisible(true);
         this.tweens.add({
           targets: this.damagePopupText,
-          y: targetPos.y - 62,
+          y: targetPos.y - 64,
           alpha: 0,
           delay: Math.round(140 * factor),
           duration: Math.round(420 * factor),
@@ -893,6 +1140,7 @@ export class WorldScene extends Phaser.Scene {
             onComplete: () => {
               this.vfxSprite.setAngle(0);
               if (cue.kind === 'capture_success') {
+                this.vfxSprite.setFrame(9).setScale(2.4);
                 this.damagePopupText
                   .setText('Bonded!')
                   .setColor('#a8f0a5')
@@ -903,7 +1151,7 @@ export class WorldScene extends Phaser.Scene {
                   targets: [this.vfxSprite, this.damagePopupText],
                   y: '-=22',
                   alpha: 0,
-                  duration: Math.round(320 * factor),
+                  duration: Math.round(340 * factor),
                   onComplete: () => {
                     this.vfxSprite.setVisible(false);
                     this.damagePopupText.setVisible(false);
@@ -928,7 +1176,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (cue.kind === 'heal') {
       this.vfxSprite
-        .setFrame(0)
+        .setFrame(8)
         .setPosition(this.playerHomePos.x, this.playerHomePos.y)
         .setScale(2.0)
         .setAlpha(0.95)

@@ -134,17 +134,26 @@ export type StepOutcome =
   | { readonly kind: 'blocked' }
   | { readonly kind: 'portal_blocked'; readonly portal: PortalDefinition }
   | { readonly kind: 'portal_entered'; readonly portal: PortalDefinition }
-  | { readonly kind: 'wild_encounter'; readonly speciesId: string; readonly level: number }
+  | {
+      readonly kind: 'wild_encounter';
+      readonly speciesId: string;
+      readonly level: number;
+      readonly isRareVariant?: boolean;
+    }
   | { readonly kind: 'moved' };
 
 export function rollWildEncounter(
   encounters: ReadonlyArray<EncounterEntry>,
   timeOfDay: TimeOfDay,
   rng: SeededRng,
-): { speciesId: string; level: number } | null {
+  hasRegionalTrace: boolean = false,
+): { speciesId: string; level: number; isRareVariant: boolean } | null {
   if (encounters.length === 0) return null;
   const weighted = encounters.map((entry) => {
-    const bonus = entry.timeBonus?.includes(timeOfDay) ? 1.8 : 1;
+    let bonus = entry.timeBonus?.includes(timeOfDay) ? 1.8 : 1;
+    if (hasRegionalTrace && (entry.isRareSpot || entry.timeBonus?.includes(timeOfDay))) {
+      bonus *= 1.9;
+    }
     return {
       item: entry,
       weight: Math.max(1, Math.round(entry.weight * bonus)),
@@ -152,7 +161,9 @@ export function rollWildEncounter(
   });
   const picked = rng.weightedPick(weighted);
   const level = rng.nextInt(picked.minLevel, picked.maxLevel);
-  return { speciesId: picked.speciesId, level };
+  const gleamingChance = hasRegionalTrace ? 0.1 : 1 / 28;
+  const isRareVariant = rng.chance(gleamingChance);
+  return { speciesId: picked.speciesId, level, isRareVariant };
 }
 
 export function attemptPlayerStep(params: {
@@ -211,12 +222,18 @@ export function attemptPlayerStep(params: {
     map.encounterRate > 0 &&
     rng.chance(map.encounterRate)
   ) {
-    const rolled = rollWildEncounter(map.encounters, state.timeOfDay, rng);
+    const hasTrace = map.props.some(
+      (p) =>
+        p.kind === 'trace' &&
+        (state.discoveredTraces.includes(p.id) || Boolean(p.setsFlag && state.flags[p.setsFlag])),
+    );
+    const rolled = rollWildEncounter(map.encounters, state.timeOfDay, rng, hasTrace);
     if (rolled) {
       return {
         kind: 'wild_encounter',
         speciesId: rolled.speciesId,
         level: rolled.level,
+        isRareVariant: rolled.isRareVariant,
       };
     }
   }

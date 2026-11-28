@@ -5,7 +5,7 @@ import { MAPS, MAPS_BY_ID } from '../data/maps.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
-import { computeWordReencounterPriority } from '../domain/learning.ts';
+import { isWordDueForReencounter, pickIndependentExample } from '../domain/learning.ts';
 import { isQuestConditionMet } from '../domain/quests.ts';
 import type { BattleSpeedMode, KeyBindingMap, RegionId } from '../domain/types.ts';
 import type { GameController, JournalTab } from '../game/controller.ts';
@@ -18,7 +18,7 @@ import {
   ROLE_LABELS,
 } from './uiHelpers.ts';
 
-export type LexiconFilter = 'encountered' | 'saved' | 'due' | 'all' | 'dispatches';
+export type LexiconFilter = 'encountered' | 'saved' | 'mastered' | 'due' | 'all' | 'dispatches';
 
 export interface JournalViewState {
   lexiconFilter: LexiconFilter;
@@ -26,6 +26,13 @@ export interface JournalViewState {
   campAnsweredMessageVi: string;
   awaitingKeyRebind: keyof KeyBindingMap | null;
 }
+
+const SECRET_FLAGS = [
+  'found_whisperwood_secret',
+  'found_fen_secret',
+  'found_ridge_secret',
+  'found_sanctuary_secret',
+] as const;
 
 export function buildJournalModal(
   controller: GameController,
@@ -89,6 +96,22 @@ export function buildJournalModal(
 
 function renderQuestsTab(controller: GameController, container: HTMLElement): void {
   const state = controller.state;
+
+  const secretsFound = SECRET_FLAGS.filter((f) => Boolean(state.flags[f])).length;
+  const masteryBanner = el('div', 'lw-journal-entry lw-mastery-card');
+  masteryBanner.style.marginBottom = '10px';
+  masteryBanner.appendChild(
+    el('strong', '', 'Expedition & Post-Game Mastery | Tiến Độ Khám Phá Chuyên Sâu'),
+  );
+  masteryBanner.appendChild(
+    el(
+      'div',
+      'lw-hud-quest',
+      `Habitat Traces: ${state.discoveredTraces.length}/4 | Secret Caches: ${secretsFound}/4 | Warden Rematches: ${state.rematchCleared.length}/4 | Gleaming Variants: ${state.gleamingSpecies.length} | Chronicles Read: ${state.readLoreIds.length}`,
+    ),
+  );
+  container.appendChild(masteryBanner);
+
   for (const q of QUESTS) {
     const prog = state.quests[q.id];
     if (!prog) continue;
@@ -152,7 +175,7 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
     {
       regionId: 'mosslight_hub',
       slotClass: 'lw-atlas-center',
-      directionLabel: 'Central Base',
+      directionLabel: 'Central Village',
     },
     {
       regionId: 'reedwater_fen',
@@ -175,6 +198,8 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
     const isHere = state.regionId === item.regionId;
     const isUnlocked = !item.unlockFlag || Boolean(state.flags[item.unlockFlag]);
     const isHarmonized = item.stoneFlag ? Boolean(state.flags[item.stoneFlag]) : true;
+    const traceProp = map.props.find((p) => p.kind === 'trace');
+    const traceFound = traceProp ? state.discoveredTraces.includes(traceProp.id) : false;
 
     const card = el('div', `lw-atlas-card ${item.slotClass}`);
     if (isHere) card.dataset.current = 'true';
@@ -201,7 +226,13 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
 
     const speciesHere = MAPS.find((m) => m.id === item.regionId)?.encounters.length ?? 0;
     if (speciesHere > 0) {
-      card.appendChild(el('div', 'lw-hud-quest', `Wild habitats: ${speciesHere} species`));
+      card.appendChild(
+        el(
+          'div',
+          'lw-hud-quest',
+          `Wild habitats: ${speciesHere} species | Trace: ${traceFound ? 'Logged' : 'Unchecked'}`,
+        ),
+      );
     }
     layoutGrid.appendChild(card);
   }
@@ -210,25 +241,37 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
 
 function renderTeamTab(controller: GameController, container: HTMLElement): void {
   const state = controller.state;
-  container.appendChild(el('h4', '', `Active Expedition Team (${state.party.length}/6)`));
+  container.appendChild(
+    el(
+      'h4',
+      '',
+      `Active Expedition Team (${state.party.length}/6) | Lead walks behind you on the map`,
+    ),
+  );
   state.party.forEach((member, idx) => {
     const sp = SPECIES_BY_ID[member.speciesId]!;
     const row = el('div', 'lw-list-row');
     const left = el('div', 'lw-hud-title');
-    left.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+    left.appendChild(
+      createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
+    );
     const info = el('div', '');
+    const gleamTag = member.isRareVariant ? ' [Gleaming]' : '';
     info.appendChild(
       el(
         'strong',
         '',
-        `${idx === 0 ? '[Lead] ' : ''}${sp.name} Lv.${member.level} (${ELEMENT_LABELS[sp.element].en} | ${ROLE_LABELS[sp.combatRole].en})`,
+        `${idx === 0 ? '[Lead] ' : ''}${sp.name}${gleamTag} Lv.${member.level} (${ELEMENT_LABELS[sp.element].en} | ${ROLE_LABELS[sp.combatRole].en})`,
       ),
     );
+    const evoHint = sp.evolvesTo
+      ? ` | Evolves Lv.${sp.evolvesTo.level} -> ${SPECIES_BY_ID[sp.evolvesTo.speciesId]?.name ?? ''}`
+      : ' | Final Form';
     info.appendChild(
       el(
         'div',
         'lw-hud-quest',
-        `HP ${member.currentHp}/${member.maxHp} | ATK ${member.stats.atk} DEF ${member.stats.def} SPD ${member.stats.spd}`,
+        `HP ${member.currentHp}/${member.maxHp} | ATK ${member.stats.atk} DEF ${member.stats.def} SPD ${member.stats.spd}${evoHint}`,
       ),
     );
     left.appendChild(info);
@@ -257,7 +300,9 @@ function renderTeamTab(controller: GameController, container: HTMLElement): void
       const sp = SPECIES_BY_ID[boxMember.speciesId]!;
       const row = el('div', 'lw-list-row');
       const left = el('div', 'lw-hud-title');
-      left.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+      left.appendChild(
+        createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(boxMember.isRareVariant) }),
+      );
       left.appendChild(
         el('span', '', `${sp.name} Lv.${boxMember.level} (${ELEMENT_LABELS[sp.element].en})`),
       );
@@ -304,29 +349,49 @@ function renderCompendiumTab(
   onRerender: () => void,
 ): void {
   const state = controller.state;
+  container.appendChild(
+    el(
+      'p',
+      'lw-hud-quest',
+      `Discovered: ${state.discoveredSpecies.length}/30 | Bonded: ${state.caughtSpecies.length}/30 | Gleaming Variants: ${state.gleamingSpecies.length}/30`,
+    ),
+  );
   const grid = el('div', 'lw-species-grid');
   for (const sp of controller.getAllSpecies()) {
     const seen = state.discoveredSpecies.includes(sp.id);
     const caught = state.caughtSpecies.includes(sp.id);
+    const hasGleaming = state.gleamingSpecies.includes(sp.id);
     const card = el('div', 'lw-journal-entry');
     if (!seen) {
-      card.appendChild(el('strong', '', `#${String(sp.dexNumber).padStart(2, '0')} ???`));
-      card.appendChild(
+      const top = el('div', 'lw-hud-title');
+      top.appendChild(createCreatureSpriteSpan(sp.dexNumber, { silhouette: true }));
+      const meta = el('div', '');
+      meta.appendChild(
+        el('strong', '', `#${String(sp.dexNumber).padStart(2, '0')} Uncharted Wildkin`),
+      );
+      meta.appendChild(
         el(
           'div',
           'lw-hud-quest',
           `Habitat: ${sp.habitatIds.map((h) => MAPS_BY_ID[h].nameEn).join(', ')}`,
         ),
       );
+      if (sp.preferredTime && sp.preferredTime.length > 0) {
+        meta.appendChild(
+          el('div', 'lw-hud-quest', `Active time: ${sp.preferredTime.join(', ')}`),
+        );
+      }
+      top.appendChild(meta);
+      card.appendChild(top);
     } else {
       const top = el('div', 'lw-hud-title');
-      top.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+      top.appendChild(createCreatureSpriteSpan(sp.dexNumber, { gleaming: hasGleaming }));
       const meta = el('div', '');
       meta.appendChild(
         el(
           'strong',
           '',
-          `#${String(sp.dexNumber).padStart(2, '0')} ${sp.name} ${caught ? '[Bonded]' : '[Seen]'}`,
+          `#${String(sp.dexNumber).padStart(2, '0')} ${sp.name} ${caught ? '[Bonded]' : '[Sighted]'}`,
         ),
       );
       const tags = el('div', 'lw-hud-title');
@@ -334,22 +399,40 @@ function renderCompendiumTab(
       const rBadge = el('span', 'lw-badge lw-badge-element', rInfo.en);
       rBadge.style.background = rInfo.color;
       tags.append(rBadge, el('span', 'lw-badge', ROLE_LABELS[sp.combatRole].en));
+      if (hasGleaming) {
+        tags.appendChild(el('span', 'lw-badge lw-badge-gleaming', 'Gleaming'));
+      }
       meta.appendChild(tags);
       top.appendChild(meta);
       card.appendChild(top);
 
       card.appendChild(el('div', 'lw-hud-quest', `${sp.titleEn} | ${sp.titleVi}`));
-      const note = el('div', 'lw-compendium-note');
-      note.appendChild(renderInteractiveEnglish(controller, sp.fieldNoteEn, 'compendium'));
-      card.appendChild(note);
-
-      const storyBtn = el('button', 'lw-btn lw-btn-sm', 'Read Field Story');
-      storyBtn.addEventListener('click', () => {
-        controller.closeModal();
-        controller.openDialogueById(`field_story_${sp.id}`);
-        onRerender();
-      });
-      card.appendChild(storyBtn);
+      if (caught) {
+        const note = el('div', 'lw-compendium-note');
+        note.appendChild(renderInteractiveEnglish(controller, sp.fieldNoteEn, 'compendium'));
+        card.appendChild(note);
+        if (sp.evolvesTo) {
+          const nextName = SPECIES_BY_ID[sp.evolvesTo.speciesId]?.name ?? sp.evolvesTo.speciesId;
+          card.appendChild(
+            el('div', 'lw-hud-quest', `Evolution: Lv.${sp.evolvesTo.level} -> ${nextName}`),
+          );
+        }
+        const storyBtn = el('button', 'lw-btn lw-btn-sm', 'Read Field Story');
+        storyBtn.addEventListener('click', () => {
+          controller.closeModal();
+          controller.openDialogueById(`field_story_${sp.id}`);
+          onRerender();
+        });
+        card.appendChild(storyBtn);
+      } else {
+        card.appendChild(
+          el(
+            'div',
+            'lw-hud-quest',
+            `Habitat: ${sp.habitatIds.map((h) => MAPS_BY_ID[h].nameEn).join(', ')} (Bond with a chime to unlock full ecological notes)`,
+          ),
+        );
+      }
     }
     grid.appendChild(card);
   }
@@ -363,23 +446,29 @@ function renderLexiconTab(
   onRerender: () => void,
 ): void {
   const state = controller.state;
-  const dueCount = Object.values(state.lexicon).filter(
-    (m) => computeWordReencounterPriority(m, state) >= 12,
+  const encounteredCount = Object.keys(state.lexicon).length;
+  const savedCount = Object.values(state.lexicon).filter((m) => m.savedByPlayer).length;
+  const masteredCount = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
+  const dueCount = Object.values(state.lexicon).filter((m) =>
+    isWordDueForReencounter(m, state),
   ).length;
+
   const filterBar = el('div', 'lw-choice-list');
   filterBar.style.marginBottom = '10px';
   for (const [fKey, label] of [
-    ['encountered', `Seen (${Object.keys(state.lexicon).length})`],
-    ['saved', `Saved (${Object.values(state.lexicon).filter((m) => m.savedByPlayer).length})`],
-    ['due', `Scheduled Re-encounter (${dueCount})`],
+    ['encountered', `Encountered (${encounteredCount})`],
+    ['saved', `Saved (${savedCount})`],
+    ['mastered', `Mastered (${masteredCount})`],
+    ['due', `Due Now (${dueCount})`],
     ['all', `All (${LEXICON_ENTRIES.length})`],
-    ['dispatches', 'Field Advisories (24)'],
+    ['dispatches', `Field Advisories (${DIALOGUES.filter((d) => d.contextTag === 'ranger_dispatch').length})`],
   ] as const) {
     const b = el(
       'button',
       viewState.lexiconFilter === fKey ? 'lw-btn lw-btn-primary lw-btn-sm' : 'lw-btn lw-btn-sm',
       label,
     );
+    b.setAttribute('data-testid', `lexicon-filter-${fKey}`);
     b.addEventListener('click', () => {
       viewState.lexiconFilter = fKey;
       onRerender();
@@ -391,8 +480,11 @@ function renderLexiconTab(
   if (viewState.lexiconFilter === 'dispatches') {
     const dispatches = DIALOGUES.filter((d) => d.contextTag === 'ranger_dispatch');
     for (const disp of dispatches) {
+      const isRead = state.readLoreIds.includes(disp.id);
       const row = el('div', 'lw-list-row');
-      row.appendChild(el('span', '', `${disp.speaker} (${disp.cefr})`));
+      row.appendChild(
+        el('span', '', `${isRead ? '[Read] ' : '[Unread] '}${disp.speaker} (${disp.cefr})`),
+      );
       const readBtn = el('button', 'lw-btn lw-btn-sm', 'Read Note');
       readBtn.addEventListener('click', () => {
         controller.closeModal();
@@ -408,8 +500,9 @@ function renderLexiconTab(
   const items = LEXICON_ENTRIES.filter((entry) => {
     const mem = state.lexicon[entry.id];
     if (viewState.lexiconFilter === 'saved') return Boolean(mem?.savedByPlayer);
+    if (viewState.lexiconFilter === 'mastered') return Boolean(mem && mem.mastery >= 3);
     if (viewState.lexiconFilter === 'due') {
-      return Boolean(mem && computeWordReencounterPriority(mem, state) >= 12);
+      return Boolean(mem && isWordDueForReencounter(mem, state));
     }
     if (viewState.lexiconFilter === 'encountered') return Boolean(mem);
     return true;
@@ -417,30 +510,39 @@ function renderLexiconTab(
 
   if (items.length === 0) {
     container.appendChild(
-      el('p', '', 'Explore trails and talk with Rangers to encounter words naturally in context!'),
+      el('p', '', 'No entries match this filter yet. Explore trails and chat with Rangers naturally!'),
     );
     return;
   }
 
   for (const entry of items) {
     const mem = state.lexicon[entry.id];
+    const ex = pickIndependentExample(entry, state.regionId, mem?.exposures ?? 0);
     const row = el('div', 'lw-list-row');
     const left = el('div', '');
+    const statusLabel =
+      mem && mem.mastery >= 3
+        ? ' [Mastered]'
+        : mem?.savedByPlayer
+          ? ' [Saved]'
+          : mem
+            ? ' [Encountered]'
+            : '';
     left.appendChild(
       el(
         'strong',
         '',
-        `${entry.word} ${entry.phonetic} [${entry.pos} | ${entry.cefr}] : ${entry.meaningVi}`,
+        `${entry.word} ${entry.phonetic} [${entry.pos} | ${entry.cefr}] : ${entry.meaningVi}${statusLabel}`,
       ),
     );
     left.appendChild(
       el(
         'div',
         'lw-hud-quest',
-        `Seen ${mem?.exposures ?? 0}x | Lookups ${mem?.glossLookups ?? 0}x | Recall stage ${mem?.mastery ?? 0}/3`,
+        `Encountered ${mem?.exposures ?? 0}x | Lookups ${mem?.glossLookups ?? 0}x | Mastery ${mem?.mastery ?? 0}/3`,
       ),
     );
-    left.appendChild(el('div', 'lw-hud-quest', entry.exampleEn));
+    left.appendChild(el('div', 'lw-hud-quest', ex.en));
     row.appendChild(left);
 
     const acts = el('div', 'lw-hud-actions');
@@ -547,17 +649,29 @@ function renderSettingsTab(
     (v) => controller.updateSettings({ textScale: v as 'normal' | 'large' }),
   );
 
-  const addCheckboxRow = (label: string, checked: boolean, onToggle: (next: boolean) => void) => {
+  const addCheckboxRow = (
+    label: string,
+    checked: boolean,
+    onToggle: (next: boolean) => void,
+    testId?: string,
+  ) => {
     const row = el('div', 'lw-list-row');
     row.appendChild(el('span', '', label));
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = checked;
+    if (testId) input.setAttribute('data-testid', testId);
     input.addEventListener('change', () => onToggle(input.checked));
     row.appendChild(input);
     container.appendChild(row);
   };
 
+  addCheckboxRow(
+    'Show Companion Follower (Sinh vật dẫn đầu đi theo sau):',
+    s.showFollower !== false,
+    (v) => controller.updateSettings({ showFollower: v }),
+    'checkbox-show-follower',
+  );
   addCheckboxRow('High Contrast Mode (Độ tương phản cao):', s.highContrast, (v) =>
     controller.updateSettings({ highContrast: v }),
   );
@@ -613,6 +727,14 @@ function renderSettingsTab(
   container.appendChild(rebindGrid);
 
   container.appendChild(el('h4', '', 'Save & Backup (Lưu trữ an toàn)'));
+  if (controller.saveRepo.hasMultiTabConflict) {
+    const conflictNote = el(
+      'p',
+      'lw-battle-log',
+      'Phát hiện một tab khác vừa lưu tiến trình mới hơn. Bấm Đồng bộ để tải bản mới nhất trước khi lưu đè.',
+    );
+    container.appendChild(conflictNote);
+  }
   const saveRow = el('div', 'lw-choice-list');
   const saveNowBtn = el('button', 'lw-btn lw-btn-moss', 'Save Progress Now');
   saveNowBtn.setAttribute('data-testid', 'btn-save-now');
@@ -658,6 +780,15 @@ function renderSettingsTab(
   importLabel.appendChild(fileInput);
 
   saveRow.append(saveNowBtn, exportBtn, importLabel);
+  if (controller.saveRepo.hasMultiTabConflict) {
+    const syncBtn = el('button', 'lw-btn lw-btn-primary', 'Sync Newer Tab Save');
+    syncBtn.setAttribute('data-testid', 'btn-sync-newer-tab');
+    syncBtn.addEventListener('click', () => {
+      controller.syncNewerTabSave();
+      onRerender();
+    });
+    saveRow.appendChild(syncBtn);
+  }
   container.appendChild(saveRow);
   void LEXICON_INDEX;
 }
@@ -733,11 +864,12 @@ export function buildCampReviewModal(
     return backdrop;
   }
 
+  const dueTag = prompt.isDueNow ? 'Due for Re-encounter' : 'Optional Warm-up';
   body.appendChild(
     el(
       'div',
       'lw-hud-quest',
-      `Card ${controller.campPromptIndex + 1} of ${controller.campPrompts.length}`,
+      `Card ${controller.campPromptIndex + 1} of ${controller.campPrompts.length} | ${dueTag}`,
     ),
   );
   const wordHeading = el('h3', '', `${prompt.entry.word} ${prompt.entry.phonetic}`);
@@ -782,7 +914,7 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
   const state = controller.state;
   const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
   const card = el('section', 'lw-notebook lw-ending-card');
-  card.style.maxWidth = '600px';
+  card.style.maxWidth = '620px';
   card.setAttribute('data-testid', 'ending-banner-modal');
 
   const header = el('header', 'lw-notebook-header');
@@ -794,14 +926,14 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
     el(
       'p',
       'lw-ending-lead',
-      'All four Resonance Stones sing together beneath Starfall Sanctuary. Thank you for exploring Verdant Basin alongside your Wildkin companions!',
+      'All four Resonance Stones sing together beneath Starfall Sanctuary. Thank you for exploring Verdant Basin side by side with your Wildkin companions!',
     ),
   );
   body.appendChild(
     el(
       'p',
       'lw-hud-quest',
-      'Cả bốn phiến Đá Cộng Hưởng đã ngân vang hòa hợp dưới bầu trời Thánh Địa Sao Rơi. Bạn có thể tiếp tục tự do khám phá mọi vùng, tìm rương ẩn và thu phục trọn 30 loài.',
+      'Cả bốn phiến Đá Cộng Hưởng đã ngân vang hòa hợp dưới bầu trời Thánh Địa Sao Rơi. Hậu truyện nay mở ra Tái Đấu Bậc Thầy cùng bốn Thủ lĩnh, săn dấu vết biến thể Ánh Sao và thu phục trọn 30 loài.',
     ),
   );
 
@@ -810,21 +942,24 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
     const sp = SPECIES_BY_ID[member.speciesId];
     if (!sp) continue;
     const chip = el('div', 'lw-ending-member');
-    chip.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+    chip.appendChild(
+      createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
+    );
     chip.appendChild(el('strong', '', `${sp.name} Lv.${member.level}`));
     showcase.appendChild(chip);
   }
   body.appendChild(showcase);
 
   const completedQuests = Object.values(state.quests).filter((q) => q.status === 'completed').length;
+  const masteredWords = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
   const statsBox = el(
     'div',
     'lw-battle-log',
-    `Steps: ${state.stepCount} | Bonded Species: ${state.caughtSpecies.length}/30 | Quests Completed: ${completedQuests}/${QUESTS.length} | English Words Encountered: ${Object.keys(state.lexicon).length}`,
+    `Steps: ${state.stepCount} | Bonded: ${state.caughtSpecies.length}/30 | Quests: ${completedQuests}/${QUESTS.length} | Warden Rematches: ${state.rematchCleared.length}/4 | Words Encountered: ${Object.keys(state.lexicon).length} (Mastered: ${masteredWords})`,
   );
   body.appendChild(statsBox);
 
-  const closeBtn = el('button', 'lw-btn lw-btn-primary', 'Continue Free Exploration / Tiếp tục khám phá');
+  const closeBtn = el('button', 'lw-btn lw-btn-primary', 'Continue Post-Game Exploration / Khám phá hậu truyện');
   closeBtn.setAttribute('data-testid', 'btn-close-ending');
   closeBtn.addEventListener('click', () => controller.closeModal());
   body.appendChild(closeBtn);

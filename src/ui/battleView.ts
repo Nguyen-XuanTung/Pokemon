@@ -1,6 +1,7 @@
 import { ITEMS_BY_ID } from '../data/items.ts';
 import { MOVES_BY_ID } from '../data/moves.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
+import type { StatStages } from '../domain/battle.ts';
 import { computeCaptureProbability } from '../domain/capture.ts';
 import { ELEMENT_LABELS, getTypeMultiplier } from '../domain/elements.ts';
 import type { BattleSpeedMode, CreatureInstance } from '../domain/types.ts';
@@ -27,6 +28,12 @@ const SPEED_BADGE_TEXT: Readonly<Record<BattleSpeedMode, string>> = {
   instant: 'Pace: Instant',
 };
 
+function effectiveCombatSpeed(creature: CreatureInstance, stages: StatStages): number {
+  const stageMult = stages.spd >= 0 ? 1 + stages.spd * 0.25 : 1 / (1 - stages.spd * 0.25);
+  const statusMult = creature.status === 'paralyze' ? 0.65 : 1;
+  return creature.stats.spd * stageMult * statusMult;
+}
+
 function buildPartyOrbs(party: ReadonlyArray<CreatureInstance>): HTMLElement {
   const row = el('div', 'lw-party-orbs');
   for (let i = 0; i < 6; i++) {
@@ -49,6 +56,7 @@ function buildPartyOrbs(party: ReadonlyArray<CreatureInstance>): HTMLElement {
 function buildCombatantPlate(
   controller: GameController,
   creature: CreatureInstance,
+  stages: StatStages,
   party: ReadonlyArray<CreatureInstance>,
   name: string,
   element: keyof typeof ELEMENT_LABELS,
@@ -61,11 +69,23 @@ function buildCombatantPlate(
   const badge = el('span', 'lw-badge lw-badge-element', elMeta.en);
   badge.style.background = elMeta.color;
   top.appendChild(badge);
+  if (creature.isRareVariant) {
+    top.appendChild(el('span', 'lw-badge lw-badge-gleaming', 'Gleaming'));
+  }
   if (creature.status) {
     top.appendChild(el('span', 'lw-badge lw-badge-status', creature.status.toUpperCase()));
   }
   if (isEnemy && controller.state.caughtSpecies.includes(creature.speciesId)) {
     top.appendChild(el('span', 'lw-badge', 'Bonded'));
+  }
+  for (const [label, val] of [
+    ['ATK', stages.atk],
+    ['DEF', stages.def],
+    ['SPD', stages.spd],
+  ] as const) {
+    if (val !== 0) {
+      top.appendChild(el('span', 'lw-badge', `${label}${val > 0 ? `+${val}` : val}`));
+    }
   }
   plate.appendChild(top);
 
@@ -106,6 +126,7 @@ export function buildBattleView(
     buildCombatantPlate(
       controller,
       player,
+      battle.playerStages,
       battle.playerParty,
       player.nickname ?? playerSpec.name,
       playerSpec.element,
@@ -116,6 +137,7 @@ export function buildBattleView(
     buildCombatantPlate(
       controller,
       enemy,
+      battle.enemyStages,
       battle.enemyParty,
       `${battle.kind === 'wild' ? 'Wild' : 'Foe'} ${enemySpec.name}`,
       enemySpec.element,
@@ -127,14 +149,58 @@ export function buildBattleView(
   const deck = el('section', 'lw-battle-deck lw-interactive');
   deck.setAttribute('data-testid', 'battle-deck');
 
+  const playerSpd = effectiveCombatSpeed(player, battle.playerStages);
+  const enemySpd = effectiveCombatSpeed(enemy, battle.enemyStages);
+  const enemyThreatMult = getTypeMultiplier(enemySpec.element, playerSpec.element);
+  const hasBenchCounter =
+    enemyThreatMult > 1.1 &&
+    battle.playerParty.some((m, idx) => {
+      if (idx === battle.activePlayerIndex || m.currentHp <= 0) return false;
+      const sp = SPECIES_BY_ID[m.speciesId];
+      return Boolean(sp && getTypeMultiplier(sp.element, enemySpec.element) > 1.1);
+    });
+
+  let bestCharmPct = 0;
+  if (battle.kind === 'wild') {
+    for (const slot of controller.state.inventory) {
+      const def = ITEMS_BY_ID[slot.itemId];
+      if (slot.quantity > 0 && def?.category === 'charm') {
+        const pct = Math.round(
+          computeCaptureProbability({
+            target: enemy,
+            species: enemySpec,
+            charmMultiplier: def.captureMultiplier ?? 1,
+          }) * 100,
+        );
+        if (pct > bestCharmPct) bestCharmPct = pct;
+      }
+    }
+  }
+
   const logHeader = el('div', 'lw-battle-header-row');
-  logHeader.appendChild(
+  const outlookWrap = el('div', 'lw-hud-title');
+  outlookWrap.setAttribute('data-testid', 'battle-turn-outlook');
+  outlookWrap.appendChild(
     el(
       'span',
       'lw-hud-quest',
       `Turn ${battle.turnCount} | ${enemySpec.titleEn} (${ROLE_LABELS[enemySpec.combatRole].en})`,
     ),
   );
+  outlookWrap.appendChild(
+    el(
+      'span',
+      'lw-badge',
+      playerSpd >= enemySpd ? 'Speed: You act first' : 'Speed: Foe acts first',
+    ),
+  );
+  if (enemyThreatMult > 1.1) {
+    outlookWrap.appendChild(
+      el('span', 'lw-badge lw-badge-danger', 'Risk: Foe has 1.5x advantage'),
+    );
+  }
+  logHeader.appendChild(outlookWrap);
+
   const currentSpeed = controller.state.settings.battleSpeed ?? 'normal';
   const speedBtn = el(
     'button',
@@ -174,11 +240,21 @@ export function buildBattleView(
     return wrapper;
   }
 
+  const bagLabel =
+    battle.kind === 'wild' && bestCharmPct > 0
+      ? `Chimes & Bag (~${bestCharmPct}%)`
+      : battle.kind === 'wild'
+        ? 'Chimes & Bag'
+        : 'Bag';
+  const teamLabel = hasBenchCounter
+    ? `Team (${battle.playerParty.length}) [Switch Tip]`
+    : `Team (${battle.playerParty.length})`;
+
   const nav = el('div', 'lw-choice-list lw-battle-tabs');
   for (const [tabKey, label] of [
     ['moves', 'Moves'],
-    ['bag', battle.kind === 'wild' ? 'Chimes & Bag' : 'Bag'],
-    ['team', `Team (${battle.playerParty.length})`],
+    ['bag', bagLabel],
+    ['team', teamLabel],
     ['tactics', 'Observe & Flee'],
   ] as const) {
     const b = el(
@@ -200,6 +276,7 @@ export function buildBattleView(
       const elMeta = ELEMENT_LABELS[mDef.element];
       const mult = mDef.power > 0 ? getTypeMultiplier(mDef.element, enemySpec.element) : 1;
       const card = el('div', 'lw-move-card');
+      card.style.borderLeft = `4px solid ${elMeta.color}`;
       const head = el('div', 'lw-hud-title');
       const useMoveBtn = el(
         'button',
@@ -218,9 +295,9 @@ export function buildBattleView(
       pill.style.background = elMeta.color;
       head.append(useMoveBtn, pill);
       if (mult > 1.05) {
-        head.appendChild(el('span', 'lw-badge lw-badge-eff-good', 'Effective'));
+        head.appendChild(el('span', 'lw-badge lw-badge-eff-good', '1.5x Effective'));
       } else if (mult < 0.95) {
-        head.appendChild(el('span', 'lw-badge', 'Resisted'));
+        head.appendChild(el('span', 'lw-badge', '0.67x Resisted'));
       }
       card.appendChild(head);
 
@@ -267,6 +344,7 @@ export function buildBattleView(
       );
       row.appendChild(btn);
       card.appendChild(row);
+      card.appendChild(el('div', 'lw-hud-quest', def.descriptionEn));
       list.appendChild(card);
     }
     deck.appendChild(list);
@@ -274,12 +352,15 @@ export function buildBattleView(
     const list = el('div', 'lw-move-grid');
     battle.playerParty.forEach((member, idx) => {
       const sp = SPECIES_BY_ID[member.speciesId]!;
+      const matchMult = getTypeMultiplier(sp.element, enemySpec.element);
       const card = el('div', 'lw-move-card');
       const row = el('div', 'lw-hud-title');
-      row.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+      row.appendChild(
+        createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
+      );
       const btn = el(
         'button',
-        'lw-btn',
+        matchMult > 1.1 && idx !== battle.activePlayerIndex ? 'lw-btn lw-btn-moss' : 'lw-btn',
         `${sp.name} Lv.${member.level} (${member.currentHp}/${member.maxHp})`,
       ) as HTMLButtonElement;
       btn.disabled = idx === battle.activePlayerIndex || member.currentHp <= 0;
@@ -288,6 +369,9 @@ export function buildBattleView(
         controller.submitBattleAction({ kind: 'switch', partyIndex: idx });
       });
       row.appendChild(btn);
+      if (matchMult > 1.1) {
+        row.appendChild(el('span', 'lw-badge lw-badge-eff-good', 'Counters Foe'));
+      }
       card.appendChild(row);
       list.appendChild(card);
     });

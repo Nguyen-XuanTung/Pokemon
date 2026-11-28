@@ -16,6 +16,9 @@ export interface LingoWildDiagnostics {
     readonly hasActiveDialogue: boolean;
     readonly hasActiveBattle: boolean;
     readonly mainStoryCompleted: boolean;
+    readonly gleamingCount: number;
+    readonly rematchCount: number;
+    readonly tracesCount: number;
     readonly fps: number;
   };
 }
@@ -29,8 +32,10 @@ declare global {
 const bootStart = performance.now();
 
 const creaturesUrl = new URL('./assets/sprites/creatures.png', window.location.href).toString();
+const companionsUrl = new URL('./assets/sprites/companions.png', window.location.href).toString();
 const itemsUrl = new URL('./assets/sprites/items.png', window.location.href).toString();
 document.documentElement.style.setProperty('--creatures-sheet-url', `url("${creaturesUrl}")`);
+document.documentElement.style.setProperty('--companions-sheet-url', `url("${companionsUrl}")`);
 document.documentElement.style.setProperty('--items-sheet-url', `url("${itemsUrl}")`);
 
 const rootEl = document.getElementById('lingowild-root');
@@ -94,6 +99,9 @@ window.__LINGOWILD_DIAGNOSTICS__ = {
     hasActiveDialogue: controller.activeDialogue !== null,
     hasActiveBattle: controller.activeBattle !== null,
     mainStoryCompleted: Boolean(controller.state.flags.main_story_completed),
+    gleamingCount: controller.state.gleamingSpecies.length,
+    rematchCount: controller.state.rematchCleared.length,
+    tracesCount: controller.state.discoveredTraces.length,
     fps: worldScene.measuredFps,
   }),
 };

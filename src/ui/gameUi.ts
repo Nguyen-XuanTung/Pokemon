@@ -1,7 +1,8 @@
 import { MAPS_BY_ID } from '../data/maps.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
-import { resolveSenseForContext } from '../domain/learning.ts';
+import { ELEMENT_LABELS } from '../domain/elements.ts';
+import { pickIndependentExample, resolveSenseForContext } from '../domain/learning.ts';
 import { isQuestConditionMet } from '../domain/quests.ts';
 import type { CefrBand, Direction } from '../domain/types.ts';
 import type { GameController } from '../game/controller.ts';
@@ -27,6 +28,10 @@ export class GameUiRenderer {
   private readonly overlayEl: HTMLElement;
   private readonly controller: GameController;
   private battleTab: BattleDeckTab = 'moves';
+  private wasInBattle = false;
+  private heldTouchDir: Direction | null = null;
+  private heldTouchTimer: number | null = null;
+  private lastPointerStepAt = -9999;
   private readonly journalState: JournalViewState = {
     lexiconFilter: 'encountered',
     campAnsweredCurrent: false,
@@ -39,14 +44,48 @@ export class GameUiRenderer {
     this.overlayEl = overlayEl;
     this.controller = controller;
 
-    this.bindKeyboardControls();
+    this.bindKeyboardAndPointerControls();
     this.controller.subscribe(() => {
       this.render();
     });
     this.render();
   }
 
-  private bindKeyboardControls(): void {
+  private startHoldWalk(dir: Direction): void {
+    this.stopHoldWalk();
+    this.heldTouchDir = dir;
+    this.lastPointerStepAt = performance.now();
+    this.controller.movePlayer(dir);
+    if (typeof window !== 'undefined') {
+      this.heldTouchTimer = window.setInterval(() => {
+        if (
+          this.controller.activeModal !== 'none' ||
+          this.controller.activeBattle !== null ||
+          this.controller.activeDialogue !== null ||
+          !this.heldTouchDir
+        ) {
+          this.stopHoldWalk();
+          return;
+        }
+        this.lastPointerStepAt = performance.now();
+        this.controller.movePlayer(this.heldTouchDir);
+      }, 135);
+    }
+  }
+
+  private stopHoldWalk(): void {
+    if (typeof window !== 'undefined' && this.heldTouchTimer !== null) {
+      window.clearInterval(this.heldTouchTimer);
+      this.heldTouchTimer = null;
+    }
+    this.heldTouchDir = null;
+  }
+
+  private bindKeyboardAndPointerControls(): void {
+    window.addEventListener('pointerup', () => this.stopHoldWalk());
+    window.addEventListener('pointercancel', () => this.stopHoldWalk());
+    window.addEventListener('blur', () => this.stopHoldWalk());
+
     window.addEventListener('keydown', (ev) => {
       if (this.journalState.awaitingKeyRebind) {
         ev.preventDefault();
@@ -70,9 +109,14 @@ export class GameUiRenderer {
       const code = ev.code;
 
       if (code === km.cancel || code === 'Escape') {
-        if (this.controller.activeGlossEntry) {
+        if (this.controller.activeGlossEntry || this.controller.activePocketGloss) {
           ev.preventDefault();
           this.controller.closeGlossPopup();
+          return;
+        }
+        if (this.controller.activeEvolution) {
+          ev.preventDefault();
+          this.controller.dismissEvolutionBanner();
           return;
         }
         if (this.controller.activeModal !== 'none' && this.controller.activeModal !== 'title') {
@@ -148,12 +192,26 @@ export class GameUiRenderer {
     this.rootEl.dataset.textScale = settings.textScale;
     this.rootEl.dataset.touch = settings.touchControls;
 
+    if (
+      this.controller.activeModal !== 'none' ||
+      this.controller.activeBattle !== null ||
+      this.controller.activeDialogue !== null
+    ) {
+      this.stopHoldWalk();
+    }
+
     this.overlayEl.replaceChildren();
 
     if (this.controller.activeModal === 'title') {
       this.overlayEl.appendChild(this.buildTitleModal());
       return;
     }
+
+    const inBattleNow = Boolean(this.controller.activeBattle);
+    if (inBattleNow && !this.wasInBattle) {
+      this.battleTab = 'moves';
+    }
+    this.wasInBattle = inBattleNow;
 
     if (this.controller.activeBattle) {
       this.overlayEl.appendChild(
@@ -165,7 +223,9 @@ export class GameUiRenderer {
     } else {
       const topGroup = el('div', 'lw-top-bar-group');
       topGroup.appendChild(this.buildTopHud());
-      if (this.controller.toasts.length > 0) {
+      if (this.controller.activeEvolution) {
+        topGroup.appendChild(this.buildEvolutionBanner());
+      } else if (this.controller.toasts.length > 0) {
         topGroup.appendChild(this.buildToastStack());
       }
       this.overlayEl.appendChild(topGroup);
@@ -176,7 +236,7 @@ export class GameUiRenderer {
       }
     }
 
-    if (this.controller.activeGlossEntry) {
+    if (this.controller.activeGlossEntry || this.controller.activePocketGloss) {
       this.overlayEl.appendChild(this.buildGlossSlip());
     }
 
@@ -204,21 +264,23 @@ export class GameUiRenderer {
     titleWrap.appendChild(el('div', 'lw-title-kicker', 'VERDANT BASIN EXPEDITION'));
     titleWrap.appendChild(el('strong', 'lw-title-heading', 'LingoWild'));
     header.appendChild(titleWrap);
-    header.appendChild(el('span', 'lw-badge', 'Offline RPG'));
+    header.appendChild(el('span', 'lw-badge', 'Offline Pixel RPG'));
     card.appendChild(header);
 
     const body = el('div', 'lw-notebook-body');
 
-    // Showcase the three starter Wildkin sprites cleanly on wooden plaque
     const starterTrio = el('div', 'lw-starter-showcase');
-    for (const [dex, name, roleVi] of [
-      [1, 'Mosskit', 'Hệ Lá'],
-      [4, 'Kindlet', 'Hệ Lửa'],
-      [7, 'Ripplefin', 'Hệ Nước'],
+    for (const [dex, name, elKey, roleVi] of [
+      [1, 'Mosskit', 'leaf', 'Hệ Lá | Cân bằng'],
+      [4, 'Kindlet', 'ember', 'Hệ Lửa | Tốc chiến'],
+      [7, 'Ripplefin', 'water', 'Hệ Nước | Vững chãi'],
     ] as const) {
       const item = el('div', 'lw-starter-plaque');
       item.appendChild(createCreatureSpriteSpan(dex));
       item.appendChild(el('strong', '', name));
+      const badge = el('span', 'lw-badge lw-badge-element', ELEMENT_LABELS[elKey].en);
+      badge.style.background = ELEMENT_LABELS[elKey].color;
+      item.appendChild(badge);
       item.appendChild(el('span', 'lw-hud-quest', roleVi));
       starterTrio.appendChild(item);
     }
@@ -228,7 +290,7 @@ export class GameUiRenderer {
       el(
         'p',
         'lw-title-desc',
-        'Khám phá năm vùng sinh thái tự nhiên, thu phục ba mươi loài Wildkin và tiếp thu tiếng Anh qua manh mối hành trình. Mọi tính năng tra từ và ôn tập đều hoàn toàn tự nguyện.',
+        'Khám phá năm vùng sinh thái sống động, kết bạn ba mươi loài Wildkin đi theo sau bước chân và tiếp thu tiếng Anh tự nhiên qua ngữ cảnh thực địa. Mọi tính năng tra từ và ôn tập đều hoàn toàn tự nguyện.',
       ),
     );
 
@@ -325,6 +387,9 @@ export class GameUiRenderer {
     const hud = el('header', 'lw-hud');
 
     const ribbon = el('div', 'lw-hud-ribbon lw-interactive');
+    ribbon.title = 'Tap to view active quest details in Field Journal';
+    ribbon.addEventListener('click', () => this.controller.openJournal('quests'));
+
     const titleRow = el('div', 'lw-hud-title');
     titleRow.appendChild(el('span', 'lw-region-name', map.nameEn));
 
@@ -340,11 +405,12 @@ export class GameUiRenderer {
     const lead = state.party[0];
     if (lead) {
       const sp = SPECIES_BY_ID[lead.speciesId];
+      const gleamPrefix = lead.isRareVariant ? '* ' : '';
       titleRow.appendChild(
         el(
           'span',
           'lw-badge lw-badge-lead',
-          `${sp?.name ?? lead.speciesId} Lv.${lead.level} (${lead.currentHp}/${lead.maxHp})`,
+          `${gleamPrefix}${sp?.name ?? lead.speciesId} Lv.${lead.level} (${lead.currentHp}/${lead.maxHp})`,
         ),
       );
     }
@@ -365,6 +431,14 @@ export class GameUiRenderer {
           : nextStep?.descriptionEn ?? activeMainQuest.titleEn,
       );
       ribbon.appendChild(qLine);
+    } else if (state.flags.main_story_completed) {
+      ribbon.appendChild(
+        el(
+          'div',
+          'lw-hud-quest lw-hud-quest-clamp',
+          `Post-Game Mastery: Wardens ${state.rematchCleared.length}/4 | Traces ${state.discoveredTraces.length}/4`,
+        ),
+      );
     }
     hud.appendChild(ribbon);
 
@@ -385,6 +459,47 @@ export class GameUiRenderer {
     hud.appendChild(actions);
 
     return hud;
+  }
+
+  private buildEvolutionBanner(): HTMLElement {
+    const evo = this.controller.activeEvolution!;
+    const fromSp = SPECIES_BY_ID[evo.fromSpeciesId];
+    const toSp = SPECIES_BY_ID[evo.toSpeciesId];
+    const wrap = el('div', 'lw-toast-stack');
+    const card = el('div', 'lw-evolution-banner lw-interactive');
+    card.setAttribute('data-testid', 'evolution-banner');
+
+    if (fromSp && toSp) {
+      const pair = el('div', 'lw-evolution-sprites');
+      pair.appendChild(createCreatureSpriteSpan(fromSp.dexNumber));
+      pair.appendChild(el('strong', 'lw-evolution-arrow', '->'));
+      pair.appendChild(createCreatureSpriteSpan(toSp.dexNumber, { gleaming: true }));
+      card.appendChild(pair);
+
+      const copy = el('div', '');
+      copy.appendChild(
+        el(
+          'strong',
+          '',
+          `Evolution! ${fromSp.name} grew into ${toSp.name} at Lv.${evo.newLevel}!`,
+        ),
+      );
+      copy.appendChild(
+        el(
+          'div',
+          'lw-hud-quest',
+          `Tiến hóa rực rỡ! ${fromSp.name} đã trưởng thành thành ${toSp.name} (${toSp.titleVi}).`,
+        ),
+      );
+      card.appendChild(copy);
+    }
+
+    const okBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', 'Celebrate');
+    okBtn.setAttribute('data-testid', 'btn-dismiss-evolution');
+    okBtn.addEventListener('click', () => this.controller.dismissEvolutionBanner());
+    card.appendChild(okBtn);
+    wrap.appendChild(card);
+    return wrap;
   }
 
   private buildToastStack(): HTMLElement {
@@ -470,12 +585,31 @@ export class GameUiRenderer {
     }
 
     if (line.choices && line.choices.length > 0) {
-      const choicesWrap = el('div', 'lw-choice-list');
+      const isStarterChoice = line.choices.some((c) => c.action?.kind === 'choose_starter');
+      const choicesWrap = el(
+        'div',
+        isStarterChoice ? 'lw-starter-choice-grid' : 'lw-choice-list',
+      );
       line.choices.forEach((choice, idx) => {
         const label =
           this.controller.state.settings.supportMode === 'bilingual'
             ? `${choice.labelEn} (${choice.labelVi})`
             : choice.labelEn;
+        if (choice.action?.kind === 'choose_starter') {
+          const sp = SPECIES_BY_ID[choice.action.speciesId];
+          const cBtn = el('button', 'lw-btn lw-starter-choice-btn');
+          cBtn.setAttribute('data-testid', `dialogue-choice-${idx}`);
+          if (sp) {
+            cBtn.appendChild(createCreatureSpriteSpan(sp.dexNumber));
+          }
+          const txt = el('div', '');
+          txt.appendChild(el('strong', '', choice.labelEn));
+          txt.appendChild(el('div', 'lw-hud-quest', choice.labelVi));
+          cBtn.appendChild(txt);
+          cBtn.addEventListener('click', () => this.controller.selectDialogueChoice(choice));
+          choicesWrap.appendChild(cBtn);
+          return;
+        }
         const cBtn = el('button', idx === 0 ? 'lw-btn lw-btn-primary' : 'lw-btn', label);
         cBtn.setAttribute('data-testid', `dialogue-choice-${idx}`);
         cBtn.addEventListener('click', () => this.controller.selectDialogueChoice(choice));
@@ -500,6 +634,42 @@ export class GameUiRenderer {
   }
 
   private buildGlossSlip(): HTMLElement {
+    const slip = el('aside', 'lw-gloss-slip lw-interactive');
+    slip.setAttribute('data-testid', 'gloss-popup');
+
+    if (this.controller.activePocketGloss && !this.controller.activeGlossEntry) {
+      const pocket = this.controller.activePocketGloss;
+      const header = el('div', 'lw-gloss-header');
+      const titleLeft = el('div', '');
+      titleLeft.appendChild(el('span', 'lw-gloss-word', pocket.surface.toLowerCase()));
+      if (pocket.note.base !== pocket.surface.toLowerCase()) {
+        titleLeft.appendChild(el('span', '', ` (-> ${pocket.note.base}) `));
+      }
+      titleLeft.appendChild(el('span', 'lw-badge', pocket.note.posVi));
+      header.appendChild(titleLeft);
+
+      const closeBtn = el('button', 'lw-btn lw-btn-sm', 'Đóng');
+      closeBtn.addEventListener('click', () => this.controller.closeGlossPopup());
+      header.appendChild(closeBtn);
+      slip.appendChild(header);
+
+      slip.appendChild(el('div', 'lw-gloss-meaning', `Nghĩa nhanh: ${pocket.note.meaningVi}`));
+      if (pocket.sentenceEn) {
+        const exBox = el('div', 'lw-gloss-example', pocket.sentenceEn);
+        slip.appendChild(exBox);
+      }
+      if (this.controller.activeGlossNoteVi) {
+        slip.appendChild(el('div', 'lw-hud-quest', this.controller.activeGlossNoteVi));
+      }
+      const actions = el('div', 'lw-choice-list');
+      const listenBtn = el('button', 'lw-btn lw-btn-sm', 'Nghe phát âm');
+      listenBtn.setAttribute('data-testid', 'btn-gloss-listen');
+      listenBtn.addEventListener('click', () => this.controller.pronounceActiveGloss());
+      actions.appendChild(listenBtn);
+      slip.appendChild(actions);
+      return slip;
+    }
+
     const entry = this.controller.activeGlossEntry!;
     const mem = this.controller.state.lexicon[entry.id];
     const resolvedSense = resolveSenseForContext(
@@ -507,9 +677,6 @@ export class GameUiRenderer {
       this.controller.activeGlossContextTag,
       this.controller.activeGlossSentenceEn,
     );
-
-    const slip = el('aside', 'lw-gloss-slip lw-interactive');
-    slip.setAttribute('data-testid', 'gloss-popup');
 
     const header = el('div', 'lw-gloss-header');
     const titleLeft = el('div', '');
@@ -527,9 +694,18 @@ export class GameUiRenderer {
 
     slip.appendChild(el('div', 'lw-gloss-meaning', `Nghĩa ngữ cảnh: ${resolvedSense.primary.meaningVi}`));
 
+    const pickedEx =
+      entry.senses && entry.senses.length > 0
+        ? { en: resolvedSense.primary.exampleEn, vi: resolvedSense.primary.exampleVi }
+        : pickIndependentExample(
+            entry,
+            this.controller.state.regionId,
+            Math.max(0, (mem?.glossLookups ?? 1) - 1),
+          );
+
     const exBox = el('div', 'lw-gloss-example');
-    exBox.appendChild(el('div', '', resolvedSense.primary.exampleEn));
-    const exVi = el('div', '', resolvedSense.primary.exampleVi);
+    exBox.appendChild(el('div', '', pickedEx.en));
+    const exVi = el('div', '', pickedEx.vi);
     exVi.style.marginTop = '3px';
     exBox.appendChild(exVi);
     slip.appendChild(exBox);
@@ -596,9 +772,18 @@ export class GameUiRenderer {
       const btn = el('button', `lw-dpad-btn lw-dpad-${cell}`) as HTMLButtonElement;
       btn.type = 'button';
       btn.innerHTML = DPAD_ARROW_SVG[cell];
+      btn.dataset.active = String(this.heldTouchDir === cell);
       btn.setAttribute('aria-label', `Move ${cell}`);
       btn.setAttribute('data-testid', `touch-${cell}`);
-      btn.addEventListener('click', () => this.controller.movePlayer(cell));
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        this.startHoldWalk(cell);
+      });
+      btn.addEventListener('click', () => {
+        if (performance.now() - this.lastPointerStepAt > 250) {
+          this.controller.movePlayer(cell);
+        }
+      });
       dpad.appendChild(btn);
     }
 

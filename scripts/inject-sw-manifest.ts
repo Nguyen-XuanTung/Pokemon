@@ -1,44 +1,81 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const distDir = path.join(process.cwd(), 'dist');
-const swPath = path.join(distDir, 'sw.js');
+export interface SwManifestResult {
+  readonly urls: string[];
+  readonly contentHash: string;
+  readonly version: string;
+}
 
-if (fs.existsSync(swPath)) {
-  const assetFiles: string[] = ['./', './index.html'];
+export function computeSwManifestForDirectory(distDir: string): SwManifestResult {
+  const discovered: Array<{ rel: string; full: string }> = [];
 
-  function collectAssets(dir: string): void {
-    for (const entry of fs.readdirSync(dir)) {
+  function walk(dir: string): void {
+    const entries = fs.readdirSync(dir).sort((a, b) => a.localeCompare(b));
+    for (const entry of entries) {
       const full = path.join(dir, entry);
       const stat = fs.statSync(full);
       if (stat.isDirectory()) {
-        collectAssets(full);
-      } else if (/\.(js|css|png|json|svg|woff2?)$/i.test(entry) && entry !== 'sw.js') {
+        walk(full);
+      } else if (/\.(html|js|css|png|json|svg|woff2?)$/i.test(entry) && entry !== 'sw.js') {
         const rel = './' + path.relative(distDir, full).replace(/\\/g, '/');
-        if (!assetFiles.includes(rel)) {
-          assetFiles.push(rel);
-        }
+        discovered.push({ rel, full });
       }
     }
   }
 
-  collectAssets(distDir);
-  const hash = crypto
-    .createHash('sha256')
-    .update(assetFiles.join('|'))
-    .digest('hex')
-    .slice(0, 10);
+  walk(distDir);
+  discovered.sort((a, b) => a.rel.localeCompare(b.rel));
 
+  const hasher = crypto.createHash('sha256');
+  const subUrls: string[] = [];
+
+  for (const item of discovered) {
+    hasher.update(item.rel);
+    hasher.update('\0');
+    hasher.update(fs.readFileSync(item.full));
+    hasher.update('\0');
+    if (item.rel !== './index.html') {
+      subUrls.push(item.rel);
+    }
+  }
+
+  const urls = ['./', './index.html', ...subUrls];
+  const contentHash = hasher.digest('hex').slice(0, 12);
+  const version = `v3-${contentHash}`;
+  return { urls, contentHash, version };
+}
+
+export function injectSwManifestIntoDist(distDir: string): SwManifestResult | null {
+  const swPath = path.join(distDir, 'sw.js');
+  if (!fs.existsSync(swPath)) return null;
+
+  const manifest = computeSwManifestForDirectory(distDir);
   let swSource = fs.readFileSync(swPath, 'utf8');
   swSource = swSource.replace(
-    "const CACHE_VERSION = 'v2';",
-    `const CACHE_VERSION = 'v2-${hash}';`,
+    /const CACHE_VERSION = '[^']+';/,
+    `const CACHE_VERSION = '${manifest.version}';`,
   );
   swSource = swSource.replace(
     /const PRECACHE_URLS = \[[\s\S]*?\];/,
-    `const PRECACHE_URLS = ${JSON.stringify(assetFiles, null, 2)};`,
+    `const PRECACHE_URLS = ${JSON.stringify(manifest.urls, null, 2)};`,
   );
   fs.writeFileSync(swPath, swSource, 'utf8');
-  console.log(`Injected ${assetFiles.length} precache URLs into dist/sw.js (version v2-${hash}).`);
+  return manifest;
+}
+
+const isDirectRun =
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+
+if (isDirectRun) {
+  const distDir = path.join(process.cwd(), 'dist');
+  const injected = injectSwManifestIntoDist(distDir);
+  if (injected) {
+    console.log(
+      `Injected ${injected.urls.length} sorted precache URLs into dist/sw.js (version ${injected.version}).`,
+    );
+  }
 }

@@ -60,6 +60,7 @@ export function createCreatureInstance(params: {
   bondedRegion: RegionId;
   movesById: Readonly<Record<string, MoveDefinition>>;
   nickname?: string;
+  isRareVariant?: boolean;
 }): CreatureInstance {
   const level = Math.max(1, Math.min(MAX_CREATURE_LEVEL, Math.floor(params.level)));
   const computed = computeStatsForLevel(params.species, level);
@@ -67,6 +68,7 @@ export function createCreatureInstance(params: {
     uid: params.uid,
     speciesId: params.species.id,
     nickname: params.nickname,
+    ...(params.isRareVariant ? { isRareVariant: true } : {}),
     level,
     exp: expRequiredForLevel(level),
     currentHp: computed.maxHp,
