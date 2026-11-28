@@ -12,7 +12,7 @@ Trong mọi hộp thoại, bạn có thể bấm nút nghe để trình duyệt 
 
 ## 2. Điều khiển trên máy tính và thiết bị cảm ứng
 
-- Trên máy tính: Di chuyển bốn hướng bằng phím mũi tên hoặc `W`, `A`, `S`, `D`; tương tác với nhân vật, biển gỗ, dấu vết sinh cảnh và chuyển thoại bằng `Space` hoặc `Enter`; mở nhanh Bản đồ vùng trên thanh trạng thái hoặc mở Sổ Thực Địa bằng phím `J`; đóng cửa sổ bằng `Escape`. Toàn bộ phím tắt đều đổi được trong thẻ Cài đặt.
+- Trên máy tính: Di chuyển bốn hướng bằng phím mũi tên hoặc `W`, `A`, `S`, `D`; tương tác với nhân vật, biển gỗ, dấu vết sinh cảnh và chuyển thoại bằng `Space` hoặc `Enter`; chọn nhanh bốn chiêu thức trong trận đấu bằng phím số `1`, `2`, `3`, `4`; mở nhanh Bản đồ vùng bằng phím `M` hoặc mở Sổ Thực Địa bằng phím `J`; đóng cửa sổ bằng `Escape`. Toàn bộ phím tắt cơ bản đều đổi được trong thẻ Cài đặt.
 - Trên điện thoại và máy tính bảng: Khung bản đồ tự động phủ kín màn hình cả chiều dọc lẫn chiều ngang mà không méo điểm ảnh. Cụm phím chữ thập bên trái hỗ trợ cả chạm từng bước lẫn nhấn giữ để đi bộ liên tục; hai nút hành động bên phải cùng thanh mục tiêu hai dòng phía trên giúp bạn chơi trọn vẹn bằng một hoặc hai ngón cái.
 
 ## 3. Đồng hành đi theo sau, chiến đấu chiến thuật và thu phục

@@ -180,7 +180,20 @@ export function awardCreatureExperience(params: {
           if (creature.moves.length < MAX_ACTIVE_MOVES) {
             creature.moves.push(newSlot);
           } else {
-            creature.moves[0] = newSlot;
+            // Protect high-power signature moves (power >= 75) in slot 0 from being overwritten by weaker/support moves
+            let targetSlot = 0;
+            const slot0Def = movesById[creature.moves[0]?.moveId ?? ''];
+            if (slot0Def && slot0Def.power >= 75) {
+              const weakerIdx = creature.moves.findIndex((s, idx) => {
+                if (idx === 0) return false;
+                const d = movesById[s.moveId];
+                return !d || d.power < 75;
+              });
+              if (weakerIdx > 0) {
+                targetSlot = weakerIdx;
+              }
+            }
+            creature.moves[targetSlot] = newSlot;
           }
           learnedMoveIds.push(moveDef.id);
         }

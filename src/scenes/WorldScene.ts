@@ -81,6 +81,7 @@ export class WorldScene extends Phaser.Scene {
   private battleBgSprite!: Phaser.GameObjects.Sprite;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private companionShadow!: Phaser.GameObjects.Ellipse;
+  private companionGleamRing!: Phaser.GameObjects.Arc;
   private companionSprite!: Phaser.GameObjects.Sprite;
   private playerSprite!: Phaser.GameObjects.Sprite;
   private timeOverlay!: Phaser.GameObjects.Rectangle;
@@ -96,7 +97,7 @@ export class WorldScene extends Phaser.Scene {
     vy: number;
   }> = [];
   private mistBands: Array<{
-    rect: Phaser.GameObjects.Rectangle;
+    cloud: Phaser.GameObjects.Ellipse;
     vx: number;
   }> = [];
   private propSprites = new Map<string, Phaser.GameObjects.Sprite>();
@@ -184,6 +185,11 @@ export class WorldScene extends Phaser.Scene {
     this.shadowLayer = this.add.container(0, 0).setDepth(3);
     this.objectLayer = this.add.container(0, 0).setDepth(5);
     this.companionShadow = this.add.ellipse(8, 14, 10, 4, 0x0e1410, 0.28).setDepth(8);
+    this.companionGleamRing = this.add
+      .circle(8, 8, 9.5, 0xffe880, 0.34)
+      .setStrokeStyle(1, 0xfff8c9, 0.75)
+      .setDepth(8.5)
+      .setVisible(false);
     this.companionSprite = this.add
       .sprite(0, 0, 'companions', 0)
       .setOrigin(0, 0)
@@ -265,9 +271,9 @@ export class WorldScene extends Phaser.Scene {
         if (m.dot.y > maxH) m.dot.y -= maxH;
       }
       for (const band of this.mistBands) {
-        band.rect.x += band.vx * dt;
-        if (band.rect.x > maxW + 120) {
-          band.rect.x = -140;
+        band.cloud.x += band.vx * dt;
+        if (band.cloud.x > maxW + 140) {
+          band.cloud.x = -160;
         }
       }
     }
@@ -422,6 +428,33 @@ export class WorldScene extends Phaser.Scene {
     return 80 + mask;
   }
 
+  private pickCanyonRoadFrame(map: RegionMapDefinition, x: number, y: number): number {
+    const isRoadLike = (tx: number, ty: number): boolean => {
+      if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return true;
+      const k = getTileAt(map, tx, ty);
+      return k === 'path' || k === 'bridge' || k === 'stone_floor' || k === 'portal';
+    };
+    const mask =
+      (isRoadLike(x, y - 1) ? 1 : 0) |
+      (isRoadLike(x + 1, y) ? 2 : 0) |
+      (isRoadLike(x, y + 1) ? 4 : 0) |
+      (isRoadLike(x - 1, y) ? 8 : 0);
+    return 128 + mask;
+  }
+
+  private pickBoardwalkFrame(map: RegionMapDefinition, x: number, y: number): number {
+    const isWalk = (tx: number, ty: number): boolean => {
+      if (tx < 0 || ty < 0 || tx >= map.width || ty >= map.height) return false;
+      const k = getTileAt(map, tx, ty);
+      return k === 'path' || k === 'bridge' || k === 'stone_floor' || k === 'portal';
+    };
+    const ns = isWalk(x, y - 1) || isWalk(x, y + 1);
+    const ew = isWalk(x - 1, y) || isWalk(x + 1, y);
+    if (ns && ew) return 120;
+    if (ns) return 119;
+    return 112;
+  }
+
   private pickTreeFramesForBiome(
     regionId: RegionId,
     x: number,
@@ -474,7 +507,7 @@ export class WorldScene extends Phaser.Scene {
           const grassFrame =
             regionId === 'terracotta_ridge'
               ? 27
-              : regionId === 'reedwater_fen' && (x + y) % 3 === 0
+              : regionId === 'reedwater_fen' && (x * 19 + y * 7) % 5 === 0
                 ? 113
                 : (x + y) % 4 === 0
                   ? 1
@@ -497,9 +530,9 @@ export class WorldScene extends Phaser.Scene {
         } else if (kind === 'path') {
           const pFrame =
             regionId === 'terracotta_ridge'
-              ? 28
+              ? this.pickCanyonRoadFrame(map, x, y)
               : regionId === 'reedwater_fen'
-                ? 112
+                ? this.pickBoardwalkFrame(map, x, y)
                 : this.pickRoadFrame(map, x, y);
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', pFrame).setOrigin(0, 0));
         } else if (kind === 'bridge') {
@@ -521,7 +554,22 @@ export class WorldScene extends Phaser.Scene {
           this.groundLayer.add(rm);
           this.animatedTiles.push({ sprite: rm, frames: [30, 31] });
         } else if (kind === 'wall') {
-          this.groundLayer.add(this.add.sprite(px, py, 'tileset', 32).setOrigin(0, 0));
+          if (regionId === 'terracotta_ridge') {
+            this.groundLayer.add(this.add.sprite(px, py, 'tileset', 32).setOrigin(0, 0));
+          } else {
+            const wallUnder = regionId === 'starfall_sanctuary' ? 78 : 0;
+            this.groundLayer.add(this.add.sprite(px, py, 'tileset', wallUnder).setOrigin(0, 0));
+            const [topF, botF] = this.pickTreeFramesForBiome(regionId, x, y);
+            if (y === 0) {
+              this.objectLayer.add(this.add.sprite(px, py, 'tileset', topF).setOrigin(0, 0));
+            } else {
+              this.shadowLayer.add(this.add.ellipse(px + 9, py + 14, 15, 6, 0x0c140e, 0.25));
+              this.objectLayer.add(this.add.sprite(px, py, 'tileset', botF).setOrigin(0, 0));
+              this.canopyLayer.add(
+                this.add.sprite(px, (y - 1) * 16, 'tileset', topF).setOrigin(0, 0),
+              );
+            }
+          }
         } else if (kind === 'cliff') {
           const aboveIsCliff = y > 0 && getTileAt(map, x, y - 1) === 'cliff';
           this.groundLayer.add(
@@ -548,9 +596,9 @@ export class WorldScene extends Phaser.Scene {
         } else if (kind === 'portal') {
           const pUnder =
             regionId === 'terracotta_ridge'
-              ? 28
+              ? this.pickCanyonRoadFrame(map, x, y)
               : regionId === 'reedwater_fen'
-                ? 112
+                ? this.pickBoardwalkFrame(map, x, y)
                 : this.pickRoadFrame(map, x, y);
           this.groundLayer.add(this.add.sprite(px, py, 'tileset', pUnder).setOrigin(0, 0));
           this.objectLayer.add(this.add.sprite(px, py, 'tileset', 73).setOrigin(0, 0));
@@ -666,7 +714,7 @@ export class WorldScene extends Phaser.Scene {
     // Whisperwood: golden dappled sunbeams piercing the layered canopy!
     if (regionId === 'whisperwood') {
       const g = this.add.graphics();
-      g.fillStyle(0xfff4b2, 0.09);
+      g.fillStyle(0xfff4b2, 0.065);
       for (const [bx, by] of [
         [108, 44],
         [248, 72],
@@ -687,16 +735,16 @@ export class WorldScene extends Phaser.Scene {
       this.ambientLayer.add(g);
     }
 
-    // Reedwater Fen: drifting translucent silver marsh mist bands!
+    // Reedwater Fen: drifting soft translucent marsh mist clouds!
     if (regionId === 'reedwater_fen') {
       for (let i = 0; i < 6; i++) {
-        const mw = 160 + (i % 3) * 48;
-        const mh = 22 + (i % 2) * 10;
-        const mx = ((i * 97) % worldW) - 40;
-        const my = 38 + i * 56;
-        const rect = this.add.rectangle(mx, my, mw, mh, 0xd8f5f2, 0.14).setOrigin(0, 0);
-        this.ambientLayer.add(rect);
-        this.mistBands.push({ rect, vx: 6 + (i % 3) * 2.5 });
+        const mw = 172 + (i % 3) * 52;
+        const mh = 26 + (i % 2) * 12;
+        const mx = ((i * 97) % worldW) + 40;
+        const my = 48 + i * 54;
+        const cloud = this.add.ellipse(mx, my, mw, mh, 0xdff7f4, 0.11);
+        this.ambientLayer.add(cloud);
+        this.mistBands.push({ cloud, vx: 6 + (i % 3) * 2.5 });
       }
     }
 
@@ -841,6 +889,12 @@ export class WorldScene extends Phaser.Scene {
           this.canopyLayer.add(this.add.sprite(px, py - 16, 'tileset', 75).setOrigin(0, 0));
         }
         break;
+      case 'tree_cluster':
+        this.shadowLayer.add(this.add.ellipse(px + 16, py + 28, 30, 10, 0x0c140e, 0.28));
+        this.canopyLayer.add(
+          this.add.sprite(px, py, 'structures', 'tree_cluster_2x2').setOrigin(0, 0),
+        );
+        break;
     }
   }
 
@@ -856,6 +910,7 @@ export class WorldScene extends Phaser.Scene {
     if (!shouldShow || !lead) {
       this.companionSprite.setVisible(false);
       this.companionShadow.setVisible(false);
+      this.companionGleamRing.setVisible(false);
       return;
     }
 
@@ -867,8 +922,10 @@ export class WorldScene extends Phaser.Scene {
     this.companionShadow.setVisible(true);
     if (lead.isRareVariant) {
       this.companionSprite.setTint(0xfff4a8);
+      this.companionGleamRing.setVisible(true);
     } else {
       this.companionSprite.clearTint();
+      this.companionGleamRing.setVisible(false);
     }
 
     const fx = this.controller.followerPos.x * 16;
@@ -881,8 +938,13 @@ export class WorldScene extends Phaser.Scene {
     ) {
       this.companionSprite.setPosition(fx, fy);
       this.companionShadow.setPosition(fx + 8, fy + 14);
+      this.companionGleamRing.setPosition(fx + 8, fy + 8);
     } else {
-      this.tweens.killTweensOf([this.companionSprite, this.companionShadow]);
+      this.tweens.killTweensOf([
+        this.companionSprite,
+        this.companionShadow,
+        this.companionGleamRing,
+      ]);
       this.tweens.add({
         targets: this.companionSprite,
         x: fx,
@@ -894,6 +956,13 @@ export class WorldScene extends Phaser.Scene {
         targets: this.companionShadow,
         x: fx + 8,
         y: fy + 14,
+        duration: 96,
+        ease: 'Linear',
+      });
+      this.tweens.add({
+        targets: this.companionGleamRing,
+        x: fx + 8,
+        y: fy + 8,
         duration: 96,
         ease: 'Linear',
       });

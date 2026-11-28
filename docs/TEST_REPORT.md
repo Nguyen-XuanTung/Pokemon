@@ -18,7 +18,7 @@
 | Kiểm tra quy tắc mã nguồn và tài liệu | `npm run lint` | Đạt: 0 lỗi văn phong trên 9 tệp Markdown và 49 tệp TypeScript, 0 tệp trùng lặp, 0 khóa bí mật hay điểm cuối theo dõi |
 | Kiểm tra kiểu tĩnh nghiêm ngặt | `npm run typecheck` | Đạt: 0 lỗi trên toàn bộ mã nguồn, kịch bản và kiểm thử |
 | Kiểm thử đơn vị, tích hợp và phá đảo 3 starter | `npm run test:coverage` | Đạt: `5/5` tệp (`26/26` bài kiểm thử), bao gồm kiểm thử tiến trình có dữ liệu mẫu và 3 lượt phá đảo tự nhiên 100% thao tác người chơi cho cả `Mosskit`, `Kindlet` và `Ripplefin` |
-| Đóng gói sản phẩm và băm bộ nhớ đệm | `npm run build` | Đạt: `index.html` (`0,48 kB` gzip), `index.css` (`3,60 kB` gzip), gói ứng dụng và dữ liệu (`151,51 kB` gzip), gói Phaser tách riêng (`318,37 kB` gzip), chèn 14 đường dẫn sắp xếp xác định vào `dist/sw.js` với mã băm nội dung `SHA-256` |
+| Đóng gói sản phẩm và băm bộ nhớ đệm | `npm run build` | Đạt: `index.html` (`0,48 kB` gzip), `index.css` (`3,72 kB` gzip), gói ứng dụng và dữ liệu (`152,38 kB` gzip), gói Phaser tách riêng (`318,37 kB` gzip), chèn 14 đường dẫn sắp xếp xác định vào `dist/sw.js` với mã băm nội dung `SHA-256` |
 | Kiểm thử trình duyệt đầu cuối và phá đảo thật | `npm run test:e2e` | Đạt: vượt qua toàn bộ các bài kiểm thử trên máy tính và di động dọc ngang, nhấn giữ phím chữ thập để đi bộ, nâng cấp trình phục vụ ngoại tuyến từ bản A sang bản B, đường dẫn `/Pokemon/` và lượt chơi trọn vẹn từ màn hình mở đầu tới đoạn kết |
 
 ## 3. Báo cáo độ phủ mã nguồn theo đúng phạm vi được đo
@@ -27,11 +27,11 @@ Cấu hình `vitest.config.ts` đo độ phủ V8 trực tiếp trên hai thư m
 
 Số liệu thực tế trên phạm vi được đo (`src/domain/` và `src/game/controller.ts`):
 
-- Tổng phạm vi được đo: `79,34%` câu lệnh, `83,22%` dòng mã, `82,69%` hàm, `73,77%` nhánh điều kiện.
-- Tầng miền nghiệp vụ thuần (`src/domain/`): `83,48%` câu lệnh, `88,59%` dòng mã, `92,48%` hàm, `76,61%` nhánh điều kiện:
+- Tổng phạm vi được đo: `79,44%` câu lệnh, `83,31%` dòng mã, `82,77%` hàm, `73,83%` nhánh điều kiện.
+- Tầng miền nghiệp vụ thuần (`src/domain/`): `83,59%` câu lệnh, `88,66%` dòng mã, `92,53%` hàm, `76,67%` nhánh điều kiện:
   - `src/domain/elements.ts`: `100%` câu lệnh, `100%` dòng mã, `100%` nhánh.
   - `src/domain/capture.ts`: `95,45%` câu lệnh, `100%` dòng mã, `91,66%` nhánh.
-  - `src/domain/creatures.ts`: `94,73%` câu lệnh, `97,26%` dòng mã, `100%` hàm.
+  - `src/domain/creatures.ts`: `95,34%` câu lệnh, `97,56%` dòng mã, `100%` hàm.
   - `src/domain/quests.ts`: `93,18%` câu lệnh, `93,18%` dòng mã, `100%` hàm.
   - `src/domain/battle.ts`: `90,33%` câu lệnh, `92,17%` dòng mã, `83,56%` nhánh, `100%` hàm.
   - `src/domain/learning.ts`: `88,47%` câu lệnh, `90,97%` dòng mã (bao phủ phân tách điều kiện đủ hạn `isWordDueForReencounter` với điểm ưu tiên `computeWordReencounterPriority`, tra từ bỏ túi ngoại tuyến và xoay vòng câu ví dụ độc lập).
@@ -39,15 +39,15 @@ Số liệu thực tế trên phạm vi được đo (`src/domain/` và `src/gam
   - `src/domain/save.ts`: `74,02%` câu lệnh, `84,75%` dòng mã, `94,44%` hàm (bao phủ chuyển đổi bản lưu phiên bản `1` sang `2`, dời tọa độ khỏi ô mới bị chặn, chống ghi đè đa thẻ và bảo toàn bản sao lưu khi đầy bộ nhớ).
   - `src/domain/world.ts`: `80,14%` câu lệnh, `82,11%` dòng mã, `93,75%` hàm.
   - `src/domain/rng.ts`: `71,42%` câu lệnh, `73,91%` dòng mã, `100%` hàm.
-- Bộ điều phối trò chơi (`src/game/controller.ts`): `68,92%` câu lệnh, `70,50%` dòng mã, `65,33%` hàm, `63,47%` nhánh điều kiện.
+- Bộ điều phối trò chơi (`src/game/controller.ts`): `68,97%` câu lệnh, `70,55%` dòng mã, `65,33%` hàm, `63,47%` nhánh điều kiện.
 
 ## 4. Số liệu hiệu năng và xác minh các phát hiện kiểm toán
 
 Số liệu đo tự động trên bản đóng gói chính thức (`test-results/benchmark-metrics.json`):
 
-- Thời gian tải trang hoàn tất điều hướng: `440 ms`.
-- Thời gian khởi tạo ứng dụng và gắn kết khung vẽ Phaser: `22 ms`.
-- Tốc độ khung hình ghi nhận trên Chromium không giao diện khi chạy song song hai tiến trình kiểm thử: `43 FPS` (trên cửa sổ trình duyệt tương tác đơn lẻ đạt ổn định từ `55` đến `60 FPS`).
+- Thời gian tải trang hoàn tất điều hướng: `2355 ms`.
+- Thời gian khởi tạo ứng dụng và gắn kết khung vẽ Phaser: `11 ms`.
+- Tốc độ khung hình ghi nhận trên Chromium không giao diện khi chạy song song hai tiến trình kiểm thử: `56 FPS` (trên cửa sổ trình duyệt tương tác đơn lẻ đạt ổn định từ `58` đến `60 FPS`).
 - Số lỗi bảng điều khiển (`console.error`, `pageerror`) và yêu cầu tài nguyên thất bại: `0` lỗi.
 
 Kết quả xác minh trực tiếp các hạng mục kiểm toán:
@@ -66,6 +66,7 @@ Kết quả xác minh trực tiếp các hạng mục kiểm toán:
 1. Lỗi tọa độ cắt ô vách đá và ván cầu đầm lầy trong `scripts/generate-assets.ts`: Khi mở kiểm tra trực tiếp `docs/screenshots/12-reedwater-fen.png` và `docs/screenshots/13-terracotta-ridge.png`, nhóm phát hiện ô vách đá cắt nhầm vùng trong suốt khiến vách núi hiện nền tối, còn ô đường đầm lầy cắt nhầm chân đá thay vì gỗ. Đã thay bằng ô vách đá sa thạch phân tầng có gờ cát nắng và ô ván gỗ đóng đinh kín khung từ bộ Sharm CC-BY, đồng thời bổ sung ô đá lát phủ rêu cho `Whisperwood Glen` và chụp lại xác nhận.
 2. Lỗi vị trí hiển thị bạn đồng hành sau khi cả đội kiệt sức về trại (`src/game/controller.ts`, `src/scenes/WorldScene.ts`): Khi hồi sức khẩn cấp từ vùng khác về `Mosslight Camp`, biến `followerPos` còn giữ tọa độ vùng cũ trong bước đầu tiên. Đã đặt lại `followerPos` ngay sau lưng điểm hồi sinh và giới hạn khoảng cách hiển thị tối đa hai ô.
 3. Lỗi giữ nguyên thẻ phụ của trận trước khi bước vào trận mới (`src/ui/gameUi.ts`): Sau khi mở thẻ rút lui ở trận hoang dã, bước vào trận thủ lĩnh kế tiếp vẫn mở sẵn thẻ rút lui thay vì thẻ chiêu thức. Đã bổ sung kiểm tra chuyển trạng thái vào trận để luôn mở mặc định thẻ `Moves`.
+4. Rà soát đợt hai về khớp chân sprite khung hình động, đường mòn và bố cục bảng lệnh chiến đấu (`scripts/generate-assets.ts`, `src/scenes/WorldScene.ts`, `src/domain/creatures.ts`, `src/ui/battleView.ts`): Khi soi phóng đại trực tiếp `creatures.png`, nhóm phát hiện một số loài ở nhịp thở thứ hai có bàn chân tách rời thân và một số loài côn trùng hơi tròn đơn điệu; đồng thời đường mòn ở `Terracotta Ridge` và viền bản đồ còn vuông góc. Nhóm đã vẽ lại toàn bộ 30 loài đổ bóng 4 sắc độ có chân liền thân bám đất ở cả hai khung hình, thiết kế riêng 30 hình dáng đồng hành `16x16` trong `companions.png`, thêm bộ tự nối đường đất đỏ 16 trạng thái và nút giao ván gỗ đầm lầy, thay tường viền bằng rìa rừng nhiều tầng, bảo vệ chiêu chủ lực bậc cuối ở ô 0 khi lên cấp cao và chuyển bảng lệnh chiến đấu sang bố cục hai cột chuẩn nhập vai kèm thanh kinh nghiệm.
 
 ## 6. Đánh giá trải nghiệm chơi thử thực tế và giới hạn trung thực
 
@@ -78,7 +79,7 @@ Giới hạn công bố trung thực: Toàn bộ đánh giá dưới đây dựa
 
 ## 7. Danh mục 17 ảnh chụp màn hình và video gameplay thực tế
 
-Video ghi hình thực tế dài `151` giây (`30,1 MB`, độ phân giải `960x540` khung tỷ lệ `16:9` xuất trực tiếp từ phiên chơi Chromium thật):
+Video ghi hình thực tế dài `98,3` giây (`18,6 MB`, độ phân giải `960x540` khung tỷ lệ `16:9` xuất trực tiếp từ phiên chơi Chromium thật):
 
 - `docs/videos/lingowild-gameplay.webm`: Quay liên tục từ màn hình mở đầu, chọn `Mosskit`, chạm tra từ lõi và từ bỏ túi, dạo quanh làng `Mosslight Camp` cùng bạn đồng hành đi theo sau, mua vật phẩm tại quầy chợ, đọc điểm ngắm cảnh có lồng ghép lại từ vừa lưu, vào `Whisperwood Glen` khảo sát dấu vết sinh cảnh, đánh trận và thu phục sinh vật hoang dã trên sân đấu rừng, xem thử lửa trại và duyệt qua các thẻ của Sổ Thực Địa.
 

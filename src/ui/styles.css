@@ -548,6 +548,21 @@ select {
   background: var(--terracotta);
 }
 
+.lw-exp-track {
+  width: 100%;
+  height: 4px;
+  background: #d8ccb2;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.lw-exp-fill {
+  height: 100%;
+  background: var(--pond-blue);
+  transition: width 0.2s ease-out;
+}
+
 .lw-plate-foot {
   display: flex;
   justify-content: space-between;
@@ -593,10 +608,41 @@ select {
   z-index: 30;
 }
 
+.lw-battle-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lw-battle-narrative-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.lw-battle-command-col {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 760px) {
+  .lw-battle-columns {
+    display: grid;
+    grid-template-columns: minmax(250px, 0.92fr) minmax(340px, 1.38fr);
+    gap: 12px;
+    align-items: start;
+  }
+
+  .lw-battle-narrative-col .lw-battle-log {
+    margin-bottom: 0;
+    min-height: 92px;
+  }
+}
+
 .lw-battle-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 6px;
   margin-bottom: 5px;
 }
 

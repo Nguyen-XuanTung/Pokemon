@@ -227,7 +227,8 @@ export type MapDecorKind =
   | 'lily_pad'
   | 'boulder'
   | 'stump'
-  | 'ruin_pillar';
+  | 'ruin_pillar'
+  | 'tree_cluster';
 
 export interface MapDecoration {
   readonly kind: MapDecorKind;

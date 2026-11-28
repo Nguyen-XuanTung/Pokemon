@@ -145,6 +145,31 @@ export class GameUiRenderer {
         return;
       }
 
+      if (
+        this.controller.activeBattle &&
+        this.controller.activeBattle.outcome === 'ongoing' &&
+        this.controller.activeModal === 'none' &&
+        this.battleTab === 'moves'
+      ) {
+        const moveIdx =
+          code === 'Digit1'
+            ? 0
+            : code === 'Digit2'
+              ? 1
+              : code === 'Digit3'
+                ? 2
+                : code === 'Digit4'
+                  ? 3
+                  : -1;
+        const activePlayer =
+          this.controller.activeBattle.playerParty[this.controller.activeBattle.activePlayerIndex];
+        if (moveIdx >= 0 && activePlayer && moveIdx < activePlayer.moves.length) {
+          ev.preventDefault();
+          this.controller.submitBattleAction({ kind: 'move', moveIndex: moveIdx });
+          return;
+        }
+      }
+
       if (code === km.interact || code === 'Enter') {
         if (this.controller.activeBattle && this.controller.activeBattle.outcome !== 'ongoing') {
           ev.preventDefault();

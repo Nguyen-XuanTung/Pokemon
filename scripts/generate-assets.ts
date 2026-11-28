@@ -375,10 +375,10 @@ const armmObjects = PixelSurface.fromPngFile(
 const INK = hexToRgba('#1b1917');
 const CREAM = hexToRgba('#f6eed9');
 
-// 1. Build Multi-Layer 16x16 Tileset Atlas (16 cols x 8 rows = 128 tiles) from Kenney CC0 + Sharm CC-BY + ArMM1998 CC0
+// 1. Build Multi-Layer 16x16 Tileset Atlas (16 cols x 9 rows = 144 tiles) from Kenney CC0 + Sharm CC-BY + ArMM1998 CC0
 function generateTilesetPng(): Buffer {
   const cols = 16;
-  const rows = 8;
+  const rows = 9;
   const out = new PixelSurface(cols * 16, rows * 16);
 
   const cell = (idx: number): [number, number] => [(idx % cols) * 16, Math.floor(idx / cols) * 16];
@@ -869,14 +869,21 @@ function generateTilesetPng(): Buffer {
       out.setPixel(bx + nx, by + 2, nail);
       out.setPixel(bx + nx, by + 13, nail);
     }
-    // 113: mossy wetland mud ground
+    // 113: seamless lush wetland clover-grass variant (no dark rectangular mud borders!)
+    putGrassBase(113, 1);
     const [mx, my] = cell(113);
-    const mudA = hexToRgba('#4a6946');
-    const mudB = hexToRgba('#3b5739');
-    const puddle = hexToRgba('#38778a');
-    out.fillRect(mx, my, 16, 16, mudA);
-    out.fillEllipse(mx + 5, my + 6, 3.5, 2, mudB);
-    out.fillEllipse(mx + 11, my + 12, 3, 1.8, puddle);
+    const clover = hexToRgba('#2d6b52');
+    const cloverHi = hexToRgba('#7fd9b8');
+    for (const [cxp, cyp] of [
+      [4, 5],
+      [11, 10],
+      [6, 12],
+    ] as const) {
+      out.setPixel(mx + cxp - 1, my + cyp, clover);
+      out.setPixel(mx + cxp + 1, my + cyp, clover);
+      out.setPixel(mx + cxp, my + cyp - 1, clover);
+      out.setPixel(mx + cxp, my + cyp, cloverHi);
+    }
     // 114: potted flowerbox (ArMM1998 col 26, row 20)
     const [fx, fy] = cell(114);
     out.blitFrom(armmOverworld, 26 * 16, 20 * 16, 16, 16, fx, fy);
@@ -891,6 +898,87 @@ function generateTilesetPng(): Buffer {
     out.blitFrom(armmOverworld, 19 * 16, 6 * 16, 16, 16, wf0X, wf0Y);
     const [wf1X, wf1Y] = cell(118);
     out.blitFrom(armmOverworld, 19 * 16, 7 * 16, 16, 16, wf1X, wf1Y);
+    // 119: North-South timber boardwalk planks (side rails on left & right!)
+    const [bvyX, bvyY] = cell(119);
+    for (let py = 0; py < 16; py++) {
+      for (let px = 0; px < 16; px++) {
+        const src = sharmBasic.getPixel(py, 2 * 16 + px);
+        out.setPixel(bvyX + px, bvyY + py, [
+          Math.round(src[0] * 0.96),
+          Math.round(src[1] * 0.9),
+          Math.round(src[2] * 0.82),
+          255,
+        ]);
+      }
+    }
+    out.fillRect(bvyX, bvyY, 1, 16, railTrim);
+    out.fillRect(bvyX + 15, bvyY, 1, 16, railTrim);
+    for (const ny of [2, 6, 10, 14]) {
+      out.setPixel(bvyX + 2, bvyY + ny, nail);
+      out.setPixel(bvyX + 13, bvyY + ny, nail);
+    }
+    // 120: Boardwalk corner/junction timber deck (connects N/S and E/W walkways cleanly!)
+    const [bjX, bjY] = cell(120);
+    out.blitFrom(sharmBasic, 1 * 16, 9 * 16, 16, 16, bjX, bjY, {
+      rMul: 1.05,
+      gMul: 0.96,
+      bMul: 0.86,
+    });
+    for (const [cpx, cpy] of [
+      [1, 1],
+      [13, 1],
+      [1, 13],
+      [13, 13],
+    ] as const) {
+      out.fillRect(bjX + cpx, bjY + cpy, 2, 2, railTrim);
+    }
+  }
+
+  // Row 8 (128..143): 16-state NESW Bitmask Organic Canyon Ochre Trail over Warm Sandstone (tile 27)
+  const ochreMain = hexToRgba('#c76d3e');
+  const ochreHi = hexToRgba('#de8654');
+  const ochreEdge = hexToRgba('#8c4522');
+  const [sandSrcX, sandSrcY] = cell(27);
+  for (let mask = 0; mask < 16; mask++) {
+    const idx = 128 + mask;
+    const [dx, dy] = cell(idx);
+    out.blitFrom(out, sandSrcX, sandSrcY, 16, 16, dx, dy);
+    const hasN = (mask & 1) !== 0;
+    const hasE = (mask & 2) !== 0;
+    const hasS = (mask & 4) !== 0;
+    const hasW = (mask & 8) !== 0;
+
+    for (let py = 0; py < 16; py++) {
+      for (let px = 0; px < 16; px++) {
+        const cx = px - 7.5;
+        const cy = py - 7.5;
+        let inPath = Math.hypot(cx, cy) <= 5.8;
+        if (hasN && py <= 8 && Math.abs(cx) <= 5.6) inPath = true;
+        if (hasS && py >= 7 && Math.abs(cx) <= 5.6) inPath = true;
+        if (hasW && px <= 8 && Math.abs(cy) <= 5.6) inPath = true;
+        if (hasE && px >= 7 && Math.abs(cy) <= 5.6) inPath = true;
+        if (hasN && hasW && px <= 8 && py <= 8) inPath = true;
+        if (hasN && hasE && px >= 7 && py <= 8) inPath = true;
+        if (hasS && hasW && px <= 8 && py >= 7) inPath = true;
+        if (hasS && hasE && px >= 7 && py >= 7) inPath = true;
+        if (!inPath) continue;
+
+        const nearSand =
+          (!hasN && py <= 3) ||
+          (!hasS && py >= 12) ||
+          (!hasW && px <= 3) ||
+          (!hasE && px >= 12);
+        if (nearSand && ((px + py) & 1) === 0) {
+          out.setPixel(dx + px, dy + py, ochreEdge);
+        } else if ((px * 5 + py * 3 + mask) % 11 === 0) {
+          out.setPixel(dx + px, dy + py, ochreHi);
+        } else if ((px * 7 + py * 13 + mask) % 19 === 0) {
+          out.setPixel(dx + px, dy + py, ochreEdge);
+        } else {
+          out.setPixel(dx + px, dy + py, ochreMain);
+        }
+      }
+    }
   }
 
   return out.toPngBuffer();
@@ -1168,14 +1256,41 @@ function generateBattleBackgroundsPng(): Buffer {
     hexToRgba('#54668c'),
     hexToRgba('#9ec4eb'),
   );
-  // Frame horizon with ArMM1998 carved sanctuary guardian statues (clear of enemy pad at x=272!)
-  for (const pxCol of [20, 92, 184, 336]) {
+  // Frame horizon with Sanctuary Archway + flanking guardian statues + glowing constellation lines & rune rings!
+  const constellationPts: ReadonlyArray<[number, number]> = [
+    [62, y4 + 26],
+    [98, y4 + 18],
+    [136, y4 + 30],
+    [172, y4 + 22],
+    [258, y4 + 20],
+    [296, y4 + 32],
+    [332, y4 + 18],
+  ];
+  for (let ci = 0; ci < constellationPts.length - 1; ci++) {
+    if (ci === 3) continue;
+    const [x0, cy0] = constellationPts[ci]!;
+    const [x1, cy1] = constellationPts[ci + 1]!;
+    out.drawLine(x0, cy0, x1, cy1, 1, hexToRgba('#bfe3ff', 95));
+  }
+  out.blitScaled(armmOverworld, 4 * 16, 31 * 16, 64, 64, 134, y4 + 66, 68, 64, {
+    rMul: 0.84,
+    gMul: 0.9,
+    bMul: 1.08,
+  });
+  for (const pxCol of [22, 332]) {
     out.blitScaled(armmOverworld, 8 * 16, 31 * 16, 32, 48, pxCol, y4 + 76, 32, 52, {
       rMul: 0.85,
       gMul: 0.9,
       bMul: 1.08,
     });
   }
+  // Subtle glowing starlight inner ring on Sanctuary combatant pads
+  const ex4 = Math.round(W * 0.71);
+  const ey4 = y4 + Math.round(H * 0.56);
+  const px4 = Math.round(W * 0.28);
+  const py4 = y4 + Math.round(H * 0.79);
+  out.fillEllipse(ex4, ey4 - 1, 28, 5.5, hexToRgba('#8cd8ff', 65));
+  out.fillEllipse(px4, py4 - 1, 34, 6.5, hexToRgba('#8cd8ff', 65));
 
   return out.toPngBuffer();
 }
@@ -1312,8 +1427,59 @@ function generateCreaturesAndCompanionsPng(): { creatures: Buffer; companions: B
     },
   };
 
+  const fillCelBody = (
+    cx: number,
+    cy: number,
+    rx: number,
+    ry: number,
+    hi: Rgba,
+    mid: Rgba,
+    shade: Rgba,
+    deep?: Rgba,
+  ) => {
+    const minX = Math.floor(cx - rx - 1);
+    const maxX = Math.ceil(cx + rx + 1);
+    const minY = Math.floor(cy - ry - 1);
+    const maxY = Math.ceil(cy + ry + 1);
+    for (let py = minY; py <= maxY; py++) {
+      for (let px = minX; px <= maxX; px++) {
+        const nx = (px + 0.5 - cx) / Math.max(0.5, rx);
+        const ny = (py + 0.5 - cy) / Math.max(0.5, ry);
+        const r2 = nx * nx + ny * ny;
+        if (r2 > 1) continue;
+        const lightDot = nx * 0.52 + ny * 0.82;
+        if (deep && lightDot > 0.68 && r2 > 0.55) {
+          s.blendPixel(px, py, deep);
+        } else if (lightDot > 0.28) {
+          s.blendPixel(px, py, shade);
+        } else if (lightDot < -0.34 && r2 < 0.82) {
+          s.blendPixel(px, py, hi);
+        } else {
+          s.blendPixel(px, py, mid);
+        }
+      }
+    }
+  };
+
+  const drawPawLeg = (
+    hipX: number,
+    hipY: number,
+    footX: number,
+    footY: number,
+    thickness: number,
+    midCol: Rgba,
+    shadeCol: Rgba,
+    clawCol: Rgba = CREAM,
+  ) => {
+    s.drawLine(hipX, hipY, footX, footY - 1, thickness, shadeCol);
+    s.drawLine(hipX - 0.5, hipY, footX - 0.5, footY - 2, Math.max(1.4, thickness - 1), midCol);
+    s.fillEllipse(footX - 0.5, footY, thickness * 0.72, 1.8, midCol, shadeCol);
+    s.setPixel(Math.round(footX - thickness * 0.55), Math.round(footY), clawCol);
+  };
+
   const drawEye = (ex: number, ey: number, iris: Rgba = INK) => {
-    s.fillRect(ex, ey, 3, 3, iris);
+    s.fillRect(ex, ey, 2, 3, iris);
+    s.fillRect(ex + 2, ey + 1, 1, 2, iris);
     s.setPixel(ex, ey, CREAM);
   };
 
@@ -1325,262 +1491,433 @@ function generateCreaturesAndCompanionsPng(): { creatures: Buffer; companions: B
       const idx = i * 2 + frame;
       const ox = (idx % cols) * size;
       const oy = Math.floor(idx / cols) * size;
-      const bob = frame === 1 ? -2 : 0;
+      const bob = frame === 1 ? -1 : 0;
+      const stride = frame === 1 ? 1 : 0;
       const wingLift = frame === 1 ? -3 : 1;
-      const sc = sp.stage === 1 ? 0.84 : sp.stage === 2 ? 1.0 : 1.16;
+      const sc = sp.stage === 1 ? 0.85 : sp.stage === 2 ? 1.0 : 1.15;
 
       const cx = ox + 24;
-      const cy = oy + 28 + bob;
+      const cy = oy + 27 + bob;
+      const groundY = oy + 41;
 
       // Grounded pixel contact shadow
-      s.fillEllipse(ox + 24, oy + 42, Math.round(12 * sc), 3.2, hexToRgba('#141c16', 120));
+      s.fillEllipse(ox + 24, oy + 42, Math.round(12.5 * sc), 3.2, hexToRgba('#141c16', 120));
 
       if (sp.dexNumber <= 3) {
+        // #1-3 Mosskit -> Briarpaw -> Verdantag (Fern Lynx / Woodland Stag-Lynx)
         const rx = Math.round(9.5 * sc);
-        const ry = Math.round(7.5 * sc);
-        s.fillEllipse(cx + rx + 2, cy - 3 - frame, 6 * sc, 3.5 * sc, p.mid, p.shade);
-        s.fillEllipse(cx + rx + 4, cy - 4 - frame, 3 * sc, 2 * sc, p.hi);
-        // Leaf vein detail on tail
-        s.drawLine(cx + rx - 1, cy - 2 - frame, cx + rx + 5, cy - 4 - frame, 1.2, p.glow);
-        s.fillRect(cx - rx + 3, oy + 34, 4, 8, p.shade);
-        s.fillRect(cx + rx - 6, oy + 34, 4, 8, p.shade);
-        s.fillRect(cx - rx + 5, oy + 35, 4, 8, p.mid);
-        s.fillEllipse(cx + 1, cy + 1, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx - 3, cy + 1, rx * 0.55, ry * 0.72, p.glow);
-        // Forehead leaf crest & stripe markings
+        const ry = Math.round(7.2 * sc);
+        // Curled leaf blade tail
+        const tailLift = frame === 1 ? -2 : 0;
+        fillCelBody(cx + rx + 3, cy - 3 + tailLift, 6.5 * sc, 3.6 * sc, p.hi, p.mid, p.shade, p.deep);
+        s.drawLine(cx + rx - 1, cy - 2 + tailLift, cx + rx + 6, cy - 4 + tailLift, 1.2, p.glow);
+        // Connected feline back & front paws
+        drawPawLeg(cx + rx - 4, cy + 3, cx + rx - 3 + stride, groundY, 3.4, p.shade, p.deep, p.accent);
+        drawPawLeg(cx - rx + 5, cy + 3, cx - rx + 3 - stride, groundY, 3.4, p.shade, p.deep, p.accent);
+        drawPawLeg(cx + 3, cy + 4, cx + 3 - stride, groundY, 3.6, p.mid, p.shade, p.glow);
+        drawPawLeg(cx - 4, cy + 4, cx - 5 + stride, groundY, 3.6, p.mid, p.shade, p.glow);
+        // Cel-shaded torso + leafy chest ruff
+        fillCelBody(cx + 1, cy + 1, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx - 3, cy + 2, rx * 0.54, ry * 0.68, CREAM, p.glow, p.hi);
         s.fillRect(cx + 2, cy - 3, 4, 1, p.deep);
-        s.fillRect(cx + 3, cy - 1, 4, 1, p.deep);
+        s.fillRect(cx + 4, cy - 1, 4, 1, p.deep);
         const hx = cx - Math.round(5 * sc);
-        const hy = cy - Math.round(7 * sc);
-        s.drawLine(hx - 5, hy - 3, hx - 9, hy - 10, 3, p.shade);
-        s.drawLine(hx + 4, hy - 3, hx + 8, hy - 10, 3, p.shade);
-        s.setPixel(hx - 8, hy - 9, p.accent);
-        s.setPixel(hx + 7, hy - 9, p.accent);
-        if (sp.stage >= 2) {
-          // Cheek whisker tufts
-          s.drawLine(hx - 6, hy + 1, hx - 10, hy + 2, 2, p.glow);
-        }
+        const hy = cy - Math.round(6.8 * sc);
+        // Pointed lynx ears with golden tips
+        s.drawLine(hx - 4, hy - 3, hx - 9, hy - 10, 3.2, p.shade);
+        s.drawLine(hx + 3, hy - 3, hx + 8, hy - 10, 3.2, p.mid);
+        s.fillRect(hx - 9, hy - 10, 2, 2, p.accent);
+        s.fillRect(hx + 7, hy - 10, 2, 2, p.accent);
         if (sp.stage === 3) {
-          s.drawLine(hx - 2, hy - 6, hx - 4, hy - 14, 2, p.accent);
-          s.drawLine(hx + 2, hy - 6, hx + 5, hy - 14, 2, p.accent);
+          s.drawLine(hx - 2, hy - 5, hx - 4, hy - 14, 2, p.accent);
+          s.drawLine(hx - 4, hy - 11, hx - 7, hy - 12, 1.5, p.glow);
+          s.drawLine(hx + 2, hy - 5, hx + 5, hy - 14, 2, p.accent);
+          s.drawLine(hx + 4, hy - 11, hx + 7, hy - 12, 1.5, p.glow);
         }
-        s.fillEllipse(hx, hy, 7 * sc, 6 * sc, p.mid, p.shade);
-        s.fillEllipse(hx - 1, hy - 2, 4.5 * sc, 2.5 * sc, p.hi);
+        fillCelBody(hx, hy, 6.8 * sc, 5.8 * sc, p.hi, p.mid, p.shade, p.deep);
+        if (sp.stage >= 2) {
+          s.drawLine(hx - 5, hy + 1, hx - 10, hy + 2, 2.2, p.glow);
+          s.drawLine(hx + 5, hy + 1, hx + 9, hy + 2, 2.2, p.glow);
+        }
         drawEye(hx - 5, hy - 1);
         drawEye(hx + 1, hy - 1);
-        s.setPixel(hx - 2, hy + 2, p.accent);
+        s.fillRect(hx - 2, hy + 2, 2, 1, p.accent);
       } else if (sp.dexNumber <= 6) {
-        const rx = Math.round(9 * sc);
-        const ry = Math.round(7 * sc);
-        s.fillEllipse(cx + rx + 3, cy - 4 - frame, 7.5 * sc, 5.2 * sc, p.mid, p.shade);
-        s.fillEllipse(cx + rx + 4, cy - 5 - frame, 4.8 * sc, 3.2 * sc, p.accent);
-        s.fillEllipse(cx + rx + 5, cy - 6 - frame, 2.2 * sc, 1.8 * sc, p.glow);
+        // #4-6 Kindlet -> Cinderfox -> Pyrelume (Ember Fox)
+        const rx = Math.round(8.8 * sc);
+        const ry = Math.round(6.8 * sc);
+        const flicker = frame === 1 ? -2 : 0;
+        fillCelBody(cx + rx + 4, cy - 4 + flicker, 7.8 * sc, 5.2 * sc, p.accent, p.hi, p.mid, p.shade);
+        fillCelBody(cx + rx + 5, cy - 5 + flicker, 4.6 * sc, 3.1 * sc, CREAM, p.glow, p.accent);
         if (sp.stage >= 2) {
-          s.fillEllipse(cx + rx + 1, cy - 9 - frame, 5 * sc, 3 * sc, p.hi);
+          fillCelBody(cx + rx + 1, cy - 9 + flicker, 4.8 * sc, 2.8 * sc, p.glow, p.accent, p.hi);
         }
-        s.fillRect(cx - 6, oy + 34, 3, 8, p.deep);
-        s.fillRect(cx + 3, oy + 34, 3, 8, p.deep);
-        s.fillEllipse(cx, cy + 1, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx - 4, cy + 2, rx * 0.52, ry * 0.68, CREAM);
+        drawPawLeg(cx + 4, cy + 3, cx + 5 - stride, groundY, 3.2, p.shade, p.deep, CREAM);
+        drawPawLeg(cx - 5, cy + 3, cx - 6 + stride, groundY, 3.2, p.shade, p.deep, CREAM);
+        drawPawLeg(cx + 1, cy + 4, cx + 1 + stride, groundY, 3.4, p.mid, p.deep, CREAM);
+        fillCelBody(cx, cy + 1, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx - 4, cy + 2, rx * 0.56, ry * 0.72, CREAM, CREAM, p.glow);
         const hx = cx - Math.round(5 * sc);
-        const hy = cy - Math.round(7 * sc);
-        s.drawLine(hx - 4, hy - 3, hx - 7, hy - 11, 3, p.mid);
-        s.drawLine(hx + 3, hy - 3, hx + 6, hy - 11, 3, p.mid);
-        s.setPixel(hx - 6, hy - 9, p.accent);
-        s.setPixel(hx + 5, hy - 9, p.accent);
-        s.fillEllipse(hx, hy, 6.8 * sc, 5.5 * sc, p.hi, p.mid);
-        s.fillEllipse(hx - 4, hy + 2, 3.2, 2.2, CREAM);
+        const hy = cy - Math.round(6.8 * sc);
+        if (sp.stage === 3) {
+          fillCelBody(hx + 3, hy - 4, 6.2, 5.2, p.glow, p.accent, p.hi);
+        }
+        s.drawLine(hx - 4, hy - 3, hx - 7, hy - 11, 3.2, p.mid);
+        s.drawLine(hx + 3, hy - 3, hx + 6, hy - 11, 3.2, p.mid);
+        s.fillRect(hx - 7, hy - 10, 2, 2, p.glow);
+        s.fillRect(hx + 5, hy - 10, 2, 2, p.glow);
+        fillCelBody(hx, hy, 6.6 * sc, 5.4 * sc, p.hi, p.mid, p.shade);
+        fillCelBody(hx - 4, hy + 2, 3.4, 2.2, CREAM, CREAM, p.glow);
         drawEye(hx - 5, hy - 1);
         drawEye(hx + 1, hy - 1);
+        s.setPixel(hx - 6, hy + 1, p.deep);
       } else if (sp.dexNumber <= 9) {
-        const rx = Math.round(9 * sc);
-        const ry = Math.round(8.5 * sc);
-        // Broad rudder fin tail
-        s.fillEllipse(cx + rx + 3, cy + 3, 6.8 * sc, 3.2 * sc, p.shade);
-        s.fillEllipse(cx + rx + 5, cy + 2, 3.5 * sc, 2.2 * sc, p.hi);
-        s.fillEllipse(cx, cy, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx - 1, cy + 2, rx * 0.62, ry * 0.7, p.accent);
+        // #7-9 Ripplefin -> Brookotter -> Tidecrest (Stream Otter)
+        const rx = Math.round(8.8 * sc);
+        const ry = Math.round(8.2 * sc);
+        const tailWave = frame === 1 ? -1 : 1;
+        fillCelBody(cx + rx + 3, cy + 3 + tailWave, 7 * sc, 3.2 * sc, p.hi, p.mid, p.shade, p.deep);
+        drawPawLeg(cx - 5, cy + 4, cx - 6 + stride, groundY, 4.2, p.mid, p.shade, p.accent);
+        drawPawLeg(cx + 4, cy + 4, cx + 5 - stride, groundY, 4.2, p.mid, p.shade, p.accent);
+        fillCelBody(cx, cy, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx - 1, cy + 2, rx * 0.62, ry * 0.68, CREAM, p.accent, p.glow);
         if (sp.stage >= 2) {
-          s.fillEllipse(cx, cy - ry + 2, rx * 0.85, 2.8, p.glow);
+          fillCelBody(cx, cy - ry + 2, rx * 0.82, 2.8, p.glow, p.hi, p.mid);
         }
         const hx = cx - 1;
-        const hy = cy - Math.round(8 * sc);
-        s.fillEllipse(hx, hy, 6.8 * sc, 5.8 * sc, p.hi, p.mid);
-        // Otter ear fins
-        s.fillEllipse(hx - 6, hy - 2, 2.2, 2.8, p.glow);
-        s.fillEllipse(hx + 6, hy - 2, 2.2, 2.8, p.glow);
+        const hy = cy - Math.round(7.6 * sc);
         if (sp.stage === 3) {
-          s.drawLine(hx, hy - 5, hx + 4, hy - 12, 3, p.glow);
+          s.drawLine(hx, hy - 4, hx + 4, hy - 12, 3.2, p.glow);
+          s.drawLine(hx - 2, hy - 4, hx - 5, hy - 10, 2.4, p.hi);
         }
+        fillCelBody(hx, hy, 6.8 * sc, 5.6 * sc, p.hi, p.mid, p.shade);
+        s.fillEllipse(hx - 6, hy - 1, 2.4, 2.6, p.glow);
+        s.fillEllipse(hx + 6, hy - 1, 2.4, 2.6, p.glow);
+        fillCelBody(hx - 1, hy + 2, 3.6, 2.0, CREAM, p.accent, p.glow);
         drawEye(hx - 4, hy - 1);
         drawEye(hx + 2, hy - 1);
-        s.fillRect(cx - 7, oy + 36, 5, 5, p.shade);
-        s.fillRect(cx + 3, oy + 36, 5, 5, p.shade);
+        s.setPixel(hx - 1, hy + 1, p.deep);
       } else if (sp.dexNumber <= 12 || sp.dexNumber === 28 || sp.dexNumber === 29) {
-        const rx = Math.round(7.5 * sc);
-        const ry = Math.round(8 * sc);
+        // #10-12 Gale Raptors & #28-29 Star Owls
+        const rx = Math.round(7.4 * sc);
+        const ry = Math.round(7.8 * sc);
         const isOwl = sp.dexNumber >= 28;
-        s.fillEllipse(cx - rx - 3, cy + wingLift, 7.5 * sc, 4.8 * sc, p.shade);
-        s.fillEllipse(cx + rx + 3, cy + wingLift, 7.5 * sc, 4.8 * sc, p.shade);
-        s.fillEllipse(cx - rx - 2, cy + wingLift - 1, 5.2 * sc, 2.6 * sc, p.hi);
-        s.fillEllipse(cx + rx + 2, cy + wingLift - 1, 5.2 * sc, 2.6 * sc, p.hi);
-        s.fillEllipse(cx, cy + 1, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx, cy + 2, rx * 0.65, ry * 0.65, isOwl ? p.glow : p.accent);
-        const hy = cy - Math.round(7 * sc);
-        s.fillEllipse(cx, hy, 6.5 * sc, 5.8 * sc, p.mid, p.shade);
+        // Layered primary/secondary wings connected cleanly to shoulders
+        fillCelBody(cx - rx - 3, cy + wingLift, 7.6 * sc, 4.6 * sc, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx + rx + 3, cy + wingLift, 7.6 * sc, 4.6 * sc, p.hi, p.mid, p.shade, p.deep);
+        if (isOwl && sp.stage >= 2) {
+          s.setPixel(Math.round(cx - rx - 5), cy + wingLift, hexToRgba('#fff3a6'));
+          s.setPixel(Math.round(cx + rx + 5), cy + wingLift, hexToRgba('#fff3a6'));
+        }
+        // Connected avian talons
+        drawPawLeg(cx - 3, cy + ry - 2, cx - 4, groundY, 2.4, hexToRgba('#e89b38'), hexToRgba('#9e5e16'), p.deep);
+        drawPawLeg(cx + 3, cy + ry - 2, cx + 4, groundY, 2.4, hexToRgba('#e89b38'), hexToRgba('#9e5e16'), p.deep);
+        fillCelBody(cx, cy + 1, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx, cy + 2, rx * 0.64, ry * 0.62, CREAM, isOwl ? p.glow : p.accent, p.hi);
+        const hy = cy - Math.round(6.6 * sc);
+        fillCelBody(cx, hy, 6.5 * sc, 5.6 * sc, p.hi, p.mid, p.shade);
         if (isOwl) {
           s.fillEllipse(cx - 3, hy, 3.2, 3.2, CREAM);
           s.fillEllipse(cx + 3, hy, 3.2, 3.2, CREAM);
-          s.drawLine(cx - 5, hy - 4, cx - 8, hy - 9, 2, p.accent);
-          s.drawLine(cx + 5, hy - 4, cx + 8, hy - 9, 2, p.accent);
+          s.drawLine(cx - 4, hy - 4, cx - 8, hy - 9, 2.4, p.accent);
+          s.drawLine(cx + 4, hy - 4, cx + 8, hy - 9, 2.4, p.accent);
         } else if (sp.stage >= 2) {
-          s.drawLine(cx, hy - 5, cx + 5, hy - 11, 2.5, p.accent);
+          s.drawLine(cx, hy - 5, cx + 5, hy - 11, 2.6, p.accent);
+          if (sp.stage === 3) {
+            s.drawLine(cx - 2, hy - 5, cx + 2, hy - 13, 2.2, p.glow);
+          }
         }
         drawEye(cx - 4, hy - 1);
         drawEye(cx + 2, hy - 1);
-        s.fillRect(cx - 1, hy + 2, 3, 3, hexToRgba('#f2a93b'));
-        s.fillRect(cx - 4, oy + 36, 2, 5, hexToRgba('#d98a2b'));
-        s.fillRect(cx + 3, oy + 36, 2, 5, hexToRgba('#d98a2b'));
-      } else if (sp.dexNumber <= 15) {
-        const rx = Math.round(10 * sc);
-        const ry = Math.round(8 * sc);
-        s.fillEllipse(cx, cy + 2, rx, ry, p.shade);
-        s.fillEllipse(cx, cy, rx - 1, ry - 1, p.mid, p.shade);
-        s.fillEllipse(cx - 2, cy - 2, rx * 0.55, ry * 0.4, p.hi);
-        // Elytra center seam
-        s.fillRect(cx, cy - ry + 2, 1, ry * 2 - 4, p.deep);
-        s.fillEllipse(cx, cy, 4 * sc, 4 * sc, p.accent);
-        s.fillEllipse(cx, cy, 2 * sc, 2 * sc, p.glow);
-        if (sp.stage >= 2) {
-          s.drawLine(cx, cy - ry + 1, cx, cy - ry - 6, 2.5, p.accent);
+        s.drawLine(cx, hy + 1, cx, hy + 4, 2.4, hexToRgba('#f2a93b'));
+      } else if (sp.dexNumber === 13) {
+        // #13 Dewgrub: Arched 4-segment Woodland Moss Caterpillar with leaf antennae!
+        const inch = frame === 1 ? -1 : 0;
+        const segs: ReadonlyArray<[number, number, number]> = [
+          [cx + 9, oy + 36, 4.5],
+          [cx + 3, oy + 34 + inch, 5.2],
+          [cx - 3, oy + 33 + inch, 5.6],
+          [cx - 9, oy + 31, 6.0],
+        ];
+        for (const [sx, sy, sr] of segs) {
+          s.fillEllipse(sx, oy + 39, 1.8, 1.5, p.deep);
+          fillCelBody(sx, sy, sr, sr * 0.92, p.hi, p.mid, p.shade, p.deep);
         }
-        if (sp.stage === 3) {
-          s.drawLine(cx - 2, cy - ry, cx - 5, cy - ry - 10, 3, p.accent);
-          s.drawLine(cx + 2, cy - ry, cx + 5, cy - ry - 10, 3, p.accent);
+        s.drawLine(cx - 11, oy + 26, cx - 14, oy + 21, 1.8, p.accent);
+        s.drawLine(cx - 8, oy + 26, cx - 9, oy + 20, 1.8, p.accent);
+        drawEye(cx - 12, oy + 30);
+        s.setPixel(cx - 6, oy + 31, p.glow);
+      } else if (sp.dexNumber === 14) {
+        // #14 Shellglow: Curved Emerald Leaf Chrysalis with glowing bioluminescent lantern core!
+        fillCelBody(cx, cy + 2, 8.5, 11.5, p.hi, p.mid, p.shade, p.deep);
+        // Glowing golden-emerald lantern window in center of cocoon
+        fillCelBody(cx - 1, cy + 1, 4.8, 5.5, CREAM, p.accent, p.glow);
+        // Overlapping leaf husk plates wrapping sides
+        s.drawLine(cx - 7, cy - 5, cx - 2, cy + 9, 2.6, p.shade);
+        s.drawLine(cx + 7, cy - 5, cx + 2, cy + 9, 2.6, p.shade);
+        s.drawLine(cx, cy - 9, cx + 1, cy - 14, 2.4, p.accent);
+        drawEye(cx - 4, cy);
+        drawEye(cx + 2, cy);
+      } else if (sp.dexNumber === 15) {
+        // #15 Canopyhorn: Armored Emerald Stag Beetle Guardian with 6 legs & twin pincer horns!
+        const rx = 12;
+        const ry = 8.8;
+        for (const lxOff of [-8, -1, 6]) {
+          drawPawLeg(cx + lxOff, cy + 3, cx + lxOff + (lxOff < 0 ? -2 : 2), groundY, 2.6, p.deep, INK, p.accent);
         }
-        drawEye(cx - 5, cy + 1);
-        drawEye(cx + 3, cy + 1);
+        fillCelBody(cx + 1, cy + 1, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        // Wing-case ridge & golden thorax shield
+        s.drawLine(cx - rx + 3, cy, cx + rx - 2, cy - 1, 1.4, p.deep);
+        fillCelBody(cx - 6, cy, 5.5, 6.2, p.glow, p.hi, p.mid);
+        // Mighty emerald-gold stag beetle horn & lower mandible
+        s.drawLine(cx - 9, cy - 2, cx - 18, cy - 11 + bob, 3.2, p.accent);
+        s.drawLine(cx - 15, cy - 8 + bob, cx - 12, cy - 12 + bob, 2.0, p.glow);
+        s.drawLine(cx - 10, cy + 2, cx - 16, cy + 1, 2.2, p.shade);
+        drawEye(cx - 9, cy - 1);
       } else if (sp.dexNumber <= 17) {
-        const rx = Math.round(8.5 * sc);
-        const ry = Math.round(7.5 * sc);
-        s.drawLine(cx + rx, cy + 2, cx + rx + 6, cy - 5, 3, p.accent);
-        s.drawLine(cx + rx + 6, cy - 5, cx + rx + 3, cy - 8, 2.5, p.glow);
-        s.fillEllipse(cx - 4, cy - ry - 7, 2.8, 8 * sc, p.mid, p.shade);
-        s.fillEllipse(cx + 3, cy - ry - 7, 2.8, 8 * sc, p.mid, p.shade);
-        s.fillEllipse(cx - 4, cy - ry - 7, 1.3, 5 * sc, p.accent);
-        s.fillEllipse(cx + 3, cy - ry - 7, 1.3, 5 * sc, p.accent);
-        s.fillEllipse(cx, cy + 2, rx, ry, p.hi, p.mid);
-        s.fillEllipse(cx - 2, cy + 3, rx * 0.55, ry * 0.55, CREAM);
-        drawEye(cx - 4, cy - 2);
-        drawEye(cx + 2, cy - 2);
-        s.setPixel(cx - 6, cy + 1, p.accent);
-        s.setPixel(cx + 5, cy + 1, p.accent);
-        s.fillRect(cx - 6, oy + 36, 4, 5, p.shade);
-        s.fillRect(cx + 3, oy + 36, 4, 5, p.shade);
+        // #16-17 Voltkit -> Thundash (Spark Jackrabbit)
+        const rx = Math.round(8.4 * sc);
+        const ry = Math.round(7.2 * sc);
+        // Zigzag lightning tail
+        s.drawLine(cx + rx - 1, cy + 2, cx + rx + 5, cy - 4 + bob, 2.8, p.accent);
+        s.drawLine(cx + rx + 5, cy - 4 + bob, cx + rx + 2, cy - 8 + bob, 2.4, p.glow);
+        s.drawLine(cx + rx + 2, cy - 8 + bob, cx + rx + 7, cy - 12 + bob, 2.2, CREAM);
+        // Connected springy hare hind feet & forepaws
+        drawPawLeg(cx + 3, cy + 3, cx + 5 - stride, groundY, 3.8, p.mid, p.shade, CREAM);
+        drawPawLeg(cx - 4, cy + 3, cx - 6 + stride, groundY, 3.6, p.hi, p.mid, CREAM);
+        // Tall rabbit ears with cyan electric inner streak
+        fillCelBody(cx - 4, cy - ry - 6, 2.8, 7.8 * sc, p.hi, p.mid, p.shade);
+        fillCelBody(cx + 3, cy - ry - 6, 2.8, 7.8 * sc, p.hi, p.mid, p.shade);
+        s.fillEllipse(cx - 4, cy - ry - 6, 1.2, 4.6 * sc, p.accent);
+        s.fillEllipse(cx + 3, cy - ry - 6, 1.2, 4.6 * sc, p.accent);
+        fillCelBody(cx, cy + 2, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx - 2, cy + 4, rx * 0.54, ry * 0.52, CREAM, CREAM, p.glow);
+        drawEye(cx - 5, cy - 1);
+        drawEye(cx + 1, cy - 1);
+        s.fillRect(cx - 7, cy + 2, 2, 2, p.accent);
+        s.fillRect(cx + 4, cy + 2, 2, 2, p.accent);
       } else if (sp.dexNumber <= 20) {
-        const rx = Math.round(10.5 * sc);
-        const ry = Math.round(7.5 * sc);
+        // #18-20 Reedhop -> Marshcroak -> Lotusbell (Wetland Frog / Lotus Sage Toad)
+        const rx = Math.round(10.4 * sc);
+        const ry = Math.round(7.4 * sc);
         if (sp.stage >= 2) {
-          s.fillEllipse(cx + 1, cy - ry + 1, 7.5 * sc, 2.8, hexToRgba('#4fa35a'));
+          fillCelBody(cx + 1, cy - ry + 1, 7.8 * sc, 2.8, hexToRgba('#7ed97e'), hexToRgba('#4fa35a'), hexToRgba('#2d6b3b'));
         }
         if (sp.stage === 3) {
-          s.fillEllipse(cx + 1, cy - ry - 3, 5.8, 4.2, hexToRgba('#f28ca6'));
-          s.fillEllipse(cx + 1, cy - ry - 4, 3.2, 2.5, CREAM);
+          fillCelBody(cx + 1, cy - ry - 3, 6.2, 4.4, hexToRgba('#ffc2d4'), hexToRgba('#f28ca6'), hexToRgba('#bd5370'));
+          s.fillEllipse(cx + 1, cy - ry - 4, 3.0, 2.2, CREAM);
         }
-        s.fillEllipse(cx, cy + 3, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx - 1, cy + 5, rx * 0.7, ry * 0.55, p.glow);
-        s.fillEllipse(cx - 5, cy - ry + 4, 3.5, 3.5, p.hi);
-        s.fillEllipse(cx + 4, cy - ry + 4, 3.5, 3.5, p.hi);
+        // Folded crouched amphibian hind legs connected to sides
+        fillCelBody(cx - rx + 2, oy + 37, 4.2, 3.6, p.mid, p.shade, p.deep);
+        fillCelBody(cx + rx - 2, oy + 37, 4.2, 3.6, p.mid, p.shade, p.deep);
+        drawPawLeg(cx - 5, cy + 5, cx - 6, groundY, 3.0, p.hi, p.mid, p.glow);
+        drawPawLeg(cx + 5, cy + 5, cx + 6, groundY, 3.0, p.hi, p.mid, p.glow);
+        fillCelBody(cx, cy + 3, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        // Puffing cream throat sac
+        fillCelBody(cx, cy + 5, rx * 0.68, ry * 0.54 + (frame === 1 ? 0.8 : 0), CREAM, p.glow, p.hi);
+        fillCelBody(cx - 5, cy - ry + 4, 3.6, 3.4, p.hi, p.mid, p.shade);
+        fillCelBody(cx + 4, cy - ry + 4, 3.6, 3.4, p.hi, p.mid, p.shade);
         drawEye(cx - 6, cy - ry + 3);
         drawEye(cx + 3, cy - ry + 3);
       } else if (sp.dexNumber <= 22) {
+        // #21-22 Glimmerfin -> Surgecoil (Lantern Minnow / Beacon River Eel)
         const rx = Math.round(11 * sc);
-        const ry = Math.round(6 * sc);
-        s.fillEllipse(cx + rx + 2, cy - frame, 4.8 * sc, 5.8 * sc, p.accent);
-        s.fillEllipse(cx, cy, rx, ry, p.mid, p.shade);
-        s.fillEllipse(cx - 2, cy - 1, rx * 0.7, ry * 0.5, p.hi);
-        // Dorsal fin crest
-        s.fillEllipse(cx + 1, cy - ry, 5 * sc, 2.2, p.accent);
-        s.drawLine(cx - rx + 2, cy - 3, cx - rx - 4, cy - 9, 1.5, p.accent);
-        s.fillEllipse(cx - rx - 5, cy - 9, 3, 3, p.glow);
-        drawEye(cx - 6, cy - 1);
+        const ry = Math.round(5.8 * sc);
+        const wave = frame === 1 ? -2 : 1;
+        // Translucent caudal & dorsal fins
+        fillCelBody(cx + rx + 3, cy + wave, 5.0 * sc, 5.8 * sc, p.glow, p.accent, p.mid);
+        fillCelBody(cx + 1, cy - ry, 5.5 * sc, 2.4, p.glow, p.accent, p.mid);
+        fillCelBody(cx, cy, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        fillCelBody(cx - 2, cy + 2, rx * 0.66, ry * 0.44, CREAM, p.glow, p.hi);
+        // Pectoral fin
+        fillCelBody(cx - 1, cy + 4, 3.8, 2.2, p.glow, p.accent, p.mid);
+        // Curved bioluminescent angler lure
+        s.drawLine(cx - rx + 2, cy - 2, cx - rx - 4, cy - 8 + wave, 1.6, p.accent);
+        fillCelBody(cx - rx - 5, cy - 8 + wave, 3.2, 3.2, CREAM, p.glow, p.accent);
+        drawEye(cx - 7, cy - 1);
       } else if (sp.dexNumber <= 25) {
-        const rx = Math.round(11.5 * sc);
-        const ry = Math.round(8.5 * sc);
-        s.fillRect(cx - 8, oy + 34, 5, 7, p.deep);
-        s.fillRect(cx + 4, oy + 34, 5, 7, p.deep);
-        s.fillEllipse(cx + 1, cy, rx, ry, p.shade, p.deep);
-        s.fillEllipse(cx + 1, cy - 1, rx - 2, ry - 2, p.mid, p.shade);
-        // Kiln shell hexagonal plate lines
-        s.fillRect(cx - 3, cy - ry + 3, 1, ry + 1, p.deep);
-        s.fillRect(cx + 4, cy - ry + 3, 1, ry + 1, p.deep);
-        s.fillRect(cx - rx + 3, cy + 2, rx * 2 - 4, 2, p.accent);
+        // #23-25 Clayback -> Kilnshell -> Cragbastion (Terracotta Tortoise / Monolith Bastion)
+        const rx = Math.round(11.4 * sc);
+        const ry = Math.round(8.2 * sc);
+        // Sturdy connected tortoise legs tucked directly into shell underside!
+        drawPawLeg(cx - 6, cy + 3, cx - 7 + stride, groundY, 4.6, p.shade, p.deep, CREAM);
+        drawPawLeg(cx + 5, cy + 3, cx + 6 - stride, groundY, 4.6, p.shade, p.deep, CREAM);
+        fillCelBody(cx + 1, cy, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        // Hexagonal shell scutes + warm terracotta rim band
+        s.drawLine(cx - 4, cy - ry + 3, cx - 5, cy + 2, 1.3, p.deep);
+        s.drawLine(cx + 4, cy - ry + 3, cx + 5, cy + 2, 1.3, p.deep);
+        s.fillRect(cx - rx + 2, cy + 2, rx * 2 - 2, 2, p.accent);
         if (sp.stage === 3) {
-          s.fillEllipse(cx + 1, cy - ry + 1, rx * 0.65, 3, hexToRgba('#579c56'));
-          s.drawLine(cx + 4, cy - ry, cx + 6, cy - ry - 6, 3, p.accent);
+          fillCelBody(cx + 1, cy - ry + 1, rx * 0.65, 3.0, hexToRgba('#8cd47e'), hexToRgba('#579c56'), hexToRgba('#2d5930'));
+          s.drawLine(cx + 4, cy - ry, cx + 7, cy - ry - 6, 3.2, p.accent);
+          s.drawLine(cx - 2, cy - ry, cx - 4, cy - ry - 5, 2.6, p.glow);
         }
-        s.fillEllipse(cx - rx - 1, cy + 2, 5 * sc, 4 * sc, p.hi);
+        // Protruding armored head & tail tip
+        s.drawLine(cx + rx - 1, cy + 2, cx + rx + 4, cy + 1, 2.6, p.shade);
+        fillCelBody(cx - rx - 1, cy + 2, 5.2 * sc, 4.0 * sc, p.hi, p.mid, p.shade);
         drawEye(cx - rx - 3, cy + 1);
       } else if (sp.dexNumber <= 27) {
-        const rx = Math.round(10 * sc);
-        const ry = Math.round(7 * sc);
-        s.drawLine(cx + rx - 2, cy + 3, cx + rx + 8, cy - 3, 3.5, p.mid);
-        s.fillEllipse(cx + 8, cy - 3, 2.5, 2.5, p.accent);
-        s.fillEllipse(cx, cy + 2, rx, ry, p.mid, p.shade);
+        // #26-27 Sunskink -> Flarecrest (Ochre Skink / Solar Frill Drake)
+        const rx = Math.round(9.8 * sc);
+        const ry = Math.round(6.6 * sc);
+        s.drawLine(cx + rx - 2, cy + 2, cx + rx + 9, cy - 4 + bob, 3.6, p.mid);
+        fillCelBody(cx + rx + 9, cy - 5 + bob, 3.2, 2.8, p.glow, p.accent, p.hi);
+        drawPawLeg(cx - 5, cy + 3, cx - 6 + stride, groundY, 3.6, p.mid, p.shade, p.glow);
+        drawPawLeg(cx + 4, cy + 3, cx + 5 - stride, groundY, 3.6, p.mid, p.shade, p.glow);
+        fillCelBody(cx, cy + 2, rx, ry, p.hi, p.mid, p.shade, p.deep);
+        // Dorsal solar spines
+        for (const sxOff of [-2, 2, 6]) {
+          s.drawLine(cx + sxOff, cy - ry + 3, cx + sxOff + 2, cy - ry - 1, 2.0, p.accent);
+        }
         const hx = cx - Math.round(6 * sc);
-        const hy = cy - Math.round(5 * sc);
-        s.fillEllipse(hx + 2, hy, 7.2 * sc, 6.8 * sc, p.accent);
-        s.fillEllipse(hx, hy + 1, 5.5 * sc, 4.2 * sc, p.hi);
-        drawEye(hx - 3, hy);
-        s.fillRect(cx - 6, oy + 35, 4, 6, p.shade);
-        s.fillRect(cx + 3, oy + 35, 4, 6, p.shade);
+        const hy = cy - Math.round(4.6 * sc);
+        if (sp.stage >= 2) {
+          fillCelBody(hx + 3, hy - 1, 7.6 * sc, 7.2 * sc, p.glow, p.accent, p.hi);
+        }
+        fillCelBody(hx, hy + 1, 5.8 * sc, 4.4 * sc, p.hi, p.mid, p.shade);
+        drawEye(hx - 4, hy);
       } else {
-        s.fillRect(cx - 6, oy + 29, 3, 12, p.shade);
-        s.fillRect(cx + 5, oy + 29, 3, 12, p.shade);
-        s.fillEllipse(cx + 1, cy + 1, 11, 6.5, CREAM, p.hi);
-        s.fillEllipse(cx + 11, cy - 2, 4, 2.5, p.accent);
-        s.drawLine(cx - 6, cy, cx - 8, cy - 10, 5, CREAM);
-        s.fillEllipse(cx - 9, cy - 11, 5.5, 4.2, CREAM);
-        s.drawLine(cx - 9, cy - 14, cx - 14, cy - 24, 2, p.accent);
-        s.drawLine(cx - 12, cy - 19, cx - 16, cy - 20, 2, p.glow);
-        s.drawLine(cx - 6, cy - 14, cx - 2, cy - 24, 2, p.accent);
-        s.drawLine(cx - 4, cy - 19, cx + 1, cy - 20, 2, p.glow);
-        drawEye(cx - 11, cy - 12);
+        // #30 Solacern (Mythic Sanctuary Harmony Stag)
+        drawPawLeg(cx - 6, cy + 3, cx - 7 + stride, groundY, 3.0, p.hi, p.shade, p.accent);
+        drawPawLeg(cx - 2, cy + 4, cx - 2 - stride, groundY, 2.8, CREAM, p.hi, p.accent);
+        drawPawLeg(cx + 6, cy + 3, cx + 7 - stride, groundY, 3.0, p.hi, p.shade, p.accent);
+        fillCelBody(cx + 1, cy + 1, 11.2, 6.4, CREAM, CREAM, p.hi, p.mid);
+        fillCelBody(cx + 12, cy - 2 + bob, 4.2, 2.6, p.glow, p.accent, p.mid);
+        // Graceful arched stag neck & starlight chest mane
+        s.drawLine(cx - 6, cy + 1, cx - 9, cy - 10, 5.2, CREAM);
+        fillCelBody(cx - 5, cy - 3, 4.2, 5.2, p.glow, p.hi, p.mid);
+        fillCelBody(cx - 9, cy - 11, 5.6, 4.2, CREAM, CREAM, p.hi);
+        // Crystalline cyan-and-gold branching antlers
+        s.drawLine(cx - 9, cy - 14, cx - 14, cy - 24, 2.2, p.accent);
+        s.drawLine(cx - 12, cy - 19, cx - 16, cy - 21, 1.8, p.glow);
+        s.drawLine(cx - 11, cy - 22, cx - 9, cy - 25, 1.6, CREAM);
+        s.drawLine(cx - 6, cy - 14, cx - 2, cy - 24, 2.2, p.accent);
+        s.drawLine(cx - 4, cy - 19, cx + 1, cy - 21, 1.8, p.glow);
+        drawEye(cx - 12, cy - 12);
       }
 
       s.outlineRegion(ox, oy, size, size, INK);
 
-      // Build crisp 16x16 Overworld Companion Follower Sprite for this species & frame!
+      // Build crisp 16x16 Overworld Companion Follower Sprite tailored to each species silhouette!
       const cox = (idx % cols) * 16;
       const coy = Math.floor(idx / cols) * 16;
       const cbob = frame === 1 ? -1 : 0;
-      comp.fillEllipse(cox + 8, coy + 14, 5, 1.6, hexToRgba('#121814', 110));
-      // Body & head tailored by silhouette family so every follower looks adorable & recognizable at 16x16
-      comp.fillEllipse(cox + 8, coy + 10 + cbob, 4.8, 3.8, p.mid, p.shade);
-      comp.fillEllipse(cox + 8, coy + 6 + cbob, 4.2, 3.4, p.hi, p.mid);
-      if (sp.dexNumber <= 6 || sp.dexNumber === 16 || sp.dexNumber === 17) {
-        // Pointed lynx/fox/hare ears + tail
-        comp.setPixel(cox + 5, coy + 2 + cbob, p.shade);
-        comp.setPixel(cox + 5, coy + 3 + cbob, p.accent);
-        comp.setPixel(cox + 11, coy + 2 + cbob, p.shade);
-        comp.setPixel(cox + 11, coy + 3 + cbob, p.accent);
-        comp.fillRect(cox + 12, coy + 8 + cbob, 2, 2, p.accent);
-      } else if (sp.dexNumber >= 10 && sp.dexNumber <= 12 || sp.dexNumber >= 28 && sp.dexNumber <= 29) {
-        // Flapping wings
-        comp.fillRect(cox + 2, coy + 8 + (frame === 1 ? -1 : 1), 2, 3, p.hi);
-        comp.fillRect(cox + 12, coy + 8 + (frame === 1 ? -1 : 1), 2, 3, p.hi);
-      } else if (sp.dexNumber === 30) {
-        // Crystal antlers
-        comp.setPixel(cox + 5, coy + 1 + cbob, p.accent);
-        comp.setPixel(cox + 6, coy + 2 + cbob, p.glow);
+      comp.fillEllipse(cox + 8, coy + 14, 5.2, 1.6, hexToRgba('#121814', 110));
+
+      if (sp.dexNumber <= 3) {
+        // #1-3 Leaf Lynx: leaf tail + tufted lynx ears + cream ruff
+        comp.fillEllipse(cox + 12, coy + 9 + cbob, 2.4, 1.8, p.hi);
+        comp.fillEllipse(cox + 8, coy + 10 + cbob, 4.4, 3.4, p.mid, p.shade);
+        comp.fillEllipse(cox + 7, coy + 10 + cbob, 2.4, 2.2, p.glow);
+        comp.fillEllipse(cox + 7, coy + 6 + cbob, 4.2, 3.2, p.hi, p.mid);
+        comp.drawLine(cox + 4, coy + 4 + cbob, cox + 3, coy + 1 + cbob, 1.8, p.mid);
+        comp.drawLine(cox + 10, coy + 4 + cbob, cox + 11, coy + 1 + cbob, 1.8, p.mid);
+        comp.setPixel(cox + 3, coy + 1 + cbob, p.accent);
         comp.setPixel(cox + 11, coy + 1 + cbob, p.accent);
-        comp.setPixel(cox + 10, coy + 2 + cbob, p.glow);
+        comp.setPixel(cox + 5, coy + 6 + cbob, INK);
+        comp.setPixel(cox + 9, coy + 6 + cbob, INK);
+      } else if (sp.dexNumber <= 6) {
+        // #4-6 Hearth Fox: fluffy flame tail + cream chest + fox ears
+        comp.fillEllipse(cox + 12, coy + 8 + cbob, 3.0, 2.6, p.accent, p.mid);
+        comp.setPixel(cox + 13, coy + 7 + cbob, p.glow);
+        comp.fillEllipse(cox + 7, coy + 10 + cbob, 4.2, 3.4, p.mid, p.shade);
+        comp.fillEllipse(cox + 7, coy + 10 + cbob, 2.5, 2.2, CREAM);
+        comp.fillEllipse(cox + 7, coy + 6 + cbob, 4.0, 3.2, p.hi, p.mid);
+        comp.drawLine(cox + 4, coy + 4 + cbob, cox + 4, coy + 1 + cbob, 1.8, p.mid);
+        comp.drawLine(cox + 10, coy + 4 + cbob, cox + 10, coy + 1 + cbob, 1.8, p.mid);
+        comp.setPixel(cox + 5, coy + 6 + cbob, INK);
+        comp.setPixel(cox + 9, coy + 6 + cbob, INK);
+      } else if (sp.dexNumber <= 9) {
+        // #7-9 River Otter: paddle tail + round ears + cream bib
+        comp.fillEllipse(cox + 12, coy + 11 + cbob, 2.8, 1.6, p.shade);
+        comp.fillEllipse(cox + 7, coy + 10 + cbob, 4.4, 3.6, p.mid, p.shade);
+        comp.fillEllipse(cox + 7, coy + 10 + cbob, 2.8, 2.4, CREAM);
+        comp.fillEllipse(cox + 7, coy + 6 + cbob, 4.2, 3.2, p.hi, p.mid);
+        comp.fillRect(cox + 3, coy + 3 + cbob, 2, 2, p.glow);
+        comp.fillRect(cox + 10, coy + 3 + cbob, 2, 2, p.glow);
+        comp.setPixel(cox + 5, coy + 6 + cbob, INK);
+        comp.setPixel(cox + 9, coy + 6 + cbob, INK);
+      } else if (sp.dexNumber <= 12 || (sp.dexNumber >= 28 && sp.dexNumber <= 29)) {
+        // #10-12 Songbird & #28-29 Owl: flapping side wings + golden beak + crest/tufts
+        const wy = coy + 8 + (frame === 1 ? -1 : 1);
+        comp.fillEllipse(cox + 3, wy, 2.6, 2.0, p.hi, p.mid);
+        comp.fillEllipse(cox + 13, wy, 2.6, 2.0, p.hi, p.mid);
+        comp.fillEllipse(cox + 8, coy + 9 + cbob, 4.0, 3.8, p.mid, p.shade);
+        comp.fillEllipse(cox + 8, coy + 10 + cbob, 2.4, 2.2, CREAM);
+        comp.fillEllipse(cox + 8, coy + 5 + cbob, 3.8, 3.0, p.hi, p.mid);
+        if (sp.dexNumber >= 28) {
+          comp.setPixel(cox + 5, coy + 2 + cbob, CREAM);
+          comp.setPixel(cox + 11, coy + 2 + cbob, CREAM);
+        } else if (sp.stage >= 2) {
+          comp.fillRect(cox + 7, coy + 1 + cbob, 2, 2, CREAM);
+        }
+        comp.setPixel(cox + 6, coy + 5 + cbob, INK);
+        comp.setPixel(cox + 10, coy + 5 + cbob, INK);
+        comp.fillRect(cox + 7, coy + 6 + cbob, 2, 2, hexToRgba('#f09d38'));
+      } else if (sp.dexNumber === 13) {
+        // #13 Dewgrub: segmented caterpillar
+        comp.fillEllipse(cox + 11, coy + 11, 2.6, 2.2, p.shade);
+        comp.fillEllipse(cox + 8, coy + 11 + cbob, 2.8, 2.4, p.mid);
+        comp.fillEllipse(cox + 5, coy + 9 + cbob, 3.0, 2.8, p.hi);
+        comp.setPixel(cox + 4, coy + 5 + cbob, p.accent);
+        comp.setPixel(cox + 6, coy + 5 + cbob, p.accent);
+        comp.setPixel(cox + 4, coy + 9 + cbob, INK);
+      } else if (sp.dexNumber === 14) {
+        // #14 Shellglow: lantern leaf chrysalis
+        comp.fillEllipse(cox + 8, coy + 8 + cbob, 4.0, 5.2, p.mid, p.shade);
+        comp.fillEllipse(cox + 8, coy + 8 + cbob, 2.2, 2.2, CREAM);
+        comp.setPixel(cox + 8, coy + 2 + cbob, p.accent);
+        comp.setPixel(cox + 7, coy + 8 + cbob, INK);
+        comp.setPixel(cox + 9, coy + 8 + cbob, INK);
+      } else if (sp.dexNumber === 15) {
+        // #15 Canopyhorn: armored stag beetle with horn
+        comp.fillEllipse(cox + 9, coy + 9 + cbob, 4.8, 3.6, p.hi, p.shade);
+        comp.drawLine(cox + 5, coy + 8 + cbob, cox + 2, coy + 4 + cbob, 2.0, p.accent);
+        comp.setPixel(cox + 5, coy + 8 + cbob, INK);
+      } else if (sp.dexNumber <= 17) {
+        // #16-17 Spark Hare: tall rabbit ears + lightning tail
+        comp.drawLine(cox + 12, coy + 10 + cbob, cox + 14, coy + 6 + cbob, 1.6, p.accent);
+        comp.fillRect(cox + 5, coy + 1 + cbob, 2, 4, p.hi);
+        comp.fillRect(cox + 9, coy + 1 + cbob, 2, 4, p.hi);
+        comp.fillEllipse(cox + 8, coy + 9 + cbob, 4.2, 4.0, p.hi, p.mid);
+        comp.setPixel(cox + 6, coy + 8 + cbob, INK);
+        comp.setPixel(cox + 10, coy + 8 + cbob, INK);
+      } else if (sp.dexNumber <= 20) {
+        // #18-20 Wetland Frog / Lotusbell: wide frog eyes + pink lotus on stage 3
+        comp.fillEllipse(cox + 8, coy + 10 + cbob, 5.0, 3.6, p.hi, p.shade);
+        comp.fillEllipse(cox + 8, coy + 11 + cbob, 3.4, 2.0, CREAM);
+        if (sp.stage === 3) {
+          comp.fillEllipse(cox + 8, coy + 4 + cbob, 3.0, 2.0, hexToRgba('#ffacc5'));
+        }
+        comp.setPixel(cox + 5, coy + 7 + cbob, INK);
+        comp.setPixel(cox + 11, coy + 7 + cbob, INK);
+      } else if (sp.dexNumber <= 22) {
+        // #21-22 Lantern Fish: swimming body + glowing lure + tail fin
+        comp.fillEllipse(cox + 13, coy + 8 + cbob, 2.2, 2.6, p.accent);
+        comp.fillEllipse(cox + 8, coy + 8 + cbob, 4.6, 3.0, p.hi, p.mid);
+        comp.fillRect(cox + 2, coy + 5 + cbob, 2, 2, CREAM);
+        comp.setPixel(cox + 5, coy + 8 + cbob, INK);
+      } else if (sp.dexNumber <= 25) {
+        // #23-25 Terracotta Tortoise: domed shell + terracotta rim + head
+        comp.fillEllipse(cox + 9, coy + 9 + cbob, 4.8, 3.8, p.hi, p.shade);
+        comp.fillRect(cox + 5, coy + 10 + cbob, 8, 1, p.accent);
+        comp.fillEllipse(cox + 3, coy + 10 + cbob, 2.2, 1.8, p.mid);
+        comp.setPixel(cox + 2, coy + 9 + cbob, INK);
+      } else if (sp.dexNumber <= 27) {
+        // #26-27 Solar Skink: spine crest + flame tail
+        comp.fillEllipse(cox + 13, coy + 8 + cbob, 2.0, 2.0, p.glow);
+        comp.fillEllipse(cox + 8, coy + 10 + cbob, 4.6, 3.2, p.mid, p.shade);
+        comp.fillEllipse(cox + 6, coy + 6 + cbob, 3.8, 2.8, p.hi, p.mid);
+        comp.fillRect(cox + 8, coy + 5 + cbob, 3, 1, p.accent);
+        comp.setPixel(cox + 4, coy + 6 + cbob, INK);
       } else {
-        // Crest / shell accent
-        comp.fillRect(cox + 6, coy + 3 + cbob, 4, 1, p.accent);
+        // #30 Solacern: regal golden stag + cyan starlight antlers
+        comp.fillEllipse(cox + 9, coy + 10 + cbob, 4.6, 3.0, CREAM, p.hi);
+        comp.fillEllipse(cox + 5, coy + 6 + cbob, 2.8, 2.6, CREAM);
+        comp.drawLine(cox + 4, coy + 4 + cbob, cox + 3, coy + 1 + cbob, 1.5, p.accent);
+        comp.drawLine(cox + 7, coy + 4 + cbob, cox + 8, coy + 1 + cbob, 1.5, p.accent);
+        comp.setPixel(cox + 4, coy + 6 + cbob, INK);
       }
-      comp.setPixel(cox + 6, coy + 6 + cbob, INK);
-      comp.setPixel(cox + 10, coy + 6 + cbob, INK);
       comp.outlineRegion(cox, coy, 16, 16, INK);
     }
   }

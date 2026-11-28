@@ -150,6 +150,29 @@ describe('Turn-based combat, statuses, leveling, and 3-stage evolution', () => {
     expect(evo2.evolvedToSpeciesId).toBe('verdantag');
     expect(partner.speciesId).toBe('verdantag');
     expect(partner.level).toBeGreaterThanOrEqual(20);
+
+    // Leveling Lotusbell to Lv.24 learns Lullaby Pollen while preserving Tidal Crest (power 80) in slot 0
+    const lotus = createCreatureInstance({
+      uid: 'lotus_1',
+      species: SPECIES_BY_ID.lotusbell!,
+      level: 21,
+      bondedRegion: 'reedwater_fen',
+      movesById: MOVES_BY_ID,
+    });
+    lotus.moves = [
+      { moveId: 'tidal_crest', pp: 10, maxPp: 10 },
+      { moveId: 'river_dive', pp: 14, maxPp: 14 },
+      { moveId: 'soothing_rain', pp: 10, maxPp: 10 },
+      { moveId: 'spore_drift', pp: 12, maxPp: 12 },
+    ];
+    awardCreatureExperience({
+      creature: lotus,
+      expGain: expRequiredForLevel(24) - lotus.exp + 5,
+      speciesById: SPECIES_BY_ID,
+      movesById: MOVES_BY_ID,
+    });
+    expect(lotus.moves[0]?.moveId).toBe('tidal_crest');
+    expect(lotus.moves.some((m) => m.moveId === 'lullaby_pollen')).toBe(true);
   });
 
   it('validates field item usage (tonics, herbs, tea, ward lanterns) and supply post token bounds', () => {

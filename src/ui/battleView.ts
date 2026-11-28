@@ -3,6 +3,7 @@ import { MOVES_BY_ID } from '../data/moves.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
 import type { StatStages } from '../domain/battle.ts';
 import { computeCaptureProbability } from '../domain/capture.ts';
+import { expRequiredForLevel } from '../domain/creatures.ts';
 import { ELEMENT_LABELS, getTypeMultiplier } from '../domain/elements.ts';
 import type { BattleSpeedMode, CreatureInstance } from '../domain/types.ts';
 import type { GameController } from '../game/controller.ts';
@@ -100,6 +101,21 @@ function buildCombatantPlate(
   fill.dataset.mid = String(ratio > 30 && ratio <= 60);
   track.appendChild(fill);
   plate.appendChild(track);
+
+  if (!isEnemy) {
+    const floorExp = expRequiredForLevel(creature.level);
+    const nextExp = expRequiredForLevel(creature.level + 1);
+    const expSpan = Math.max(1, nextExp - floorExp);
+    const expPct =
+      creature.level >= 30
+        ? 100
+        : Math.max(0, Math.min(100, Math.round(((creature.exp - floorExp) / expSpan) * 100)));
+    const expTrack = el('div', 'lw-exp-track');
+    const expFill = el('div', 'lw-exp-fill');
+    expFill.style.width = `${expPct}%`;
+    expTrack.appendChild(expFill);
+    plate.appendChild(expTrack);
+  }
 
   const foot = el('div', 'lw-plate-foot');
   foot.appendChild(el('span', 'lw-hud-quest', `HP ${creature.currentHp}/${creature.maxHp}`));
@@ -213,7 +229,8 @@ export function buildBattleView(
     controller.updateSettings({ battleSpeed: next });
   });
   logHeader.appendChild(speedBtn);
-  deck.appendChild(logHeader);
+  const narrativeCol = el('div', 'lw-battle-narrative-col');
+  narrativeCol.appendChild(logHeader);
 
   const logBox = el('div', 'lw-battle-log');
   for (const entry of controller.battleLogs.slice(-3)) {
@@ -225,9 +242,10 @@ export function buildBattleView(
     }
     logBox.appendChild(lineDiv);
   }
-  deck.appendChild(logBox);
+  narrativeCol.appendChild(logBox);
 
   if (battle.outcome !== 'ongoing') {
+    deck.appendChild(narrativeCol);
     const finishBtn = el(
       'button',
       'lw-btn lw-btn-primary',
@@ -239,6 +257,10 @@ export function buildBattleView(
     wrapper.appendChild(deck);
     return wrapper;
   }
+
+  const columns = el('div', 'lw-battle-columns');
+  columns.appendChild(narrativeCol);
+  const commandCol = el('div', 'lw-battle-command-col');
 
   const bagLabel =
     battle.kind === 'wild' && bestCharmPct > 0
@@ -266,7 +288,7 @@ export function buildBattleView(
     b.addEventListener('click', () => onSelectTab(tabKey));
     nav.appendChild(b);
   }
-  deck.appendChild(nav);
+  commandCol.appendChild(nav);
 
   if (battleTab === 'moves') {
     const grid = el('div', 'lw-move-grid');
@@ -307,7 +329,7 @@ export function buildBattleView(
       card.appendChild(desc);
       grid.appendChild(card);
     });
-    deck.appendChild(grid);
+    commandCol.appendChild(grid);
   } else if (battleTab === 'bag') {
     const list = el('div', 'lw-move-grid');
     const usableItems = controller.state.inventory.filter((s) => {
@@ -347,7 +369,7 @@ export function buildBattleView(
       card.appendChild(el('div', 'lw-hud-quest', def.descriptionEn));
       list.appendChild(card);
     }
-    deck.appendChild(list);
+    commandCol.appendChild(list);
   } else if (battleTab === 'team') {
     const list = el('div', 'lw-move-grid');
     battle.playerParty.forEach((member, idx) => {
@@ -375,7 +397,7 @@ export function buildBattleView(
       card.appendChild(row);
       list.appendChild(card);
     });
-    deck.appendChild(list);
+    commandCol.appendChild(list);
   } else {
     const actions = el('div', 'lw-choice-list');
     const obsBtn = el('button', 'lw-btn lw-btn-moss', 'Observe Habits (Field Note)');
@@ -389,9 +411,11 @@ export function buildBattleView(
       fleeBtn.addEventListener('click', () => controller.submitBattleAction({ kind: 'flee' }));
       actions.appendChild(fleeBtn);
     }
-    deck.appendChild(actions);
+    commandCol.appendChild(actions);
   }
 
+  columns.appendChild(commandCol);
+  deck.appendChild(columns);
   wrapper.appendChild(deck);
   return wrapper;
 }
