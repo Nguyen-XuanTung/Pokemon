@@ -1,6 +1,7 @@
 import { ITEMS_BY_ID } from '../data/items.ts';
 import { MOVES_BY_ID } from '../data/moves.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
+import { MOVES_ZH } from '../data/zh-world-content.ts';
 import type { StatStages } from '../domain/battle.ts';
 import { computeBattleAssistPlan } from '../domain/battleAssist.ts';
 import { computeCaptureProbability } from '../domain/capture.ts';
@@ -15,6 +16,7 @@ import {
   createCreatureSpriteSpan,
   createItemSpriteSpan,
   el,
+  renderInteractiveChinese,
   renderInteractiveEnglish,
   ROLE_LABELS,
 } from './uiHelpers.ts';
@@ -249,9 +251,18 @@ export function buildBattleView(
 
   const logBox = el('div', 'lw-battle-log');
   logBox.dataset.captured = String(battle.outcome === 'captured');
+  const learningLang = settings.learningLanguage ?? 'en';
+  const zhMode = settings.zhStudyMode ?? 'hanzi_pinyin_vi';
   for (const entry of controller.battleLogs.slice(-3)) {
     const lineDiv = el('div', 'lw-battle-log-line');
-    if (contentLang === 'vi_only') {
+    if (learningLang === 'zh' && zhMode !== 'vi_only' && entry.messageZh) {
+      const zhWrap = el('div', 'lw-dialogue-zh');
+      zhWrap.appendChild(renderInteractiveChinese(controller, entry.messageZh, 'battle_log'));
+      lineDiv.appendChild(zhWrap);
+      if (settings.showZhTranslation !== false && zhMode !== 'zh_immersion') {
+        lineDiv.appendChild(el('div', 'lw-battle-log-vi', entry.messageVi));
+      }
+    } else if (learningLang === 'none' || contentLang === 'vi_only' || (learningLang === 'zh' && zhMode === 'vi_only')) {
       lineDiv.appendChild(document.createTextNode(entry.messageVi));
     } else {
       lineDiv.appendChild(renderInteractiveEnglish(controller, entry.messageEn, 'battle_log'));
@@ -380,7 +391,22 @@ export function buildBattleView(
 
       const desc = el('div', 'lw-hud-quest');
       desc.style.marginTop = '2px';
-      if (contentLang === 'vi_only' || (uiLang === 'vi' && contentLang === 'bilingual')) {
+      if (learningLang === 'zh' && zhMode !== 'vi_only' && MOVES_ZH[mDef.id]) {
+        const zhDesc = el('div', 'lw-dialogue-zh');
+        zhDesc.appendChild(
+          renderInteractiveChinese(controller, MOVES_ZH[mDef.id]!.descriptionZh, 'move_desc', {
+            showPinyin: false,
+          }),
+        );
+        desc.appendChild(zhDesc);
+        if (settings.showZhTranslation !== false) {
+          desc.appendChild(el('div', '', mDef.descriptionVi));
+        }
+      } else if (
+        learningLang === 'none' ||
+        contentLang === 'vi_only' ||
+        (uiLang === 'vi' && contentLang === 'bilingual')
+      ) {
         desc.textContent = mDef.descriptionVi;
       } else {
         desc.appendChild(renderInteractiveEnglish(controller, mDef.descriptionEn, 'move_desc'));

@@ -1,7 +1,9 @@
 import { ITEMS } from '../data/items.ts';
 import { LEXICON_INDEX } from '../data/lexicon.ts';
+import { ZH_LEXICON_INDEX } from '../data/zh-lexicon.ts';
+import { shouldHighlightChineseToken, tokenizeChineseText } from '../domain/chinese.ts';
 import { shouldHighlightToken, tokenizeEnglishText } from '../domain/learning.ts';
-import type { CombatRole, SpeciesRarity } from '../domain/types.ts';
+import type { CombatRole, PinyinPosition, SpeciesRarity } from '../domain/types.ts';
 import type { GameController } from '../game/controller.ts';
 
 export const RARITY_LABELS: Readonly<Record<SpeciesRarity, { en: string; vi: string; color: string }>> = {
@@ -102,6 +104,87 @@ export function renderInteractiveEnglish(
       });
       frag.appendChild(btn);
     }
+  }
+  return frag;
+}
+
+export function renderInteractiveChinese(
+  controller: GameController,
+  textZh: string,
+  contextTag: string,
+  options?: {
+    readonly showPinyin?: boolean;
+    readonly pinyinPosition?: PinyinPosition;
+  },
+): DocumentFragment {
+  const frag = document.createDocumentFragment();
+  const settings = controller.state.settings;
+  const showPinyin = options?.showPinyin ?? settings.showPinyin !== false;
+  const pinyinPos: PinyinPosition = options?.pinyinPosition ?? settings.pinyinPosition ?? 'above';
+  const tokens = tokenizeChineseText(textZh, ZH_LEXICON_INDEX, contextTag);
+
+  for (const tok of tokens) {
+    if (!tok.isWord) {
+      const punct = el('span', 'zh-punct', tok.raw);
+      frag.appendChild(punct);
+      continue;
+    }
+
+    if (tok.properNoun) {
+      const pn = tok.properNoun;
+      const cls = [
+        'zh-token',
+        'zh-token-proper',
+        'lw-interactive',
+        showPinyin ? `zh-token-${pinyinPos}` : 'zh-token-plain',
+      ].join(' ');
+      const btn = el('button', cls) as HTMLButtonElement;
+      btn.type = 'button';
+      btn.title = `${pn.hanzi} (${pn.pinyin}): ${pn.nameVi}`;
+      btn.dataset.hanzi = pn.hanzi;
+      btn.dataset.proper = 'true';
+      if (showPinyin) {
+        btn.appendChild(el('span', 'zh-pinyin', pn.pinyin));
+      }
+      btn.appendChild(el('span', 'zh-hanzi', tok.raw));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        controller.inspectZhProperNoun(pn, textZh);
+      });
+      frag.appendChild(btn);
+      continue;
+    }
+
+    if (tok.entry) {
+      const entryRef = tok.entry;
+      const highlighted = shouldHighlightChineseToken(entryRef, controller.state);
+      const cls = [
+        'zh-token',
+        highlighted ? 'zh-token-focus' : '',
+        'lw-interactive',
+        showPinyin ? `zh-token-${pinyinPos}` : 'zh-token-plain',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const btn = el('button', cls) as HTMLButtonElement;
+      btn.type = 'button';
+      btn.title = `${tok.raw} (${tok.resolvedPinyin}): ${tok.resolvedMeaningVi ?? entryRef.meaningVi}`;
+      btn.dataset.hanzi = tok.raw;
+      btn.dataset.wordId = entryRef.id;
+      if (showPinyin && tok.resolvedPinyin) {
+        btn.appendChild(el('span', 'zh-pinyin', tok.resolvedPinyin));
+      }
+      btn.appendChild(el('span', 'zh-hanzi', tok.raw));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        controller.inspectZhGlossWord(entryRef, contextTag, textZh, tok.resolvedPinyin);
+      });
+      frag.appendChild(btn);
+      continue;
+    }
+
+    const plain = el('span', 'zh-raw-char', tok.raw);
+    frag.appendChild(plain);
   }
   return frag;
 }

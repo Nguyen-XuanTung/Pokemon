@@ -15,6 +15,11 @@ import type {
 } from '../domain/types.ts';
 import { getTileAt, isPropVisible } from '../domain/world.ts';
 import type { BattleVisualCue, GameController } from '../game/controller.ts';
+import {
+  getNpcsInRegion,
+  worldPointToTile,
+  type MovementVisualSnapshot,
+} from '../game/movement.ts';
 
 const DIR_IDLE_COL: Readonly<Record<Direction, number>> = {
   down: 1,
@@ -75,12 +80,19 @@ export class WorldScene extends Phaser.Scene {
   private groundLayer!: Phaser.GameObjects.Container;
   private shadowLayer!: Phaser.GameObjects.Container;
   private navLayer!: Phaser.GameObjects.Container;
+  private clickPathGraphics!: Phaser.GameObjects.Graphics;
   private objectLayer!: Phaser.GameObjects.Container;
   private canopyLayer!: Phaser.GameObjects.Container;
   private ambientLayer!: Phaser.GameObjects.Container;
   private markerLayer!: Phaser.GameObjects.Container;
   private lightGlowLayer!: Phaser.GameObjects.Container;
-  private lastNavSignature = '';
+  private lastTrailSignature = '';
+  private lastMarkerSignature = '';
+  private lastClickPathVersion = -1;
+  private camCenterX = 0;
+  private camCenterY = 0;
+  private camInitialized = false;
+  private clickPulsePhase = 0;
   private battleContainer!: Phaser.GameObjects.Container;
   private battleUnderfill!: Phaser.GameObjects.Rectangle;
   private battleBgSprite!: Phaser.GameObjects.Sprite;
@@ -116,13 +128,13 @@ export class WorldScene extends Phaser.Scene {
   private damagePopupText!: Phaser.GameObjects.Text;
 
   private animCycleStep = 0;
-  private lastStepRendered = -1;
   private lastVisualCueId = 0;
   private wasInBattle = false;
   private enemyHomePos = { x: 240, y: 92 };
   private playerHomePos = { x: 96, y: 156 };
   private unsubscribe: (() => void) | null = null;
   public measuredFps = 60;
+  public lastFrameDeltaMs = 16.67;
 
   public constructor(controller: GameController) {
     super('WorldScene');
@@ -189,6 +201,7 @@ export class WorldScene extends Phaser.Scene {
     this.groundLayer = this.add.container(0, 0).setDepth(1);
     this.shadowLayer = this.add.container(0, 0).setDepth(3);
     this.navLayer = this.add.container(0, 0).setDepth(4);
+    this.clickPathGraphics = this.add.graphics().setDepth(4.5);
     this.objectLayer = this.add.container(0, 0).setDepth(5);
     this.companionShadow = this.add.ellipse(8, 14, 10, 4, 0x0e1410, 0.28).setDepth(8);
     this.companionGleamRing = this.add
@@ -222,6 +235,20 @@ export class WorldScene extends Phaser.Scene {
     this.createBattleLayer();
     this.rebuildRegionMap(this.controller.state.regionId, false);
     this.syncFromController();
+    this.applyMovementVisuals(this.controller.movement.getSnapshot(), 0, true);
+
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.controller.state.settings.clickToMove === false) return;
+      if (this.controller.isOverworldLocked()) return;
+      if (!pointer.wasTouch && pointer.button !== 0) return;
+      const rawEvent = pointer.event as Event | undefined;
+      if (rawEvent && rawEvent.target && rawEvent.target !== this.game.canvas) {
+        return;
+      }
+      const worldPt = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      const tile = worldPointToTile(worldPt.x, worldPt.y, 16);
+      this.controller.requestClickToMove(tile.x, tile.y);
+    });
 
     const onBattleUiLayout = () => {
       if (
@@ -238,7 +265,7 @@ export class WorldScene extends Phaser.Scene {
       if (this.controller.activeBattle) {
         this.enterOrLayoutBattleCamera();
       } else {
-        this.configureWorldCamera();
+        this.configureWorldCamera(true);
       }
     });
 
@@ -254,7 +281,7 @@ export class WorldScene extends Phaser.Scene {
             item.sprite.setFrame(nextFrame);
           }
         }
-        this.refreshCompanionFollower(false);
+        this.refreshCompanionAppearance();
         this.refreshBattleCreatureFrames();
       },
     });
@@ -273,14 +300,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   public override update(_time: number, delta: number): void {
+    this.lastFrameDeltaMs = delta;
     if (this.game.loop.actualFps > 0) {
       this.measuredFps = Math.round(this.game.loop.actualFps);
     }
+
+    const clampedDt = Math.max(0, Math.min(delta, 50));
+    if (!this.controller.activeBattle) {
+      const moveSnap = this.controller.tickMovement(clampedDt);
+      this.applyMovementVisuals(moveSnap, clampedDt, false);
+    }
+
     if (!this.controller.state.settings.reducedMotion && !this.controller.activeBattle) {
       const map = MAPS_BY_ID[this.controller.state.regionId];
       const maxW = map.width * 16;
       const maxH = map.height * 16;
-      const dt = delta * 0.001;
+      const dt = clampedDt * 0.001;
       for (const m of this.ambientMotes) {
         m.dot.x += m.vx * dt;
         m.dot.y += m.vy * dt;
@@ -298,7 +333,57 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private configureWorldCamera(): void {
+  public getTileClientCenter(tileX: number, tileY: number): { x: number; y: number } | null {
+    if (!this.game.canvas) return null;
+    const cam = this.cameras.main;
+    const rect = this.game.canvas.getBoundingClientRect();
+    const worldX = tileX * 16 + 8;
+    const worldY = tileY * 16 + 8;
+    const scaleX = rect.width / Math.max(1, this.scale.width);
+    const scaleY = rect.height / Math.max(1, this.scale.height);
+    const camLocalX = (worldX - cam.worldView.x) * cam.zoom;
+    const camLocalY = (worldY - cam.worldView.y) * cam.zoom;
+    return {
+      x: rect.left + camLocalX * scaleX,
+      y: rect.top + camLocalY * scaleY,
+    };
+  }
+
+  public getMovementTelemetry(): {
+    readonly visualX: number;
+    readonly visualY: number;
+    readonly spriteX: number;
+    readonly spriteY: number;
+    readonly companionSpriteX: number;
+    readonly companionSpriteY: number;
+    readonly camScrollX: number;
+    readonly camScrollY: number;
+    readonly camZoom: number;
+    readonly isMoving: boolean;
+    readonly activePathLength: number;
+    readonly isRunning: boolean;
+    readonly lastFrameDeltaMs: number;
+  } {
+    const snap = this.controller.movement.getSnapshot();
+    const cam = this.cameras.main;
+    return {
+      visualX: Number(snap.visualX.toFixed(3)),
+      visualY: Number(snap.visualY.toFixed(3)),
+      spriteX: Number(this.playerSprite.x.toFixed(2)),
+      spriteY: Number(this.playerSprite.y.toFixed(2)),
+      companionSpriteX: Number(this.companionSprite.x.toFixed(2)),
+      companionSpriteY: Number(this.companionSprite.y.toFixed(2)),
+      camScrollX: Number(cam.scrollX.toFixed(2)),
+      camScrollY: Number(cam.scrollY.toFixed(2)),
+      camZoom: cam.zoom,
+      isMoving: snap.isMoving,
+      activePathLength: snap.activePath.length,
+      isRunning: snap.isRunning,
+      lastFrameDeltaMs: Number(this.lastFrameDeltaMs.toFixed(2)),
+    };
+  }
+
+  private configureWorldCamera(snapNow: boolean = false): void {
     const cam = this.cameras.main;
     const map = MAPS_BY_ID[this.controller.state.regionId];
     const worldW = map.width * 16;
@@ -309,10 +394,150 @@ export class WorldScene extends Phaser.Scene {
     const minCoverZoom = Math.max(viewW / worldW, viewH / worldH);
     const crispZoom = Math.max(2, Math.min(3.5, Math.ceil(minCoverZoom * 2) / 2));
 
+    cam.stopFollow();
     cam.setBounds(0, 0, worldW, worldH);
     cam.setZoom(crispZoom);
-    const lerp = this.controller.state.settings.reducedMotion ? 1 : 0.18;
-    cam.startFollow(this.playerSprite, true, lerp, lerp);
+    cam.roundPixels = false;
+
+    if (snapNow || !this.camInitialized) {
+      const snap = this.controller.movement.getSnapshot();
+      this.updateSmoothWorldCamera(snap.visualX * 16 + 8, snap.visualY * 16 + 8, 0, true);
+    }
+  }
+
+  private updateSmoothWorldCamera(
+    targetWorldX: number,
+    targetWorldY: number,
+    deltaMs: number,
+    instant: boolean,
+  ): void {
+    const cam = this.cameras.main;
+    const map = MAPS_BY_ID[this.controller.state.regionId];
+    const worldW = map.width * 16;
+    const worldH = map.height * 16;
+    const viewWorldW = this.scale.width / cam.zoom;
+    const viewWorldH = this.scale.height / cam.zoom;
+    const halfW = viewWorldW * 0.5;
+    const halfH = viewWorldH * 0.5;
+
+    const clampedTargetX =
+      worldW <= viewWorldW ? worldW * 0.5 : Phaser.Math.Clamp(targetWorldX, halfW, worldW - halfW);
+    const clampedTargetY =
+      worldH <= viewWorldH ? worldH * 0.5 : Phaser.Math.Clamp(targetWorldY, halfH, worldH - halfH);
+
+    if (instant || !this.camInitialized || this.controller.state.settings.reducedMotion) {
+      this.camCenterX = clampedTargetX;
+      this.camCenterY = clampedTargetY;
+      this.camInitialized = true;
+    } else {
+      // Frame-rate-independent exponential smoothing identical across 30/60/120 Hz
+      const dtSec = Math.max(0, Math.min(deltaMs, 50)) * 0.001;
+      const alpha = 1 - Math.exp(-15 * dtSec);
+      this.camCenterX += (clampedTargetX - this.camCenterX) * alpha;
+      this.camCenterY += (clampedTargetY - this.camCenterY) * alpha;
+      if (Math.abs(clampedTargetX - this.camCenterX) < 0.05) this.camCenterX = clampedTargetX;
+      if (Math.abs(clampedTargetY - this.camCenterY) < 0.05) this.camCenterY = clampedTargetY;
+    }
+
+    const rawScrollX = this.camCenterX - cam.width * 0.5;
+    const rawScrollY = this.camCenterY - cam.height * 0.5;
+    // Snap scroll to exact screen pixels (1 / zoom world increments) for crisp pixel art without 3px stair-step jitter
+    cam.setScroll(
+      Math.round(rawScrollX * cam.zoom) / cam.zoom,
+      Math.round(rawScrollY * cam.zoom) / cam.zoom,
+    );
+  }
+
+  private applyMovementVisuals(
+    snap: MovementVisualSnapshot,
+    deltaMs: number,
+    snapCamera: boolean,
+  ): void {
+    const px = snap.visualX * 16;
+    const py = snap.visualY * 16;
+    this.playerSprite.setPosition(px, py);
+    this.playerShadow.setPosition(px + 8, py + 15);
+
+    if (snap.isMoving && !this.controller.state.settings.reducedMotion) {
+      const walkCols = DIR_WALK_COLS[snap.facing];
+      const frameIdx = Math.floor(snap.walkCyclePhase) % 4;
+      this.playerSprite.setFrame(walkCols[frameIdx]!);
+    } else {
+      this.playerSprite.setFrame(DIR_IDLE_COL[snap.facing]);
+    }
+
+    const fx = snap.companionVisualX * 16;
+    const fy = snap.companionVisualY * 16;
+    this.companionSprite.setPosition(fx, fy);
+    this.companionShadow.setPosition(fx + 8, fy + 14);
+    this.companionGleamRing.setPosition(fx + 8, fy + 8);
+
+    this.updateSmoothWorldCamera(px + 8, py + 8, deltaMs, snapCamera);
+    this.renderClickPathOverlay(snap, deltaMs);
+  }
+
+  private renderClickPathOverlay(snap: MovementVisualSnapshot, deltaMs: number): void {
+    const hasVisual =
+      snap.activePath.length > 0 || snap.activeGoal !== null || snap.blockedMarker !== null;
+    if (!hasVisual && this.lastClickPathVersion === snap.pathVersion) {
+      return;
+    }
+
+    if (!this.controller.state.settings.reducedMotion && hasVisual) {
+      this.clickPulsePhase = (this.clickPulsePhase + deltaMs * 0.006) % (Math.PI * 2);
+    } else if (!hasVisual && this.lastClickPathVersion !== snap.pathVersion) {
+      this.clickPathGraphics.clear();
+      this.lastClickPathVersion = snap.pathVersion;
+      return;
+    }
+
+    this.lastClickPathVersion = snap.pathVersion;
+    this.clickPathGraphics.clear();
+    if (!hasVisual || this.controller.activeBattle) return;
+
+    const pulse = this.controller.state.settings.reducedMotion
+      ? 0.5
+      : 0.5 + 0.5 * Math.sin(this.clickPulsePhase);
+
+    // Distinct cool aqua-cyan stepping markers for player-chosen click-to-move (distinct from golden quest trail!)
+    for (let i = 0; i < snap.activePath.length; i++) {
+      const pt = snap.activePath[i]!;
+      const cx = pt.x * 16 + 8;
+      const cy = pt.y * 16 + 10;
+      const alpha = Math.max(0.32, 0.72 - i * 0.015);
+      this.clickPathGraphics.fillStyle(0x57e3ff, alpha);
+      this.clickPathGraphics.lineStyle(1, 0x164459, alpha);
+      this.clickPathGraphics.fillCircle(cx, cy, i === snap.activePath.length - 1 ? 2.8 : 2.0);
+      this.clickPathGraphics.strokeCircle(cx, cy, i === snap.activePath.length - 1 ? 2.8 : 2.0);
+    }
+
+    if (snap.activeGoal) {
+      const gx = snap.activeGoal.x * 16 + 8;
+      const gy = snap.activeGoal.y * 16 + 9;
+      const isInteractable =
+        snap.activeGoal.kind === 'npc' ||
+        snap.activeGoal.kind === 'prop' ||
+        snap.activeGoal.kind === 'portal';
+      const ringColor = isInteractable ? 0x62f2b6 : 0x57e3ff;
+      const radius = 5.5 + pulse * 1.6;
+      this.clickPathGraphics.fillStyle(ringColor, 0.16 + pulse * 0.08);
+      this.clickPathGraphics.lineStyle(1.4, ringColor, 0.85);
+      this.clickPathGraphics.fillCircle(gx, gy, radius);
+      this.clickPathGraphics.strokeCircle(gx, gy, radius);
+    }
+
+    if (snap.blockedMarker) {
+      const bx = snap.blockedMarker.x * 16 + 8;
+      const by = snap.blockedMarker.y * 16 + 8;
+      const alpha = Math.max(0.15, Math.min(1, snap.blockedMarker.remainingMs / 520));
+      this.clickPathGraphics.lineStyle(1.8, 0xe85a3c, alpha);
+      this.clickPathGraphics.beginPath();
+      this.clickPathGraphics.moveTo(bx - 4, by - 4);
+      this.clickPathGraphics.lineTo(bx + 4, by + 4);
+      this.clickPathGraphics.moveTo(bx + 4, by - 4);
+      this.clickPathGraphics.lineTo(bx - 4, by + 4);
+      this.clickPathGraphics.strokePath();
+    }
   }
 
   private enterOrLayoutBattleCamera(): void {
@@ -755,7 +980,7 @@ export class WorldScene extends Phaser.Scene {
     this.regionFadeRect.setSize(worldW + 128, worldH + 128);
 
     if (!this.controller.activeBattle) {
-      this.configureWorldCamera();
+      this.configureWorldCamera(true);
     }
 
     if (playFade && !this.controller.state.settings.reducedMotion) {
@@ -961,7 +1186,7 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private refreshCompanionFollower(animateTween: boolean): void {
+  private refreshCompanionAppearance(): void {
     const state = this.controller.state;
     const lead = state.party[0];
     const dist =
@@ -990,46 +1215,6 @@ export class WorldScene extends Phaser.Scene {
       this.companionSprite.clearTint();
       this.companionGleamRing.setVisible(false);
     }
-
-    const fx = this.controller.followerPos.x * 16;
-    const fy = this.controller.followerPos.y * 16;
-    if (
-      !animateTween ||
-      state.settings.reducedMotion ||
-      Math.abs(this.companionSprite.x - fx) > 24 ||
-      Math.abs(this.companionSprite.y - fy) > 24
-    ) {
-      this.companionSprite.setPosition(fx, fy);
-      this.companionShadow.setPosition(fx + 8, fy + 14);
-      this.companionGleamRing.setPosition(fx + 8, fy + 8);
-    } else {
-      this.tweens.killTweensOf([
-        this.companionSprite,
-        this.companionShadow,
-        this.companionGleamRing,
-      ]);
-      this.tweens.add({
-        targets: this.companionSprite,
-        x: fx,
-        y: fy,
-        duration: 96,
-        ease: 'Linear',
-      });
-      this.tweens.add({
-        targets: this.companionShadow,
-        x: fx + 8,
-        y: fy + 14,
-        duration: 96,
-        ease: 'Linear',
-      });
-      this.tweens.add({
-        targets: this.companionGleamRing,
-        x: fx + 8,
-        y: fy + 8,
-        duration: 96,
-        ease: 'Linear',
-      });
-    }
   }
 
   private rebuildNavigationOverlay(): void {
@@ -1039,82 +1224,87 @@ export class WorldScene extends Phaser.Scene {
     const inBattle = Boolean(this.controller.activeBattle);
     const dest = nav.destinationInCurrentRegion;
     const nearby = nav.nearbyInteractable;
-    const sig = `${inBattle}|${guidance}|${state.regionId}|${state.playerPos.x},${state.playerPos.y}|${dest?.x ?? -1},${dest?.y ?? -1}|${nav.waypoints.length}|${nearby?.id ?? ''}|${Object.keys(state.quests).length}|${state.defeatedTrainers.length}|${Boolean(state.flags.has_starter)}`;
-    if (sig === this.lastNavSignature) {
-      return;
-    }
-    this.lastNavSignature = sig;
-    this.navLayer.removeAll(true);
-    this.markerLayer.removeAll(true);
 
-    if (inBattle || guidance === 'off') {
-      return;
-    }
+    const firstWp = nav.waypoints[0];
+    const trailSig = `${inBattle}|${guidance}|${state.regionId}|${nav.active}|${dest?.x ?? -1},${dest?.y ?? -1}|${nav.waypoints.length}|${firstWp?.x ?? -1},${firstWp?.y ?? -1}`;
+    if (trailSig !== this.lastTrailSignature) {
+      this.lastTrailSignature = trailSig;
+      this.navLayer.removeAll(true);
 
-    // Subtle ground guidance trail & destination beacon in Full mode
-    if (guidance === 'full' && nav.active) {
-      for (let i = 0; i < nav.waypoints.length; i++) {
-        const pt = nav.waypoints[i]!;
-        const px = pt.x * 16 + 8;
-        const py = pt.y * 16 + 10;
-        const alpha = Math.max(0.28, 0.68 - i * 0.015);
-        const dot = this.add
-          .circle(px, py, i === 0 ? 2.8 : 2.1, 0xffe478, alpha)
-          .setStrokeStyle(1, 0x4f3616, alpha * 0.9);
-        this.navLayer.add(dot);
-      }
-      if (dest) {
-        const ring = this.add
-          .circle(dest.x * 16 + 8, dest.y * 16 + 10, 7, 0xffdf6b, 0.2)
-          .setStrokeStyle(1.4, 0xfff5b5, 0.9);
-        this.navLayer.add(ring);
+      if (!inBattle && guidance === 'full' && nav.active) {
+        for (let i = 0; i < nav.waypoints.length; i++) {
+          const pt = nav.waypoints[i]!;
+          const px = pt.x * 16 + 8;
+          const py = pt.y * 16 + 10;
+          const alpha = Math.max(0.28, 0.68 - i * 0.015);
+          const dot = this.add
+            .circle(px, py, i === 0 ? 2.8 : 2.1, 0xffe478, alpha)
+            .setStrokeStyle(1, 0x4f3616, alpha * 0.9);
+          this.navLayer.add(dot);
+        }
+        if (dest) {
+          const ring = this.add
+            .circle(dest.x * 16 + 8, dest.y * 16 + 10, 7, 0xffdf6b, 0.2)
+            .setStrokeStyle(1.4, 0xfff5b5, 0.9);
+          this.navLayer.add(ring);
+        }
       }
     }
 
-    // NPC quest indicators (! for new quest, ? for active objective / turn-in)
-    const npcsHere = NPCS.filter((n) => n.regionId === state.regionId);
-    for (const npc of npcsHere) {
-      const marker = getNpcQuestMarker({
-        npc,
-        state,
-        quests: QUESTS,
-        speciesById: SPECIES_BY_ID,
-      });
-      if (marker === 'none') continue;
-      const mx = npc.x * 16 + 8;
-      const my = npc.y * 16 - 5;
-      const bgColor = marker === 'new_quest' ? 0xf5c842 : 0x3b8c52;
-      const textColor = marker === 'new_quest' ? '#2c1f0a' : '#fffaf0';
-      const badge = this.add
-        .circle(mx, my, 5.2, bgColor, 0.96)
-        .setStrokeStyle(1, 0x261d14, 0.95);
-      const glyph = this.add
-        .text(mx, my, marker === 'new_quest' ? '!' : '?', {
-          fontFamily: 'Segoe UI, Tahoma, sans-serif',
-          fontSize: '9px',
-          fontStyle: 'bold',
-          color: textColor,
-        })
-        .setOrigin(0.5, 0.5);
-      this.markerLayer.add([badge, glyph]);
-    }
+    // Separate marker signature so NPC Phaser.Text badges are NEVER destroyed/rebuilt on routine walking steps!
+    const markerSig = `${inBattle}|${guidance}|${state.regionId}|${nearby?.id ?? ''}|${Object.keys(state.quests).length}|${state.defeatedTrainers.length}|${Boolean(state.flags.has_starter)}|${Boolean(state.flags.warden_sylvan_cleared)}|${Boolean(state.flags.warden_mirella_cleared)}|${Boolean(state.flags.warden_kaelen_cleared)}|${Boolean(state.flags.sanctuary_harmony_restored)}`;
+    if (markerSig !== this.lastMarkerSignature) {
+      this.lastMarkerSignature = markerSig;
+      this.markerLayer.removeAll(true);
 
-    // Subtle nearby interaction bubble above adjacent NPC or prop
-    if (nearby) {
-      const bx = nearby.x * 16 + 8;
-      const by = nearby.y * 16 - 6;
-      const bubble = this.add
-        .circle(bx, by, 4.5, 0xfff8e1, 0.95)
-        .setStrokeStyle(1, 0x5e442c, 0.95);
-      const dot = this.add.circle(bx, by, 1.5, 0xba5b38, 1);
-      this.markerLayer.add([bubble, dot]);
+      if (!inBattle && guidance !== 'off') {
+        const npcsHere = getNpcsInRegion(state.regionId);
+        for (const npc of npcsHere) {
+          const marker = getNpcQuestMarker({
+            npc,
+            state,
+            quests: QUESTS,
+            speciesById: SPECIES_BY_ID,
+          });
+          if (marker === 'none') continue;
+          const mx = npc.x * 16 + 8;
+          const my = npc.y * 16 - 5;
+          const bgColor = marker === 'new_quest' ? 0xf5c842 : 0x3b8c52;
+          const textColor = marker === 'new_quest' ? '#2c1f0a' : '#fffaf0';
+          const badge = this.add
+            .circle(mx, my, 5.2, bgColor, 0.96)
+            .setStrokeStyle(1, 0x261d14, 0.95);
+          const glyph = this.add
+            .text(mx, my, marker === 'new_quest' ? '!' : '?', {
+              fontFamily: 'Segoe UI, Tahoma, sans-serif',
+              fontSize: '9px',
+              fontStyle: 'bold',
+              color: textColor,
+            })
+            .setOrigin(0.5, 0.5);
+          this.markerLayer.add([badge, glyph]);
+        }
+
+        if (nearby) {
+          const bx = nearby.x * 16 + 8;
+          const by = nearby.y * 16 - 6;
+          const bubble = this.add
+            .circle(bx, by, 4.5, 0xfff8e1, 0.95)
+            .setStrokeStyle(1, 0x5e442c, 0.95);
+          const dot = this.add.circle(bx, by, 1.5, 0xba5b38, 1);
+          this.markerLayer.add([bubble, dot]);
+        }
+      }
     }
   }
 
   private syncFromController(): void {
     const state = this.controller.state;
-    if (this.renderedRegion !== state.regionId) {
-      this.lastNavSignature = '';
+    const regionChanged = this.renderedRegion !== state.regionId;
+    if (regionChanged) {
+      this.lastTrailSignature = '';
+      this.lastMarkerSignature = '';
+      this.lastClickPathVersion = -1;
       this.rebuildRegionMap(state.regionId, true);
     }
 
@@ -1128,41 +1318,11 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    const walkCols = DIR_WALK_COLS[state.playerPos.facing];
-    const playerCol = walkCols[state.stepCount % 4]!;
-    this.playerSprite.setFrame(playerCol);
-
-    const targetX = state.playerPos.x * 16;
-    const targetY = state.playerPos.y * 16;
-    const stepped = this.lastStepRendered !== state.stepCount;
-    if (
-      state.settings.reducedMotion ||
-      Math.abs(this.playerSprite.x - targetX) > 24 ||
-      Math.abs(this.playerSprite.y - targetY) > 24 ||
-      this.lastStepRendered < 0
-    ) {
-      this.playerSprite.setPosition(targetX, targetY);
-      this.playerShadow.setPosition(targetX + 8, targetY + 15);
-    } else if (stepped) {
-      this.tweens.killTweensOf([this.playerSprite, this.playerShadow]);
-      this.tweens.add({
-        targets: this.playerSprite,
-        x: targetX,
-        y: targetY,
-        duration: 92,
-        ease: 'Linear',
-      });
-      this.tweens.add({
-        targets: this.playerShadow,
-        x: targetX + 8,
-        y: targetY + 15,
-        duration: 92,
-        ease: 'Linear',
-      });
-    }
-    this.refreshCompanionFollower(stepped && this.lastStepRendered >= 0);
+    this.refreshCompanionAppearance();
     this.rebuildNavigationOverlay();
-    this.lastStepRendered = state.stepCount;
+    if (regionChanged || !this.controller.movement.isCurrentlyStepping()) {
+      this.applyMovementVisuals(this.controller.movement.getSnapshot(), 0, regionChanged);
+    }
 
     const tint = TIME_TINT[state.timeOfDay];
     this.timeOverlay.setFillStyle(tint.color, tint.alpha);
@@ -1180,6 +1340,7 @@ export class WorldScene extends Phaser.Scene {
     if (battle) {
       if (!this.wasInBattle) {
         this.wasInBattle = true;
+        this.clickPathGraphics.clear();
         this.battleContainer.setVisible(true);
         this.enterOrLayoutBattleCamera();
       }
@@ -1197,7 +1358,7 @@ export class WorldScene extends Phaser.Scene {
       this.gleamingAuraSprite.setVisible(false);
       this.vfxSprite.setVisible(false);
       this.damagePopupText.setVisible(false);
-      this.configureWorldCamera();
+      this.configureWorldCamera(true);
     }
   }
 

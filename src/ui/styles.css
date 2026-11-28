@@ -538,6 +538,96 @@ select {
   background: rgba(201, 152, 40, 0.25);
 }
 
+/* Interactive Chinese Hanzi + Pinyin Tokens (Mobile-safe inline-flex layout) */
+.lw-dialogue-zh {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', sans-serif;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px 3px;
+  line-height: 1.35;
+  font-size: 1.08rem;
+}
+
+.zh-token {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px dotted var(--pond-blue);
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  vertical-align: bottom;
+  max-width: 100%;
+}
+
+.zh-token-below {
+  flex-direction: column-reverse;
+}
+
+.zh-token-focus {
+  background: rgba(56, 119, 138, 0.14);
+  border-bottom: 2px solid var(--terracotta);
+}
+
+.zh-token-proper {
+  border-bottom: 1.5px dashed var(--leaf-green);
+}
+
+.zh-token:hover {
+  background: rgba(201, 152, 40, 0.28);
+}
+
+.zh-pinyin {
+  font-size: 0.67rem;
+  line-height: 1.15;
+  color: var(--pond-blue);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.zh-hanzi {
+  font-size: 1.06rem;
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+.zh-punct,
+.zh-raw-char {
+  display: inline-flex;
+  align-items: flex-end;
+  line-height: 1.2;
+  padding: 1px 0;
+  font-size: 1.04rem;
+}
+
+.lw-gloss-pinyin {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--pond-blue);
+  margin: 0 4px;
+}
+
+@media (max-width: 480px) {
+  .lw-dialogue-zh {
+    gap: 2px 2px;
+    font-size: 1rem;
+  }
+  .zh-pinyin {
+    font-size: 0.62rem;
+  }
+  .zh-hanzi {
+    font-size: 1rem;
+  }
+}
+
 .lw-evolution-banner {
   background: rgba(246, 238, 217, 0.98);
   border: 2.5px solid var(--amber-gold);

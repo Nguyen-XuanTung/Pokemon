@@ -3,6 +3,7 @@ import { MOVES_BY_ID } from '../data/moves.ts';
 import { NPCS } from '../data/npcs.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
+import { resolveChineseSenseForContext } from '../domain/chinese.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
 import {
   getUiStrings,
@@ -18,7 +19,11 @@ import type {
   ContentLanguageMode,
   DifficultyMode,
   Direction,
+  HskLevel,
+  LearningLanguage,
+  PinyinPosition,
   UiLanguage,
+  ZhStudyMode,
 } from '../domain/types.ts';
 import { getTileAt } from '../domain/world.ts';
 import { APP_VERSION, type GameController } from '../game/controller.ts';
@@ -32,7 +37,12 @@ import {
   buildSupplyPostModal,
   type JournalViewState,
 } from './journalView.ts';
-import { createCreatureSpriteSpan, el, renderInteractiveEnglish } from './uiHelpers.ts';
+import {
+  createCreatureSpriteSpan,
+  el,
+  renderInteractiveChinese,
+  renderInteractiveEnglish,
+} from './uiHelpers.ts';
 
 const DPAD_ARROW_SVG: Readonly<Record<Direction, string>> = {
   up: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 5l7 8h-4v6H9v-6H5z"/></svg>',
@@ -56,8 +66,17 @@ export class GameUiRenderer {
   private wasInBattle = false;
   private skipTutorialOnTitle = false;
   private heldTouchDir: Direction | null = null;
-  private heldTouchTimer: number | null = null;
+  private activeTouchPointerId: number | null = null;
   private lastPointerStepAt = -9999;
+  private overworldShellMounted = false;
+  private owTopSlot: HTMLElement | null = null;
+  private owMinimapSlot: HTMLElement | null = null;
+  private owMinimapCanvas: HTMLCanvasElement | null = null;
+  private owNearbySlot: HTMLElement | null = null;
+  private owTouchSlot: HTMLElement | null = null;
+  private owTouchUiLang: UiLanguage | null = null;
+  private owLastNearbySig = '';
+  private minimapTerrainCache = new Map<string, HTMLCanvasElement>();
   private readonly journalState: JournalViewState = {
     lexiconFilter: 'encountered',
     campAnsweredCurrent: false,
@@ -78,40 +97,73 @@ export class GameUiRenderer {
     this.render();
   }
 
-  private startHoldWalk(dir: Direction): void {
-    this.stopHoldWalk();
-    this.heldTouchDir = dir;
-    this.lastPointerStepAt = performance.now();
-    this.controller.movePlayer(dir);
-    if (typeof window !== 'undefined') {
-      this.heldTouchTimer = window.setInterval(() => {
-        if (
-          this.controller.activeModal !== 'none' ||
-          this.controller.activeBattle !== null ||
-          this.controller.activeDialogue !== null ||
-          !this.heldTouchDir
-        ) {
-          this.stopHoldWalk();
-          return;
-        }
-        this.lastPointerStepAt = performance.now();
-        this.controller.movePlayer(this.heldTouchDir);
-      }, 135);
+  private resolveDirectionForKeyCode(code: string): Direction | null {
+    const km = this.controller.state.settings.keyMap;
+    if (code === km.up) return 'up';
+    if (code === km.down) return 'down';
+    if (code === km.left) return 'left';
+    if (code === km.right) return 'right';
+    if (code === km.interact || code === km.cancel || code === km.journal) return null;
+    if (code === 'KeyW' || code === 'ArrowUp') return 'up';
+    if (code === 'KeyS' || code === 'ArrowDown') return 'down';
+    if (code === 'KeyA' || code === 'ArrowLeft') return 'left';
+    if (code === 'KeyD' || code === 'ArrowRight') return 'right';
+    return null;
+  }
+
+  private updateTouchButtonActiveVisuals(): void {
+    if (!this.owTouchSlot) return;
+    const buttons = this.owTouchSlot.querySelectorAll<HTMLButtonElement>('.lw-dpad-btn');
+    for (const btn of buttons) {
+      const dir = btn.dataset.dir;
+      btn.dataset.active = String(Boolean(dir && this.heldTouchDir === dir));
     }
   }
 
-  private stopHoldWalk(): void {
-    if (typeof window !== 'undefined' && this.heldTouchTimer !== null) {
-      window.clearInterval(this.heldTouchTimer);
-      this.heldTouchTimer = null;
+  private startTouchMove(dir: Direction, pointerId: number): void {
+    if (this.heldTouchDir && this.heldTouchDir !== dir) {
+      this.controller.releaseMoveInput(`touch:${this.heldTouchDir}`);
     }
-    this.heldTouchDir = null;
+    this.heldTouchDir = dir;
+    this.activeTouchPointerId = pointerId;
+    this.lastPointerStepAt = performance.now();
+    this.controller.pressMoveInput(`touch:${dir}`, dir);
+    this.updateTouchButtonActiveVisuals();
+  }
+
+  private stopTouchMove(pointerId?: number): void {
+    if (pointerId !== undefined && this.activeTouchPointerId !== null && pointerId !== this.activeTouchPointerId) {
+      return;
+    }
+    if (this.heldTouchDir) {
+      this.controller.releaseMoveInput(`touch:${this.heldTouchDir}`);
+      this.heldTouchDir = null;
+    }
+    this.activeTouchPointerId = null;
+    this.updateTouchButtonActiveVisuals();
   }
 
   private bindKeyboardAndPointerControls(): void {
-    window.addEventListener('pointerup', () => this.stopHoldWalk());
-    window.addEventListener('pointercancel', () => this.stopHoldWalk());
-    window.addEventListener('blur', () => this.stopHoldWalk());
+    window.addEventListener('pointerup', (e) => this.stopTouchMove(e.pointerId));
+    window.addEventListener('pointercancel', (e) => this.stopTouchMove(e.pointerId));
+    window.addEventListener('blur', () => {
+      this.stopTouchMove();
+      this.controller.cancelMovementInputs('blur');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.stopTouchMove();
+        this.controller.cancelMovementInputs('blur');
+      }
+    });
+
+    window.addEventListener('keyup', (ev) => {
+      if (ev.code === 'ShiftLeft' || ev.code === 'ShiftRight') {
+        this.controller.setSprintInput(false);
+        return;
+      }
+      this.controller.releaseMoveInput(`key:${ev.code}`);
+    });
 
     window.addEventListener('keydown', (ev) => {
       if (this.journalState.awaitingKeyRebind) {
@@ -135,8 +187,18 @@ export class GameUiRenderer {
       const km = this.controller.state.settings.keyMap;
       const code = ev.code;
 
+      if (code === 'ShiftLeft' || code === 'ShiftRight') {
+        this.controller.setSprintInput(true);
+        return;
+      }
+
       if (code === km.cancel || code === 'Escape') {
-        if (this.controller.activeGlossEntry || this.controller.activePocketGloss) {
+        if (
+          this.controller.activeGlossEntry ||
+          this.controller.activePocketGloss ||
+          this.controller.activeZhGlossEntry ||
+          this.controller.activeZhProperGloss
+        ) {
           ev.preventDefault();
           this.controller.closeGlossPopup();
           return;
@@ -219,17 +281,13 @@ export class GameUiRenderer {
         }
         if (this.controller.activeModal === 'none' && !this.controller.activeBattle) {
           ev.preventDefault();
+          this.controller.cancelMovementInputs('manual');
           this.controller.interactFacing();
           return;
         }
       }
 
-      let dir: Direction | null = null;
-      if (code === km.up || code === 'KeyW') dir = 'up';
-      else if (code === km.down || code === 'KeyS') dir = 'down';
-      else if (code === km.left || code === 'KeyA') dir = 'left';
-      else if (code === km.right || code === 'KeyD') dir = 'right';
-
+      const dir = this.resolveDirectionForKeyCode(code);
       if (
         dir &&
         this.controller.activeModal === 'none' &&
@@ -237,9 +295,106 @@ export class GameUiRenderer {
         !this.controller.activeDialogue
       ) {
         ev.preventDefault();
-        this.controller.movePlayer(dir);
+        // Ignore OS key-repeat events! Continuous movement is driven smoothly by MovementCoordinator.tick(delta).
+        if (ev.repeat) {
+          return;
+        }
+        this.controller.pressMoveInput(`key:${code}`, dir);
       }
     });
+  }
+
+  private resetOverworldShell(): void {
+    this.overworldShellMounted = false;
+    this.owTopSlot = null;
+    this.owMinimapSlot = null;
+    this.owMinimapCanvas = null;
+    this.owNearbySlot = null;
+    this.owTouchSlot = null;
+    this.owTouchUiLang = null;
+    this.owLastNearbySig = '';
+  }
+
+  private renderPureOverworldIncremental(): void {
+    const { settings } = this.controller.state;
+    const uiLang: UiLanguage = settings.uiLanguage === 'en' ? 'en' : 'vi';
+    const guidance = settings.guidanceMode ?? 'full';
+
+    if (!this.overworldShellMounted) {
+      this.overlayEl.replaceChildren();
+      this.owTopSlot = el('div', 'lw-top-bar-group');
+      this.owMinimapSlot = el('div', '');
+      this.owMinimapCanvas = null;
+
+      const bottomStack = el('div', 'lw-bottom-stack');
+      this.owNearbySlot = el('div', '');
+      this.owTouchSlot = this.buildTouchPad();
+      this.owTouchUiLang = uiLang;
+      this.owLastNearbySig = '';
+      bottomStack.append(this.owNearbySlot, this.owTouchSlot);
+
+      this.overlayEl.append(this.owTopSlot, this.owMinimapSlot, bottomStack);
+      this.overworldShellMounted = true;
+    }
+
+    // 1. Update top HUD & transient banners
+    if (this.owTopSlot) {
+      this.owTopSlot.replaceChildren();
+      this.owTopSlot.appendChild(this.buildTopHud());
+      if (this.controller.activeEvolution) {
+        this.owTopSlot.appendChild(this.buildEvolutionBanner());
+      } else if (this.controller.activeMoveLearnBanner) {
+        this.owTopSlot.appendChild(this.buildMoveLearnBanner());
+      } else if (this.controller.toasts.length > 0) {
+        this.owTopSlot.appendChild(this.buildToastStack());
+      }
+      if (this.controller.activeOnboardingPrompt) {
+        this.owTopSlot.appendChild(this.buildOnboardingStrip());
+      }
+    }
+
+    // 2. Incrementally redraw minimap using cached region terrain canvas (zero DOM teardown!)
+    if (this.owMinimapSlot) {
+      if (guidance === 'full') {
+        if (!this.owMinimapCanvas || !this.owMinimapSlot.firstChild) {
+          const widget = this.buildMinimapWidget();
+          this.owMinimapCanvas = widget.querySelector('canvas');
+          this.owMinimapSlot.replaceChildren(widget);
+        } else {
+          this.paintMinimapCanvas(this.owMinimapCanvas);
+        }
+      } else if (this.owMinimapSlot.firstChild) {
+        this.owMinimapSlot.replaceChildren();
+        this.owMinimapCanvas = null;
+      }
+    }
+
+    // 3. Patch nearby interactable pill ONLY when target or highlight state changes
+    if (this.owNearbySlot) {
+      const nearby = guidance !== 'off' ? this.controller.navigationPlan.nearbyInteractable : null;
+      const highlight =
+        this.controller.activeOnboardingPrompt?.highlightButtonTestId === 'btn-nearby-interact';
+      const sig = `${uiLang}|${nearby?.id ?? ''}|${highlight}|${settings.touchControls}`;
+      if (sig !== this.owLastNearbySig) {
+        this.owLastNearbySig = sig;
+        this.owNearbySlot.replaceChildren();
+        if (nearby) {
+          this.owNearbySlot.appendChild(this.buildNearbyPromptBar());
+        }
+      }
+    }
+
+    // 4. Keep touch D-pad permanently mounted during walking so touch hold pointer events NEVER drop!
+    if (this.owTouchSlot && this.owTouchUiLang !== uiLang) {
+      const parent = this.owTouchSlot.parentElement;
+      const replacement = this.buildTouchPad();
+      if (parent) {
+        parent.replaceChild(replacement, this.owTouchSlot);
+      }
+      this.owTouchSlot = replacement;
+      this.owTouchUiLang = uiLang;
+    }
+    this.updateTouchButtonActiveVisuals();
   }
 
   public render(): void {
@@ -250,14 +405,35 @@ export class GameUiRenderer {
     this.rootEl.dataset.touch = settings.touchControls;
     this.rootEl.dataset.uiLang = settings.uiLanguage === 'en' ? 'en' : 'vi';
 
-    if (
+    const locked =
       this.controller.activeModal !== 'none' ||
       this.controller.activeBattle !== null ||
-      this.controller.activeDialogue !== null
-    ) {
-      this.stopHoldWalk();
+      this.controller.activeDialogue !== null;
+
+    if (locked) {
+      this.stopTouchMove();
     }
 
+    const inBattleNow = Boolean(this.controller.activeBattle);
+    if (inBattleNow && !this.wasInBattle) {
+      this.battleTab = 'moves';
+    }
+    this.wasInBattle = inBattleNow;
+
+    // Fast-path incremental overworld rendering: avoids tearing down touch D-pad & minimap on every step!
+    const hasGloss = Boolean(
+      this.controller.activeGlossEntry ||
+        this.controller.activePocketGloss ||
+        this.controller.activeZhGlossEntry ||
+        this.controller.activeZhProperGloss,
+    );
+    const isPureOverworld = !locked && !hasGloss;
+    if (isPureOverworld) {
+      this.renderPureOverworldIncremental();
+      return;
+    }
+
+    this.resetOverworldShell();
     this.overlayEl.replaceChildren();
 
     if (this.controller.activeModal === 'title') {
@@ -269,12 +445,6 @@ export class GameUiRenderer {
       this.overlayEl.appendChild(buildCreditsModal(this.controller));
       return;
     }
-
-    const inBattleNow = Boolean(this.controller.activeBattle);
-    if (inBattleNow && !this.wasInBattle) {
-      this.battleTab = 'moves';
-    }
-    this.wasInBattle = inBattleNow;
 
     if (this.controller.activeBattle) {
       this.overlayEl.appendChild(
@@ -327,7 +497,7 @@ export class GameUiRenderer {
       }
     }
 
-    if (this.controller.activeGlossEntry || this.controller.activePocketGloss) {
+    if (hasGloss) {
       this.overlayEl.appendChild(this.buildGlossSlip());
     }
 
@@ -431,6 +601,8 @@ export class GameUiRenderer {
       prefsGrid.appendChild(row);
     };
 
+    const learningLang: LearningLanguage = s.learningLanguage ?? 'en';
+
     addPrefSelect(
       t.labelUiLanguage,
       uiLang,
@@ -443,17 +615,83 @@ export class GameUiRenderer {
     );
 
     addPrefSelect(
-      t.labelContentLanguage,
-      contentLang,
+      t.labelLearningLanguage,
+      learningLang,
       [
-        ['vi_only', t.contentLanguageOptions.vi_only],
-        ['bilingual', t.contentLanguageOptions.bilingual],
-        ['en_assist', t.contentLanguageOptions.en_assist],
-        ['en_immersion', t.contentLanguageOptions.en_immersion],
+        ['en', t.learningLanguageOptions.en],
+        ['zh', t.learningLanguageOptions.zh],
+        ['none', t.learningLanguageOptions.none],
       ],
-      'select-content-language',
-      (v) => this.controller.updateSettings({ contentLanguage: v as ContentLanguageMode }),
+      'select-learning-language',
+      (v) => this.controller.updateSettings({ learningLanguage: v as LearningLanguage }),
     );
+
+    if (learningLang === 'en') {
+      addPrefSelect(
+        t.labelContentLanguage,
+        contentLang,
+        [
+          ['vi_only', t.contentLanguageOptions.vi_only],
+          ['bilingual', t.contentLanguageOptions.bilingual],
+          ['en_assist', t.contentLanguageOptions.en_assist],
+          ['en_immersion', t.contentLanguageOptions.en_immersion],
+        ],
+        'select-content-language',
+        (v) => this.controller.updateSettings({ contentLanguage: v as ContentLanguageMode }),
+      );
+
+      if (contentLang !== 'vi_only') {
+        addPrefSelect(
+          t.labelEnglishBand,
+          s.cefrBand,
+          [
+            ['A1', t.cefrOptions.A1],
+            ['A2', t.cefrOptions.A2],
+            ['B1', t.cefrOptions.B1],
+            ['B2', t.cefrOptions.B2],
+          ],
+          'select-cefr-band',
+          (v) => this.controller.updateSettings({ cefrBand: v as CefrBand }),
+        );
+      }
+    } else if (learningLang === 'zh') {
+      addPrefSelect(
+        t.labelHskLevel,
+        s.hskLevel ?? 'HSK2',
+        [
+          ['HSK1', t.hskOptions.HSK1],
+          ['HSK2', t.hskOptions.HSK2],
+          ['HSK3', t.hskOptions.HSK3],
+        ],
+        'select-hsk-level',
+        (v) => this.controller.updateSettings({ hskLevel: v as HskLevel }),
+      );
+
+      addPrefSelect(
+        t.labelZhStudyMode,
+        s.zhStudyMode ?? 'hanzi_pinyin_vi',
+        [
+          ['hanzi_pinyin_vi', t.zhStudyModeOptions.hanzi_pinyin_vi],
+          ['hanzi_pinyin', t.zhStudyModeOptions.hanzi_pinyin],
+          ['hanzi_assist', t.zhStudyModeOptions.hanzi_assist],
+          ['zh_immersion', t.zhStudyModeOptions.zh_immersion],
+          ['vi_only', t.zhStudyModeOptions.vi_only],
+        ],
+        'select-zh-study-mode',
+        (v) => this.controller.updateSettings({ zhStudyMode: v as ZhStudyMode }),
+      );
+
+      addPrefSelect(
+        t.labelPinyinPosition,
+        s.pinyinPosition ?? 'above',
+        [
+          ['above', t.pinyinPositionOptions.above],
+          ['below', t.pinyinPositionOptions.below],
+        ],
+        'select-pinyin-position',
+        (v) => this.controller.updateSettings({ pinyinPosition: v as PinyinPosition }),
+      );
+    }
 
     addPrefSelect(
       t.labelDifficulty,
@@ -466,21 +704,6 @@ export class GameUiRenderer {
       'select-difficulty',
       (v) => this.controller.updateSettings({ difficulty: v as DifficultyMode }),
     );
-
-    if (contentLang !== 'vi_only') {
-      addPrefSelect(
-        t.labelEnglishBand,
-        s.cefrBand,
-        [
-          ['A1', t.cefrOptions.A1],
-          ['A2', t.cefrOptions.A2],
-          ['B1', t.cefrOptions.B1],
-          ['B2', t.cefrOptions.B2],
-        ],
-        'select-cefr-band',
-        (v) => this.controller.updateSettings({ cefrBand: v as CefrBand }),
-      );
-    }
 
     const diffHint = el('div', 'lw-hud-quest', t.difficultyDescriptions[difficulty]);
     diffHint.style.padding = '4px 8px';
@@ -710,24 +933,15 @@ export class GameUiRenderer {
     return wrap;
   }
 
-  private buildMinimapWidget(): HTMLElement {
-    const state = this.controller.state;
-    const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
-    const t = getUiStrings(uiLang);
-    const map = MAPS_BY_ID[state.regionId];
-    const nav = this.controller.navigationPlan;
-
-    const box = el('button', 'lw-minimap-card lw-interactive') as HTMLButtonElement;
-    box.type = 'button';
-    box.title = t.minimapTitle;
-    box.setAttribute('data-testid', 'overworld-minimap');
-    box.addEventListener('click', () => this.controller.openJournal('map'));
-
-    const canvas = document.createElement('canvas');
+  private getCachedMinimapTerrain(regionId: keyof typeof MAPS_BY_ID): HTMLCanvasElement {
+    const existing = this.minimapTerrainCache.get(regionId);
+    if (existing) return existing;
+    const map = MAPS_BY_ID[regionId];
     const cell = 3;
-    canvas.width = map.width * cell;
-    canvas.height = map.height * cell;
-    const ctx = canvas.getContext('2d');
+    const offscreen = document.createElement('canvas');
+    offscreen.width = map.width * cell;
+    offscreen.height = map.height * cell;
+    const ctx = offscreen.getContext('2d');
     if (ctx) {
       for (let y = 0; y < map.height; y++) {
         for (let x = 0; x < map.width; x++) {
@@ -746,48 +960,88 @@ export class GameUiRenderer {
           ctx.fillRect(x * cell, y * cell, cell, cell);
         }
       }
+    }
+    this.minimapTerrainCache.set(regionId, offscreen);
+    return offscreen;
+  }
 
-      // Draw portals (cyan = unlocked, muted = locked)
-      for (const portal of map.portals) {
-        const unlocked = isPortalUnlocked(portal, state, SPECIES_BY_ID);
-        ctx.fillStyle = unlocked ? '#57e3ff' : '#7a7570';
-        ctx.fillRect(portal.x * cell, portal.y * cell, cell + 1, cell + 1);
-      }
+  private paintMinimapCanvas(canvas: HTMLCanvasElement): void {
+    const state = this.controller.state;
+    const map = MAPS_BY_ID[state.regionId];
+    const nav = this.controller.navigationPlan;
+    const cell = 3;
+    if (canvas.width !== map.width * cell || canvas.height !== map.height * cell) {
+      canvas.width = map.width * cell;
+      canvas.height = map.height * cell;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-      // Draw BFS waypoints
-      ctx.fillStyle = '#ffe570';
-      for (const pt of nav.waypoints) {
-        ctx.fillRect(pt.x * cell + 1, pt.y * cell + 1, 2, 2);
-      }
+    const terrain = this.getCachedMinimapTerrain(state.regionId);
+    ctx.drawImage(terrain, 0, 0);
 
-      // Draw NPCs with quest markers
-      for (const npc of NPCS) {
-        if (npc.regionId !== state.regionId) continue;
-        const marker = getNpcQuestMarker({ npc, state, quests: QUESTS, speciesById: SPECIES_BY_ID });
-        if (marker !== 'none') {
-          ctx.fillStyle = marker === 'new_quest' ? '#ffd23f' : '#4ee075';
-          ctx.fillRect(npc.x * cell, npc.y * cell, cell, cell);
-        }
-      }
-
-      // Draw tracked destination
-      if (nav.destinationInCurrentRegion) {
-        ctx.fillStyle = '#ff9c24';
-        ctx.fillRect(
-          nav.destinationInCurrentRegion.x * cell - 1,
-          nav.destinationInCurrentRegion.y * cell - 1,
-          cell + 2,
-          cell + 2,
-        );
-      }
-
-      // Draw player dot
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(state.playerPos.x * cell - 1, state.playerPos.y * cell - 1, cell + 2, cell + 2);
-      ctx.fillStyle = '#d94b2b';
-      ctx.fillRect(state.playerPos.x * cell, state.playerPos.y * cell, cell, cell);
+    for (const portal of map.portals) {
+      const unlocked = isPortalUnlocked(portal, state, SPECIES_BY_ID);
+      ctx.fillStyle = unlocked ? '#57e3ff' : '#7a7570';
+      ctx.fillRect(portal.x * cell, portal.y * cell, cell + 1, cell + 1);
     }
 
+    // Quest BFS waypoints (gold)
+    ctx.fillStyle = '#ffe570';
+    for (const pt of nav.waypoints) {
+      ctx.fillRect(pt.x * cell + 1, pt.y * cell + 1, 2, 2);
+    }
+
+    // Player click-to-move waypoints (aqua cyan, distinct from gold quest trail)
+    const moveSnap = this.controller.movement.getSnapshot();
+    if (moveSnap.activePath.length > 0) {
+      ctx.fillStyle = '#57e3ff';
+      for (const pt of moveSnap.activePath) {
+        ctx.fillRect(pt.x * cell + 1, pt.y * cell + 1, 2, 2);
+      }
+    }
+
+    for (const npc of NPCS) {
+      if (npc.regionId !== state.regionId) continue;
+      const marker = getNpcQuestMarker({ npc, state, quests: QUESTS, speciesById: SPECIES_BY_ID });
+      if (marker !== 'none') {
+        ctx.fillStyle = marker === 'new_quest' ? '#ffd23f' : '#4ee075';
+        ctx.fillRect(npc.x * cell, npc.y * cell, cell, cell);
+      }
+    }
+
+    if (nav.destinationInCurrentRegion) {
+      ctx.fillStyle = '#ff9c24';
+      ctx.fillRect(
+        nav.destinationInCurrentRegion.x * cell - 1,
+        nav.destinationInCurrentRegion.y * cell - 1,
+        cell + 2,
+        cell + 2,
+      );
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(state.playerPos.x * cell - 1, state.playerPos.y * cell - 1, cell + 2, cell + 2);
+    ctx.fillStyle = '#d94b2b';
+    ctx.fillRect(state.playerPos.x * cell, state.playerPos.y * cell, cell, cell);
+  }
+
+  private buildMinimapWidget(): HTMLElement {
+    const state = this.controller.state;
+    const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+    const t = getUiStrings(uiLang);
+
+    const box = el('button', 'lw-minimap-card lw-interactive') as HTMLButtonElement;
+    box.type = 'button';
+    box.title = t.minimapTitle;
+    box.setAttribute('data-testid', 'overworld-minimap');
+    box.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.controller.openJournal('map');
+    });
+
+    const canvas = document.createElement('canvas');
+    this.paintMinimapCanvas(canvas);
     box.appendChild(canvas);
     return box;
   }
@@ -921,27 +1175,69 @@ export class GameUiRenderer {
     const line = dlg.node.lines[dlg.lineIndex]!;
     const settings = this.controller.state.settings;
     const uiLang: UiLanguage = settings.uiLanguage === 'en' ? 'en' : 'vi';
+    const learningLang: LearningLanguage = settings.learningLanguage ?? 'en';
     const contentLang = settings.contentLanguage ?? 'bilingual';
+    const zhMode: ZhStudyMode = settings.zhStudyMode ?? 'hanzi_pinyin_vi';
+    const isZhActive = learningLang === 'zh' && zhMode !== 'vi_only';
+    const isViOnly =
+      learningLang === 'none' ||
+      (learningLang === 'en' && contentLang === 'vi_only') ||
+      (learningLang === 'zh' && zhMode === 'vi_only');
+    const showPinyinNow = dlg.revealPinyinOverride ?? settings.showPinyin !== false;
+    const showZhViDefault =
+      settings.showZhTranslation !== false && zhMode !== 'zh_immersion' && zhMode !== 'hanzi_pinyin' && zhMode !== 'hanzi_assist';
+    const showZhViNow = dlg.revealViOverride ? !showZhViDefault : showZhViDefault;
     const t = getUiStrings(uiLang);
 
     const box = el('section', 'lw-dialogue-box lw-interactive');
     box.setAttribute('data-testid', 'dialogue-box');
+    box.dataset.learningLang = learningLang;
 
     const top = el('div', 'lw-dialogue-top');
     const leftMeta = el('div', 'lw-hud-title');
     const speakerBase = localizeSpeakerName(dlg.node.speaker, uiLang);
-    const speakerLabel =
-      uiLang === 'vi' && dlg.node.speakerRoleVi && !speakerBase.includes(dlg.node.speakerRoleVi)
+    const speakerLabel = isZhActive
+      ? `${dlg.speakerZh} (${speakerBase})`
+      : uiLang === 'vi' && dlg.node.speakerRoleVi && !speakerBase.includes(dlg.node.speakerRoleVi)
         ? `${speakerBase} | ${dlg.node.speakerRoleVi}`
         : speakerBase;
     leftMeta.appendChild(el('span', 'lw-speaker-tag', speakerLabel));
-    if (contentLang !== 'vi_only') {
-      leftMeta.appendChild(el('span', 'lw-badge', t.dialogueBandBadge(settings.cefrBand)));
+    if (isZhActive) {
+      const hskBadge = el('span', 'lw-badge', t.dialogueHskBadge(settings.hskLevel ?? 'HSK2'));
+      hskBadge.setAttribute('data-testid', 'dialogue-level-badge');
+      leftMeta.appendChild(hskBadge);
+    } else if (!isViOnly) {
+      const cefrBadge = el('span', 'lw-badge', t.dialogueBandBadge(settings.cefrBand));
+      cefrBadge.setAttribute('data-testid', 'dialogue-level-badge');
+      leftMeta.appendChild(cefrBadge);
     }
     top.appendChild(leftMeta);
 
     const rightControls = el('div', 'lw-hud-actions');
-    if (contentLang !== 'vi_only') {
+    if (isZhActive) {
+      const listenLineBtn = el('button', 'lw-btn lw-btn-sm', t.dialogueListenBtn);
+      listenLineBtn.setAttribute('data-testid', 'btn-dialogue-listen');
+      listenLineBtn.addEventListener('click', () => this.controller.speakActiveDialogueSentence());
+      rightControls.appendChild(listenLineBtn);
+
+      const pinyinBtn = el(
+        'button',
+        'lw-btn lw-btn-sm',
+        showPinyinNow ? t.dialogueHidePinyin : t.dialogueShowPinyin,
+      );
+      pinyinBtn.setAttribute('data-testid', 'btn-toggle-pinyin');
+      pinyinBtn.addEventListener('click', () => this.controller.toggleDialoguePinyinAssist());
+      rightControls.appendChild(pinyinBtn);
+
+      const viBtn = el(
+        'button',
+        'lw-btn lw-btn-sm',
+        showZhViNow ? t.dialogueHideVi : t.dialogueShowVi,
+      );
+      viBtn.setAttribute('data-testid', 'btn-toggle-vi');
+      viBtn.addEventListener('click', () => this.controller.toggleDialogueVietnameseAssist());
+      rightControls.appendChild(viBtn);
+    } else if (!isViOnly) {
       const listenLineBtn = el('button', 'lw-btn lw-btn-sm', t.dialogueListenBtn);
       listenLineBtn.setAttribute('data-testid', 'btn-dialogue-listen');
       listenLineBtn.addEventListener('click', () => this.controller.speakActiveDialogueSentence());
@@ -987,10 +1283,42 @@ export class GameUiRenderer {
       box.appendChild(warnEl);
     }
 
-    if (contentLang === 'vi_only') {
+    if (isViOnly) {
       box.appendChild(el('div', 'lw-dialogue-en', dlg.resolvedVi));
       if (dlg.echoVi) {
         box.appendChild(el('div', 'lw-dialogue-echo', dlg.echoVi));
+      }
+    } else if (isZhActive) {
+      const zhPara = el('div', 'lw-dialogue-en lw-dialogue-zh');
+      zhPara.setAttribute('data-testid', 'dialogue-zh-text');
+      zhPara.appendChild(
+        renderInteractiveChinese(this.controller, dlg.resolvedZh, dlg.node.contextTag, {
+          showPinyin: showPinyinNow,
+          pinyinPosition: settings.pinyinPosition ?? 'above',
+        }),
+      );
+      box.appendChild(zhPara);
+
+      if (dlg.echoZh) {
+        const echoBox = el('div', 'lw-dialogue-echo');
+        const echoZhRow = el('div', 'lw-dialogue-zh');
+        echoZhRow.appendChild(
+          renderInteractiveChinese(this.controller, dlg.echoZh, `${dlg.node.contextTag}_echo`, {
+            showPinyin: showPinyinNow,
+            pinyinPosition: settings.pinyinPosition ?? 'above',
+          }),
+        );
+        echoBox.appendChild(echoZhRow);
+        if (showZhViNow && dlg.echoVi) {
+          echoBox.appendChild(el('div', 'lw-hud-quest', dlg.echoVi));
+        }
+        box.appendChild(echoBox);
+      }
+
+      if (showZhViNow) {
+        const viLine = el('div', 'lw-dialogue-vi', dlg.resolvedVi);
+        viLine.setAttribute('data-testid', 'dialogue-vi-translation');
+        box.appendChild(viLine);
       }
     } else {
       const enPara = el('div', 'lw-dialogue-en');
@@ -1016,12 +1344,16 @@ export class GameUiRenderer {
       }
 
       if (contentLang === 'bilingual' || dlg.revealViOverride) {
-        box.appendChild(el('div', 'lw-dialogue-vi', dlg.resolvedVi));
+        const viLine = el('div', 'lw-dialogue-vi', dlg.resolvedVi);
+        viLine.setAttribute('data-testid', 'dialogue-vi-translation');
+        box.appendChild(viLine);
       }
     }
 
     if (dlg.speechNoteVi) {
-      box.appendChild(el('div', 'lw-hud-quest', dlg.speechNoteVi));
+      const speechNote = el('div', 'lw-hud-quest', dlg.speechNoteVi);
+      speechNote.setAttribute('data-testid', 'dialogue-speech-note');
+      box.appendChild(speechNote);
     }
 
     if (line.choices && line.choices.length > 0) {
@@ -1031,6 +1363,7 @@ export class GameUiRenderer {
         isStarterChoice ? 'lw-starter-choice-grid' : 'lw-choice-list',
       );
       line.choices.forEach((choice, idx) => {
+        const zhChoiceLabel = dlg.choicesZh?.[idx];
         if (choice.action?.kind === 'choose_starter') {
           const sp = SPECIES_BY_ID[choice.action.speciesId];
           const cBtn = el('button', 'lw-btn lw-starter-choice-btn');
@@ -1039,9 +1372,14 @@ export class GameUiRenderer {
             cBtn.appendChild(createCreatureSpriteSpan(sp.dexNumber));
           }
           const txt = el('div', '');
-          if (contentLang === 'vi_only' || uiLang === 'vi') {
+          if (isZhActive && zhChoiceLabel) {
+            txt.appendChild(el('strong', '', zhChoiceLabel));
+            if (showZhViNow) {
+              txt.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, choice.labelEn, choice.labelVi)));
+            }
+          } else if (isViOnly || uiLang === 'vi') {
             txt.appendChild(el('strong', '', choice.labelVi));
-            if (contentLang === 'bilingual') {
+            if (!isViOnly && contentLang === 'bilingual') {
               txt.appendChild(el('div', 'lw-hud-quest', choice.labelEn));
             }
           } else {
@@ -1056,13 +1394,17 @@ export class GameUiRenderer {
           return;
         }
         const label =
-          contentLang === 'vi_only'
-            ? choice.labelVi
-            : contentLang === 'bilingual'
-              ? uiLang === 'vi'
-                ? choice.labelVi
-                : `${choice.labelEn} | ${choice.labelVi}`
-              : choice.labelEn;
+          isZhActive && zhChoiceLabel
+            ? showZhViNow
+              ? `${zhChoiceLabel} | ${pickText(uiLang, choice.labelEn, choice.labelVi)}`
+              : zhChoiceLabel
+            : isViOnly
+              ? choice.labelVi
+              : contentLang === 'bilingual'
+                ? uiLang === 'vi'
+                  ? choice.labelVi
+                  : `${choice.labelEn} | ${choice.labelVi}`
+                : choice.labelEn;
         const cBtn = el('button', idx === 0 ? 'lw-btn lw-btn-primary' : 'lw-btn', label);
         cBtn.setAttribute('data-testid', `dialogue-choice-${idx}`);
         cBtn.addEventListener('click', () => this.controller.selectDialogueChoice(choice));
@@ -1092,6 +1434,117 @@ export class GameUiRenderer {
 
     const slip = el('aside', 'lw-gloss-slip lw-interactive');
     slip.setAttribute('data-testid', 'gloss-popup');
+
+    // 1. Chinese Proper Noun card (separated from HSK vocabulary)
+    if (this.controller.activeZhProperGloss) {
+      const pn = this.controller.activeZhProperGloss;
+      slip.dataset.glossLang = 'zh_proper';
+      const header = el('div', 'lw-gloss-header');
+      const titleLeft = el('div', '');
+      titleLeft.appendChild(el('span', 'lw-gloss-word', pn.hanzi));
+      titleLeft.appendChild(el('span', 'lw-gloss-pinyin', pn.pinyin));
+      titleLeft.appendChild(el('span', 'lw-badge', t.glossProperNounBadge));
+      header.appendChild(titleLeft);
+
+      const closeBtn = el('button', 'lw-btn lw-btn-sm', t.glossCloseBtn);
+      closeBtn.setAttribute('data-testid', 'btn-gloss-close');
+      closeBtn.addEventListener('click', () => this.controller.closeGlossPopup());
+      header.appendChild(closeBtn);
+      slip.appendChild(header);
+
+      slip.appendChild(el('div', 'lw-gloss-meaning', `${pn.nameVi} (${pn.nameEn})`));
+      slip.appendChild(el('div', 'lw-hud-quest', t.glossProperNounNote));
+      if (this.controller.activeGlossNoteVi) {
+        const noteEl = el('div', 'lw-hud-quest', this.controller.activeGlossNoteVi);
+        noteEl.setAttribute('data-testid', 'gloss-speech-note');
+        slip.appendChild(noteEl);
+      }
+      const actions = el('div', 'lw-choice-list');
+      const listenBtn = el('button', 'lw-btn lw-btn-sm', t.glossListenBtn);
+      listenBtn.setAttribute('data-testid', 'btn-gloss-listen');
+      listenBtn.addEventListener('click', () => this.controller.pronounceActiveGloss());
+      actions.appendChild(listenBtn);
+      slip.appendChild(actions);
+      return slip;
+    }
+
+    // 2. Full 10-field Chinese HSK / Dictionary Gloss card
+    if (this.controller.activeZhGlossEntry) {
+      const zhEntry = this.controller.activeZhGlossEntry;
+      slip.dataset.glossLang = 'zh';
+      const memZh = this.controller.state.lexiconZh?.[zhEntry.id];
+      const resolvedSense = resolveChineseSenseForContext(
+        zhEntry,
+        this.controller.activeGlossContextTag,
+        this.controller.activeZhGlossSentenceZh,
+      );
+      const displayPinyin = this.controller.activeZhGlossPinyin || resolvedSense.primary.pinyin;
+
+      const header = el('div', 'lw-gloss-header');
+      const titleLeft = el('div', '');
+      titleLeft.appendChild(el('span', 'lw-gloss-word', zhEntry.hanzi));
+      titleLeft.appendChild(el('span', 'lw-gloss-pinyin', displayPinyin));
+      const posLabel = localizePos(resolvedSense.primary.pos, uiLang);
+      const badgeText = zhEntry.hsk ? `${posLabel} | ${zhEntry.hsk}` : posLabel;
+      titleLeft.appendChild(el('span', 'lw-badge', badgeText));
+      header.appendChild(titleLeft);
+
+      const closeBtn = el('button', 'lw-btn lw-btn-sm', t.glossCloseBtn);
+      closeBtn.setAttribute('data-testid', 'btn-gloss-close');
+      closeBtn.addEventListener('click', () => this.controller.closeGlossPopup());
+      header.appendChild(closeBtn);
+      slip.appendChild(header);
+
+      slip.appendChild(
+        el('div', 'lw-gloss-meaning', `${t.glossContextMeaning} ${resolvedSense.primary.meaningVi}`),
+      );
+
+      const exBox = el('div', 'lw-gloss-example');
+      exBox.appendChild(el('div', '', resolvedSense.primary.exampleZh));
+      const exPy = el('div', 'zh-pinyin', resolvedSense.primary.examplePinyin);
+      exPy.style.marginTop = '2px';
+      exPy.style.whiteSpace = 'normal';
+      exBox.appendChild(exPy);
+      const exVi = el('div', '', resolvedSense.primary.exampleVi);
+      exVi.style.marginTop = '3px';
+      exBox.appendChild(exVi);
+      slip.appendChild(exBox);
+
+      if (resolvedSense.otherSenses.length > 0) {
+        const other = resolvedSense.otherSenses[0]!;
+        slip.appendChild(
+          el(
+            'div',
+            'lw-gloss-polysemy',
+            t.glossOtherReading(other.pinyin, localizePos(other.pos, uiLang), other.meaningVi),
+          ),
+        );
+      }
+
+      if (this.controller.activeGlossNoteVi) {
+        const noteEl = el('div', 'lw-hud-quest', this.controller.activeGlossNoteVi);
+        noteEl.setAttribute('data-testid', 'gloss-speech-note');
+        slip.appendChild(noteEl);
+      }
+
+      const actions = el('div', 'lw-choice-list');
+      const listenBtn = el('button', 'lw-btn lw-btn-sm', t.glossListenBtn);
+      listenBtn.setAttribute('data-testid', 'btn-gloss-listen');
+      listenBtn.addEventListener('click', () => this.controller.pronounceActiveGloss());
+
+      const isSaved = Boolean(memZh?.savedByPlayer);
+      const saveBtn = el(
+        'button',
+        isSaved ? 'lw-btn lw-btn-moss lw-btn-sm' : 'lw-btn lw-btn-primary lw-btn-sm',
+        isSaved ? t.glossSavedBtn : t.glossSaveBtn,
+      );
+      saveBtn.setAttribute('data-testid', 'btn-gloss-save');
+      saveBtn.addEventListener('click', () => this.controller.toggleSaveActiveGloss());
+
+      actions.append(listenBtn, saveBtn);
+      slip.appendChild(actions);
+      return slip;
+    }
 
     if (this.controller.activePocketGloss && !this.controller.activeGlossEntry) {
       const pocket = this.controller.activePocketGloss;
@@ -1234,16 +1687,28 @@ export class GameUiRenderer {
       const btn = el('button', `lw-dpad-btn lw-dpad-${cell}`) as HTMLButtonElement;
       btn.type = 'button';
       btn.innerHTML = DPAD_ARROW_SVG[cell];
+      btn.dataset.dir = cell;
       btn.dataset.active = String(this.heldTouchDir === cell);
       btn.setAttribute('aria-label', t.touchMoveAria(cell));
       btn.setAttribute('data-testid', `touch-${cell}`);
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        this.startHoldWalk(cell);
+        e.stopPropagation();
+        this.startTouchMove(cell, e.pointerId);
       });
-      btn.addEventListener('click', () => {
+      btn.addEventListener('pointerup', (e) => {
+        e.stopPropagation();
+        this.stopTouchMove(e.pointerId);
+      });
+      btn.addEventListener('pointercancel', (e) => {
+        e.stopPropagation();
+        this.stopTouchMove(e.pointerId);
+      });
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (performance.now() - this.lastPointerStepAt > 250) {
-          this.controller.movePlayer(cell);
+          this.controller.pressMoveInput(`touch_tap:${cell}`, cell);
+          this.controller.releaseMoveInput(`touch_tap:${cell}`);
         }
       });
       dpad.appendChild(btn);

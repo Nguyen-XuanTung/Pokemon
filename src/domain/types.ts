@@ -6,6 +6,23 @@ export type StatusId = 'burn' | 'poison' | 'sleep' | 'paralyze';
 
 export type CefrBand = 'A1' | 'A2' | 'B1' | 'B2';
 
+export type LearningLanguage = 'en' | 'zh' | 'none';
+
+export type HskLevel = 'HSK1' | 'HSK2' | 'HSK3';
+
+export type ChineseHskTag = 'HSK1' | 'HSK2' | 'HSK3' | 'HSK4';
+
+export type ZhStudyMode =
+  | 'hanzi_pinyin_vi'
+  | 'hanzi_pinyin'
+  | 'hanzi_assist'
+  | 'zh_immersion'
+  | 'vi_only';
+
+export type PinyinPosition = 'above' | 'below';
+
+export type MovementSpeedMode = 'walk' | 'run';
+
 export type UiLanguage = 'vi' | 'en';
 
 export type ContentLanguageMode = 'vi_only' | 'bilingual' | 'en_assist' | 'en_immersion';
@@ -441,6 +458,54 @@ export interface LexiconEntry {
   readonly senses?: ReadonlyArray<PolysemySense>;
 }
 
+export type ChinesePos =
+  | 'noun'
+  | 'verb'
+  | 'adj'
+  | 'adv'
+  | 'pron'
+  | 'num'
+  | 'mw'
+  | 'prep'
+  | 'conj'
+  | 'part'
+  | 'interj'
+  | 'phrase';
+
+export interface ChineseSense {
+  readonly senseId: string;
+  readonly contextHints: ReadonlyArray<string>;
+  readonly pinyin: string;
+  readonly pos: ChinesePos;
+  readonly meaningVi: string;
+  readonly exampleZh: string;
+  readonly examplePinyin: string;
+  readonly exampleVi: string;
+}
+
+export interface ChineseLexiconEntry {
+  readonly id: string;
+  readonly hanzi: string;
+  readonly variants?: ReadonlyArray<string>;
+  readonly pinyin: string;
+  readonly pos: ChinesePos;
+  readonly hsk?: ChineseHskTag;
+  readonly meaningVi: string;
+  readonly exampleZh: string;
+  readonly examplePinyin: string;
+  readonly exampleVi: string;
+  readonly topic: string;
+  readonly senses?: ReadonlyArray<ChineseSense>;
+}
+
+export interface ChineseProperNoun {
+  readonly hanzi: string;
+  readonly pinyin: string;
+  readonly category: 'npc' | 'creature' | 'region' | 'term';
+  readonly nameVi: string;
+  readonly nameEn: string;
+}
+
 export interface WordMemoryRecord {
   wordId: string;
   exposures: number;
@@ -474,10 +539,18 @@ export interface KeyBindingMap {
 
 export interface GameSettings {
   uiLanguage?: UiLanguage;
+  learningLanguage?: LearningLanguage;
   contentLanguage?: ContentLanguageMode;
+  hskLevel?: HskLevel;
+  zhStudyMode?: ZhStudyMode;
+  showPinyin?: boolean;
+  pinyinPosition?: PinyinPosition;
+  showZhTranslation?: boolean;
   difficulty?: DifficultyMode;
   guidanceMode?: GuidanceMode;
   battleAssist?: boolean;
+  clickToMove?: boolean;
+  movementSpeed?: MovementSpeedMode;
   cefrBand: CefrBand;
   supportMode: LanguageSupportMode;
   bgmVolume: number;
@@ -498,10 +571,12 @@ export interface PlayerStats {
   wordsGlossed: number;
   campReviewsCompleted: number;
   fledCount: number;
+  zhWordsGlossed?: number;
+  zhCampReviewsCompleted?: number;
 }
 
 export interface GameState {
-  schemaVersion: 1 | 2;
+  schemaVersion: 1 | 2 | 3;
   seedState: number;
   playTimeSeconds: number;
   stepCount: number;
@@ -531,6 +606,7 @@ export interface GameState {
   trackedQuestId?: string | null;
   onboarding?: OnboardingState;
   lexicon: Record<string, WordMemoryRecord>;
+  lexiconZh?: Record<string, WordMemoryRecord>;
   stats: PlayerStats;
   settings: GameSettings;
 }

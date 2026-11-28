@@ -2,7 +2,7 @@
 
 ## 1. Phân định giấy phép mã nguồn và giấy phép tài nguyên hình ảnh
 
-- Giấy phép mã nguồn phần mềm và nội dung văn bản nguyên bản: Toàn bộ mã nguồn trong `src/`, `scripts/`, `tests/`, `public/sw.js`, âm thanh tổng hợp bằng Web Audio API cùng toàn bộ dữ liệu hội thoại, từ vựng và cốt truyện biên soạn nguyên bản cho dự án LingoWild được phát hành theo giấy phép MIT trong tệp `LICENSE`.
+- Giấy phép mã nguồn phần mềm và nội dung văn bản nguyên bản: Toàn bộ mã nguồn trong `src/`, `scripts/`, `tests/`, `public/sw.js`, âm thanh tổng hợp bằng Web Audio API cùng toàn bộ dữ liệu hội thoại, cốt truyện, nghĩa tiếng Việt và câu ví dụ tiếng Anh, tiếng Trung biên soạn nguyên bản cho dự án LingoWild được phát hành theo giấy phép MIT trong tệp `LICENSE`.
 - Giấy phép tài nguyên hình ảnh bên thứ ba: Tệp `LICENSE` (MIT) chỉ điều chỉnh mã nguồn và các tài nguyên do dự án tự tạo mới; các gói hình ảnh mở trong `assets-src/` và phần đồ họa trích xuất vào `public/assets/sprites/` giữ nguyên giấy phép riêng của từng tác giả gốc (CC0 1.0 Universal và CC-BY 3.0 / CC-BY 4.0). Bất kỳ bản sao hoặc bản phân phối lại nào có sử dụng các bảng ảnh này đều phải giữ nguyên tệp `CREDITS.md` cùng các tệp `ATTRIBUTION.txt` đi kèm trong `assets-src/`.
 - Tham khảo thiết kế trò chơi: Quá trình thiết kế có nghiên cứu nguyên lý bố cục bản đồ, phân tầng cảnh vật, nhịp chiến đấu và giao diện của Pokémon Emerald, Pokémon HeartGold, Pokémon Black 2, Stardew Valley, Eastward, Cassette Beasts và Coromon. Dự án chỉ tham khảo nguyên lý thiết kế, tuyệt đối không sao chép hình ảnh, âm thanh, nhân vật hay dữ liệu thương mại.
 - LingoWild là tên làm việc tạm thời phục vụ phát triển và nghiên cứu, không có bất kỳ liên hệ nào với The Pokémon Company, Nintendo hay các thương hiệu bên thứ ba.
@@ -31,12 +31,20 @@ Kịch bản `scripts/generate-assets.ts` đóng gói tám bảng ảnh trong `p
 5. Phần đồ họa pixel biên soạn nguyên bản của dự án:
    - Toàn bộ 30 loài sinh vật trong trận đấu (`creatures.png`, khung `48x48` hai nhịp thở kèm biến thể ánh kim tự nhiên), bảng sinh vật nhỏ đi theo sau nhân vật trên bản đồ (`companions.png`, 60 khung `16x16`), dấu chân sinh cảnh phát sáng, hàng rào gỗ, gạch đá đen chạm cổ ngữ, vật phẩm đặc thù (`items.png`) và hiệu ứng nguyên tố (`vfx.png`).
 6. Nhạc nền và hiệu ứng âm thanh: Tổng hợp thời gian thực bằng Web Audio API trong `src/audio/soundEngine.ts`, không sử dụng tệp thu âm có bản quyền của bên thứ ba.
-7. Phát âm tiếng Anh: Sử dụng Web Speech API có sẵn trên trình duyệt của người chơi cho cả từ đơn, cụm từ lẫn câu hội thoại hoàn chỉnh, kèm cơ chế hiển thị phiên âm dự phòng khi thiết bị thiếu giọng đọc.
+7. Phát âm tiếng Anh và tiếng Trung: Sử dụng Web Speech API có sẵn trên trình duyệt của người chơi. Với tiếng Trung, bộ phát âm lọc nghiêm ngặt giọng `zh-CN` / `zh-Hans` / `zh` và hiển thị Pinyin kèm ghi chú nếu thiết bị thiếu giọng đọc thay vì dùng giọng tiếng Anh.
 
-## 3. Nguồn gốc dữ liệu ngôn ngữ
+## 3. Nguồn gốc dữ liệu ngôn ngữ tiếng Anh và tiếng Trung
 
-- Toàn bộ 367 mục từ vựng và cụm từ giao tiếp Anh Việt (`src/data/lexicon-*.ts`, gồm các mục đa nghĩa theo ngữ cảnh và 25 mục có nhiều câu ví dụ độc lập), từ điển gốc từ bỏ túi ngoại tuyến hơn 430 mục (`src/data/pocket-dict.ts`) phủ trên `90,5%` từ xuất hiện trong hội thoại, 42 mô tả chiêu thức (`src/data/moves.ts`), 13 mô tả vật phẩm (`src/data/items.ts`), 30 hồ sơ và truyện ngắn sinh thái (`src/data/species.ts`) cùng 192 đoạn hội thoại có biến thể theo trình độ (`src/data/dialogues-*.ts`) đều được biên soạn mới gắn với thế giới Thung Lũng Rêu Xanh.
-- Không nhập kho dữ liệu mang điều khoản copyleft từ `wordfreq` hay `Tatoeba`. Nhãn mức độ từ A1 đến B2 chỉ dùng để điều chỉnh độ phức tạp câu thoại và gợi ý từ trong game, không phải chứng nhận đánh giá năng lực ngoại ngữ.
+### Tiếng Anh (CEFR A1 đến B2)
+- Toàn bộ 367 mục từ vựng và cụm từ giao tiếp Anh Việt (`src/data/lexicon-*.ts`, gồm các mục đa nghĩa theo ngữ cảnh và 25 mục có nhiều câu ví dụ độc lập), từ điển gốc từ bỏ túi ngoại tuyến hơn 430 mục (`src/data/pocket-dict.ts`) phủ `90,5%` từ xuất hiện trong hội thoại, 42 mô tả chiêu thức (`src/data/moves.ts`), 13 mô tả vật phẩm (`src/data/items.ts`), 30 hồ sơ và truyện ngắn sinh thái (`src/data/species.ts`) cùng 192 đoạn hội thoại có biến thể theo trình độ (`src/data/dialogues-*.ts`) đều được biên soạn mới gắn với thế giới Thung Lũng Rêu Xanh.
+- Không nhập kho dữ liệu mang điều khoản copyleft từ `wordfreq` hay `Tatoeba`.
+
+### Tiếng Trung giản thể (chuẩn HSK 2.0, Hanban 2012)
+- Danh mục đầu mục và đối chiếu phiên âm Pinyin được kiểm chứng từ hai kho công khai có giấy phép rõ ràng (truy xuất ngày `2026-11-28`, kiểm định tự động bằng `scripts/verify-hsk-data.ts`):
+  - `sawcordwell/HSK-Vocab` (`https://github.com/sawcordwell/HSK-Vocab`, commit `bd786242a80ca3af65515712b70493c39d369393`, giấy phép CC0 1.0 Universal): đối chiếu đủ danh mục đầu mục `HSK 1` (`150` từ), `HSK 2` (`150` từ) và `HSK 3` (`300` mục gồm `298` đầu mục riêng biệt và `2` cách đọc đa âm chính thức `还 huán`, `长 zhǎng`).
+  - `drkameleon/complete-hsk-vocabulary` (`https://github.com/drkameleon/complete-hsk-vocabulary`, commit `7ac65bf1a6387d35f1ade478906172a19311c7f9`, giấy phép MIT): đối chiếu phiên âm Pinyin có dấu thanh và phân cấp chuẩn HSK 2.0. Dự án không sao chép nghĩa tiếng Anh từ CC-CEDICT (CC BY-SA 4.0) mà biên soạn mới toàn bộ nghĩa tiếng Việt, ghi chú ngữ cảnh và câu ví dụ tiếng Trung gắn với LingoWild theo giấy phép MIT.
+- Bộ dữ liệu trong `src/data/zh-lexicon-*.ts`, `src/data/zh-world-content.ts` và `src/data/zh-dialogues-*.ts` gồm `985` mục từ điển (`150` HSK 1, `150` HSK 2, `298 + 2` đa âm HSK 3, `73` từ bổ trợ HSK 4 và `314` từ ngữ cảnh không gán HSK), `55` tên riêng trong thế giới game tách riêng khỏi HSK và toàn bộ `192` đoạn hội thoại, `30` loài, `42` chiêu, `13` vật phẩm, `12` nhiệm vụ, `5` bản đồ, `16` nhân vật phụ cùng nhật ký chiến đấu.
+- Nhãn CEFR và HSK 2.0 chỉ dùng để điều chỉnh độ khó câu thoại và gợi ý từ trong game, không phải chứng nhận đánh giá năng lực ngoại ngữ.
 
 ## 4. Thư viện mã nguồn mở sử dụng
 

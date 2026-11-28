@@ -6,6 +6,10 @@ import { MOVES, MOVES_BY_ID } from '../src/data/moves.ts';
 import { NPCS } from '../src/data/npcs.ts';
 import { QUESTS } from '../src/data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../src/data/species.ts';
+import { ZH_DIALOGUES_BY_ID } from '../src/data/zh-dialogues.ts';
+import { CHINESE_PROPER_NOUNS, ZH_LEXICON_ENTRIES, ZH_LEXICON_INDEX } from '../src/data/zh-lexicon.ts';
+import { ITEMS_ZH, MAPS_ZH, MOVES_ZH, NPCS_ZH, QUESTS_ZH, SPECIES_ZH } from '../src/data/zh-world-content.ts';
+import { tokenizeChineseText } from '../src/domain/chinese.ts';
 import { COMBAT_ELEMENTS, getElementStrengthsAndWeaknesses } from '../src/domain/elements.ts';
 import { tokenizeEnglishText } from '../src/domain/learning.ts';
 import { getTileAt, offsetByDirection } from '../src/domain/world.ts';
@@ -383,6 +387,147 @@ assert(
   `Expected >= 90% dialogue word tap-lookup coverage, got ${coveragePct.toFixed(1)}%`,
 );
 
+// 10. Chinese Multilingual Content, HSK 2.0 Lexicon & Tap-Lookup Coverage
+const zhHskCounts = { HSK1: 0, HSK2: 0, HSK3: 0, HSK4: 0, domain: 0 };
+const seenZhIds = new Set<string>();
+for (const entry of ZH_LEXICON_ENTRIES) {
+  assert(entry.id.startsWith('zh:'), `Chinese lexicon id ${entry.id} must be namespaced with "zh:"`);
+  assert(!seenZhIds.has(entry.id), `Duplicate Chinese lexicon id: ${entry.id}`);
+  seenZhIds.add(entry.id);
+  checkNoForbiddenStyle(entry.meaningVi, `zhLexicon.${entry.id}.meaningVi`);
+  checkNoForbiddenStyle(entry.exampleVi, `zhLexicon.${entry.id}.exampleVi`);
+  if (entry.hsk) {
+    zhHskCounts[entry.hsk] += 1;
+  } else {
+    zhHskCounts.domain += 1;
+  }
+}
+assert(zhHskCounts.HSK1 === 150, `Expected 150 HSK 1 entries, got ${zhHskCounts.HSK1}`);
+assert(zhHskCounts.HSK2 === 150, `Expected 150 HSK 2 entries, got ${zhHskCounts.HSK2}`);
+assert(zhHskCounts.HSK3 === 298, `Expected 298 unique HSK 3 headwords (+2 polyphones), got ${zhHskCounts.HSK3}`);
+assert(CHINESE_PROPER_NOUNS.length >= 50, `Expected >= 50 Chinese proper nouns, got ${CHINESE_PROPER_NOUNS.length}`);
+
+// Every world entity has Chinese localization
+for (const sp of SPECIES) {
+  const zh = SPECIES_ZH[sp.id];
+  assert(Boolean(zh?.nameZh && zh.titleZh && zh.fieldNoteZh), `Missing Chinese content for species ${sp.id}`);
+}
+for (const mv of MOVES) {
+  const zh = MOVES_ZH[mv.id];
+  assert(Boolean(zh?.nameZh && zh.descriptionZh), `Missing Chinese content for move ${mv.id}`);
+}
+for (const item of ITEMS) {
+  const zh = ITEMS_ZH[item.id];
+  assert(Boolean(zh?.nameZh && zh.descriptionZh), `Missing Chinese content for item ${item.id}`);
+}
+for (const q of QUESTS) {
+  const zh = QUESTS_ZH[q.id];
+  assert(Boolean(zh?.titleZh && zh.summaryZh), `Missing Chinese content for quest ${q.id}`);
+  for (const step of q.steps) {
+    assert(Boolean(zh?.stepsZh[step.id]), `Missing Chinese quest step ${q.id}.${step.id}`);
+  }
+}
+for (const map of MAPS) {
+  const zh = MAPS_ZH[map.id];
+  assert(Boolean(zh?.nameZh && zh.subtitleZh), `Missing Chinese content for map ${map.id}`);
+  assert(
+    (zh?.portalLabelsZh.length ?? 0) === map.portals.length,
+    `Map ${map.id} Chinese portal label count mismatch`,
+  );
+  for (const prop of map.props) {
+    assert(Boolean(zh?.propLabelsZh[prop.id]), `Missing Chinese prop label for ${map.id}.${prop.id}`);
+  }
+}
+for (const npc of NPCS) {
+  const zh = NPCS_ZH[npc.id];
+  assert(Boolean(zh?.nameZh && zh.roleZh), `Missing Chinese content for NPC ${npc.id}`);
+}
+
+// Every single dialogue line and choice has Chinese content + measure actual in-game HSK usage & lookup coverage
+let zhHskVariantDialogues = 0;
+let zhTotalCjkChars = 0;
+let zhCoveredCjkChars = 0;
+const zhInGameDistinctWordIds = new Set<string>();
+const zhInGameHskCounts = { HSK1: 0, HSK2: 0, HSK3: 0, HSK4: 0, domain: 0 };
+const recordZhTextCoverage = (text: string, tag: string) => {
+  const tokens = tokenizeChineseText(text, ZH_LEXICON_INDEX, tag);
+  for (const tok of tokens) {
+    if (!tok.isWord) continue;
+    const len = tok.raw.length;
+    zhTotalCjkChars += len;
+    if (tok.entry || tok.properNoun) {
+      zhCoveredCjkChars += len;
+    }
+    if (tok.entry && !zhInGameDistinctWordIds.has(tok.entry.id)) {
+      zhInGameDistinctWordIds.add(tok.entry.id);
+      if (tok.entry.hsk) {
+        zhInGameHskCounts[tok.entry.hsk] += 1;
+      } else {
+        zhInGameHskCounts.domain += 1;
+      }
+    }
+  }
+};
+
+for (const dlg of DIALOGUES) {
+  const zhNode = ZH_DIALOGUES_BY_ID[dlg.id];
+  assert(Boolean(zhNode), `Missing Chinese dialogue translation for ${dlg.id}`);
+  if (!zhNode) continue;
+  assert(zhNode.speakerZh.trim().length > 0, `Empty speakerZh for dialogue ${dlg.id}`);
+  assert(
+    zhNode.lines.length === dlg.lines.length,
+    `Chinese dialogue ${dlg.id} line count ${zhNode.lines.length} != ${dlg.lines.length}`,
+  );
+  let hasZhVar = false;
+  dlg.lines.forEach((line, idx) => {
+    const zhLine = zhNode.lines[idx];
+    if (!zhLine) return;
+    assert(zhLine.zh.trim().length > 0, `Empty zh text at ${dlg.id}[${idx}]`);
+    recordZhTextCoverage(zhLine.zh, `dlg:${dlg.id}`);
+    if (zhLine.variants) {
+      hasZhVar = true;
+      for (const variantZh of Object.values(zhLine.variants)) {
+        if (variantZh) {
+          recordZhTextCoverage(variantZh, `dlg:${dlg.id}`);
+        }
+      }
+    }
+    if (line.choices && line.choices.length > 0) {
+      assert(
+        (zhLine.choicesZh?.length ?? 0) === line.choices.length,
+        `Chinese dialogue ${dlg.id}[${idx}] choice count mismatch`,
+      );
+    }
+  });
+  if (hasZhVar) zhHskVariantDialogues += 1;
+}
+
+for (const sp of Object.values(SPECIES_ZH)) {
+  recordZhTextCoverage(sp.fieldNoteZh, 'species');
+}
+for (const mv of Object.values(MOVES_ZH)) {
+  recordZhTextCoverage(mv.descriptionZh, 'move');
+}
+for (const item of Object.values(ITEMS_ZH)) {
+  recordZhTextCoverage(item.descriptionZh, 'item');
+}
+for (const q of Object.values(QUESTS_ZH)) {
+  recordZhTextCoverage(q.summaryZh, 'quest');
+  for (const s of Object.values(q.stepsZh)) {
+    recordZhTextCoverage(s, 'quest');
+  }
+}
+
+assert(
+  zhHskVariantDialogues >= 40,
+  `Expected >= 40 dialogues with HSK level variants, got ${zhHskVariantDialogues}`,
+);
+const zhCoveragePct = zhTotalCjkChars > 0 ? (zhCoveredCjkChars / zhTotalCjkChars) * 100 : 100;
+assert(
+  zhCoveragePct >= 75,
+  `Expected >= 75% Chinese CJK character lookup coverage, got ${zhCoveragePct.toFixed(1)}%`,
+);
+
 if (errors.length > 0) {
   console.error(`Data validation failed with ${errors.length} error(s):`);
   for (const err of errors) {
@@ -392,5 +537,5 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `Data validation passed: ${SPECIES.length} species, ${MOVES.length} moves, ${ITEMS.length} items, ${MAPS.length} maps, ${NPCS.length} NPCs (${bosses.length} bosses, ${rematches.length} rematches), ${QUESTS.length} quests, ${LEXICON_ENTRIES.length} lexicon entries (${multiExampleCount} multi-example, A1:${cefrCounts.A1}, A2:${cefrCounts.A2}, B1:${cefrCounts.B1}, B2:${cefrCounts.B2}), ${DIALOGUES.length} dialogues (${coveragePct.toFixed(1)}% word lookup coverage).`,
+  `Data validation passed: ${SPECIES.length} species, ${MOVES.length} moves, ${ITEMS.length} items, ${MAPS.length} maps, ${NPCS.length} NPCs (${bosses.length} bosses, ${rematches.length} rematches), ${QUESTS.length} quests, ${LEXICON_ENTRIES.length} EN lexicon (${multiExampleCount} multi-example, A1:${cefrCounts.A1}, A2:${cefrCounts.A2}, B1:${cefrCounts.B1}, B2:${cefrCounts.B2}), ${ZH_LEXICON_ENTRIES.length} ZH dictionary (HSK1:${zhHskCounts.HSK1}, HSK2:${zhHskCounts.HSK2}, HSK3:${zhHskCounts.HSK3}+2poly, HSK4_suppl:${zhHskCounts.HSK4}, domain:${zhHskCounts.domain}; in-game distinct: ${zhInGameDistinctWordIds.size} [HSK1:${zhInGameHskCounts.HSK1}, HSK2:${zhInGameHskCounts.HSK2}, HSK3:${zhInGameHskCounts.HSK3}, HSK4:${zhInGameHskCounts.HSK4}, domain:${zhInGameHskCounts.domain}]), ${DIALOGUES.length} dialogues (EN:${coveragePct.toFixed(1)}% / ZH:${zhCoveragePct.toFixed(1)}% lookup coverage, ${zhHskVariantDialogues} HSK-variant dialogues).`,
 );

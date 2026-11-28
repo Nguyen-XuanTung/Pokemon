@@ -7,9 +7,12 @@ import './ui/styles.css';
 export interface LingoWildDiagnostics {
   readonly version: string;
   readonly bootDurationMs: number;
+  readonly getTileClientCenter: (tileX: number, tileY: number) => { x: number; y: number } | null;
+  readonly getMovementTelemetry: () => ReturnType<WorldScene['getMovementTelemetry']>;
   readonly getSnapshot: () => {
     readonly regionId: string;
     readonly playerPos: { readonly x: number; readonly y: number; readonly facing: string };
+    readonly stepCount: number;
     readonly partyCount: number;
     readonly caughtCount: number;
     readonly discoveredCount: number;
@@ -21,7 +24,9 @@ export interface LingoWildDiagnostics {
     readonly rematchCount: number;
     readonly tracesCount: number;
     readonly uiLanguage: string;
+    readonly learningLanguage: string;
     readonly contentLanguage: string;
+    readonly hskLevel: string;
     readonly difficulty: string;
     readonly guidanceMode: string;
     readonly onboardingStep: string | null;
@@ -117,9 +122,12 @@ const bootDurationMs = Math.round(performance.now() - bootStart);
 window.__LINGOWILD_DIAGNOSTICS__ = {
   version: APP_VERSION,
   bootDurationMs,
+  getTileClientCenter: (tileX, tileY) => worldScene.getTileClientCenter(tileX, tileY),
+  getMovementTelemetry: () => worldScene.getMovementTelemetry(),
   getSnapshot: () => ({
     regionId: controller.state.regionId,
     playerPos: { ...controller.state.playerPos },
+    stepCount: controller.state.stepCount,
     partyCount: controller.state.party.length,
     caughtCount: controller.state.caughtSpecies.length,
     discoveredCount: controller.state.discoveredSpecies.length,
@@ -131,7 +139,9 @@ window.__LINGOWILD_DIAGNOSTICS__ = {
     rematchCount: controller.state.rematchCleared.length,
     tracesCount: controller.state.discoveredTraces.length,
     uiLanguage: controller.state.settings.uiLanguage ?? 'vi',
+    learningLanguage: controller.state.settings.learningLanguage ?? 'en',
     contentLanguage: controller.state.settings.contentLanguage ?? 'bilingual',
+    hskLevel: controller.state.settings.hskLevel ?? 'HSK2',
     difficulty: controller.state.settings.difficulty ?? 'relaxed',
     guidanceMode: controller.state.settings.guidanceMode ?? 'full',
     onboardingStep: controller.activeOnboardingPrompt?.id ?? null,
