@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { GameController } from './game/controller.ts';
+import { APP_VERSION, GameController } from './game/controller.ts';
 import { WorldScene } from './scenes/WorldScene.ts';
 import { GameUiRenderer } from './ui/gameUi.ts';
 import './ui/styles.css';
 
 export interface LingoWildDiagnostics {
+  readonly version: string;
   readonly bootDurationMs: number;
   readonly getSnapshot: () => {
     readonly regionId: string;
@@ -114,6 +115,7 @@ new GameUiRenderer(rootEl, overlayEl, controller);
 const bootDurationMs = Math.round(performance.now() - bootStart);
 
 window.__LINGOWILD_DIAGNOSTICS__ = {
+  version: APP_VERSION,
   bootDurationMs,
   getSnapshot: () => ({
     regionId: controller.state.regionId,

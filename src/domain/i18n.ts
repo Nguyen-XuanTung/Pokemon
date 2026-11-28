@@ -79,6 +79,20 @@ export interface UiCatalog {
   readonly lostHealAdvice: string;
   readonly lostEnableGuidanceBtn: string;
   readonly lostTrackMainBtn: string;
+  readonly lostQuickGuideBtn: string;
+  readonly lostHideQuickGuideBtn: string;
+  readonly lostRestartGuideBtn: string;
+  readonly hudArrivedBadge: string;
+  readonly hudLockedBadge: string;
+  readonly hudUnreachableBadge: string;
+  readonly creditsBtn: string;
+  readonly creditsModalTitle: string;
+  readonly creditsCloseBtn: string;
+  readonly creditsVersionLine: (ver: string) => string;
+  readonly creditsLicenseSummary: string;
+  readonly creditsThirdPartyTitle: string;
+  readonly creditsViewLicenseLink: string;
+  readonly creditsViewCreditsLink: string;
   readonly onboardingHeader: (stepNum: number, total: number) => string;
   readonly onboardingSkipBtn: string;
   readonly onboardingSkipStepBtn: string;
@@ -101,6 +115,7 @@ export interface UiCatalog {
   readonly battleEffectiveTag: string;
   readonly battleResistedTag: string;
   readonly battleRecommendedTag: string;
+  readonly battleKoRiskTag: string;
   readonly battleNoItems: string;
   readonly battleBondEstimate: (pct: number) => string;
   readonly battleBondGuaranteed: string;
@@ -118,6 +133,8 @@ export interface UiCatalog {
     teamMaxLv: number,
     recLv: number,
     needsHeal: boolean,
+    needsTonics: boolean,
+    counterElementsText: string,
   ) => string;
   readonly journalHeader: (caught: number, tokens: number) => string;
   readonly journalCloseBtn: string;
@@ -379,9 +396,24 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     lostNextAction: 'Việc cần làm tiếp theo:',
     lostTargetLabel: 'Điểm đến đang theo dõi:',
     lostDirectionLabel: 'Đường đi ngắn nhất:',
-    lostHealAdvice: 'Đội hình đang mất nhiều máu. Nên ghé lửa trại gần nhất hoặc dùng Nước Sương trước khi đi tiếp.',
+    lostHealAdvice: 'Đội hình đang mất nhiều máu. Nên ghé lửa trại gần nhất hoặc dùng Sương Thảo Dược trước khi đi tiếp.',
     lostEnableGuidanceBtn: 'Bật đường dẫn đầy đủ',
     lostTrackMainBtn: 'Theo dõi nhiệm vụ chính',
+    lostQuickGuideBtn: 'Xem nhanh 8 bước cho người mới',
+    lostHideQuickGuideBtn: 'Ẩn hướng dẫn nhanh',
+    lostRestartGuideBtn: 'Bật lại gợi ý từng bước',
+    hudArrivedBadge: 'Đã tới nơi',
+    hudLockedBadge: 'Đang khóa',
+    hudUnreachableBadge: 'Cần mở đường',
+    creditsBtn: 'Giấy phép và Ghi công',
+    creditsModalTitle: 'Giấy phép và Ghi công tài nguyên',
+    creditsCloseBtn: 'Đóng',
+    creditsVersionLine: (ver) => `Phiên bản phát hành: LingoWild v${ver} (Chạy ngoại tuyến phía trình duyệt)`,
+    creditsLicenseSummary:
+      'Mã nguồn TypeScript, âm thanh tổng hợp Web Audio, dữ liệu hội thoại song ngữ, 30 loài sinh vật và đồng hành vẽ riêng phát hành theo giấy phép MIT. Các gói hình ảnh mở bên thứ ba giữ nguyên giấy phép gốc của từng tác giả (CC0 1.0, CC-BY 3.0 và CC-BY 4.0).',
+    creditsThirdPartyTitle: 'Ghi công tài nguyên đồ họa và thư viện mã mở:',
+    creditsViewLicenseLink: 'Mở tệp LICENSE.txt',
+    creditsViewCreditsLink: 'Mở tệp CREDITS.md đầy đủ',
     onboardingHeader: (stepNum, total) => `Hướng dẫn nhập môn (${stepNum}/${total})`,
     onboardingSkipBtn: 'Bỏ qua hướng dẫn',
     onboardingSkipStepBtn: 'Bỏ qua bước này',
@@ -409,6 +441,7 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     battleEffectiveTag: 'Khắc chế 1,5x',
     battleResistedTag: 'Bị kháng 0,67x',
     battleRecommendedTag: 'Khuyên dùng',
+    battleKoRiskTag: 'Dễ đánh ngất',
     battleNoItems: 'Không còn vật phẩm dùng trong trận.',
     battleBondEstimate: (pct) => ` | Tỷ lệ ~${pct}%`,
     battleBondGuaranteed: ' | Bảo đảm 100%',
@@ -417,7 +450,7 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     battleFleeBtn: 'Rút lui an toàn',
     battleAssistTitle: 'Gợi ý chiến thuật:',
     battleLowHpAlert: (cur, max) =>
-      `Máu đang thấp (${cur}/${max}). Hãy mở Túi đồ dùng Nước Sương hoặc đổi bạn đồng hành khác.`,
+      `Máu đang thấp (${cur}/${max}). Hãy mở Túi đồ dùng Sương Thảo Dược hoặc đổi bạn đồng hành khác.`,
     battleSwitchTip: (partnerName, elName) =>
       `Nên đổi sang ${partnerName} (hệ ${elName}) để khắc chế đối thủ dễ hơn.`,
     battleCaptureReadyTip: (pct, guaranteed) =>
@@ -432,10 +465,21 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
         : mult < 0.95
           ? `Hệ ${foeEl} kháng hệ ${moveEl}, sát thương giảm còn 0,67 lần.`
           : `Hệ ${moveEl} gây sát thương bình thường lên hệ ${foeEl}.`,
-    bossWarningBanner: (bossName, teamMaxLv, recLv, needsHeal) =>
-      needsHeal
-        ? `Lưu ý trước trận gặp ${bossName}: Đội hình hiện cao nhất cấp ${teamMaxLv} (khuyên dùng cấp ${recLv}+) và đang cần hồi máu ở lửa trại.`
-        : `Lưu ý trước trận gặp ${bossName}: Sinh vật mạnh nhất của bạn mới ở cấp ${teamMaxLv}, nên luyện lên khoảng cấp ${recLv} để dễ thắng hơn.`,
+    bossWarningBanner: (bossName, teamMaxLv, recLv, needsHeal, needsTonics, counterElementsText) => {
+      const parts: string[] = [
+        `Chuẩn bị trước trận gặp ${bossName}: đội hình hiện cao nhất cấp ${teamMaxLv} (khuyên dùng từ cấp ${recLv})`,
+      ];
+      if (counterElementsText) {
+        parts.push(`nên mang bạn hệ ${counterElementsText}`);
+      }
+      if (needsHeal) {
+        parts.push('hãy hồi đầy máu tại lửa trại gần nhất');
+      }
+      if (needsTonics) {
+        parts.push('nên mang ít nhất 2 bình hồi máu trong Túi đồ');
+      }
+      return `${parts.join('; ')}.`;
+    },
     journalHeader: (caught, tokens) => `Sổ Thực Địa | Đã kết bạn: ${caught}/30 | ${tokens} Huy hiệu`,
     journalCloseBtn: 'Đóng (Esc)',
     journalTabs: {
@@ -710,6 +754,21 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     lostHealAdvice: 'Your party is low on health. Visit the nearest campfire or use a Dew Tonic first.',
     lostEnableGuidanceBtn: 'Enable Full Guidance',
     lostTrackMainBtn: 'Track Main Story Quest',
+    lostQuickGuideBtn: 'View 8-Step Quick Guide',
+    lostHideQuickGuideBtn: 'Hide Quick Guide',
+    lostRestartGuideBtn: 'Replay Step-by-Step Guide',
+    hudArrivedBadge: 'Arrived',
+    hudLockedBadge: 'Locked',
+    hudUnreachableBadge: 'Path Blocked',
+    creditsBtn: 'Licenses & Credits',
+    creditsModalTitle: 'Licenses & Asset Attributions',
+    creditsCloseBtn: 'Close',
+    creditsVersionLine: (ver) => `Release Version: LingoWild v${ver} (Offline Web Edition)`,
+    creditsLicenseSummary:
+      'TypeScript source code, synthesized Web Audio, original bilingual dialogue and lexicon, and custom creature/companion sprites are licensed under MIT. Third-party open pixel art packs retain their original author licenses (CC0 1.0, CC-BY 3.0, and CC-BY 4.0).',
+    creditsThirdPartyTitle: 'Third-party pixel art and open-source libraries:',
+    creditsViewLicenseLink: 'Open LICENSE.txt',
+    creditsViewCreditsLink: 'Open full CREDITS.md',
     onboardingHeader: (stepNum, total) => `Beginner Guide (${stepNum}/${total})`,
     onboardingSkipBtn: 'Skip Guide',
     onboardingSkipStepBtn: 'Skip Step',
@@ -737,6 +796,7 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     battleEffectiveTag: '1.5x Effective',
     battleResistedTag: '0.67x Resisted',
     battleRecommendedTag: 'Recommended',
+    battleKoRiskTag: 'KO Risk',
     battleNoItems: 'No battle items remaining in bag.',
     battleBondEstimate: (pct) => ` | Bond ~${pct}%`,
     battleBondGuaranteed: ' | Guaranteed 100%',
@@ -760,10 +820,21 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
         : mult < 0.95
           ? `${foeEl} resists ${moveEl} (0.67x damage).`
           : `${moveEl} deals standard damage to ${foeEl}.`,
-    bossWarningBanner: (bossName, teamMaxLv, recLv, needsHeal) =>
-      needsHeal
-        ? `Preparation tip before ${bossName}: highest partner is Lv.${teamMaxLv} (recommended Lv.${recLv}+) and needs healing.`
-        : `Preparation tip before ${bossName}: highest partner is Lv.${teamMaxLv}; training to around Lv.${recLv} is recommended.`,
+    bossWarningBanner: (bossName, teamMaxLv, recLv, needsHeal, needsTonics, counterElementsText) => {
+      const parts: string[] = [
+        `Prep before ${bossName}: highest partner is Lv.${teamMaxLv} (recommended Lv.${recLv}+)`,
+      ];
+      if (counterElementsText) {
+        parts.push(`bring ${counterElementsText} partners`);
+      }
+      if (needsHeal) {
+        parts.push('heal at the nearest campfire first');
+      }
+      if (needsTonics) {
+        parts.push('carry at least 2 healing tonics');
+      }
+      return `${parts.join('; ')}.`;
+    },
     journalHeader: (caught, tokens) => `Field Journal | Bonded: ${caught}/30 | Tokens: ${tokens}`,
     journalCloseBtn: 'Close (Esc)',
     journalTabs: {
@@ -1043,4 +1114,38 @@ export function localizeSpeakerName(speaker: string, lang: UiLanguage | undefine
     }
   }
   return speaker;
+}
+
+export function localizeSaveNotice(raw: string, lang: UiLanguage | undefined): string {
+  if (!raw || lang === 'en') return raw;
+  const lower = raw.toLowerCase();
+  if (lower.includes('checksum')) return 'Mã kiểm tra tệp lưu không khớp (tệp đã bị sửa hoặc hỏng).';
+  if (lower.includes('oversized') || lower.includes('too large') || lower.includes('max size')) {
+    return 'Tệp lưu vượt quá dung lượng cho phép.';
+  }
+  if (lower.includes('invalid json') || lower.includes('unexpected token')) {
+    return 'Tệp lưu không đúng định dạng JSON.';
+  }
+  if (lower.includes('invalid save') || lower.includes('invalid game state') || lower.includes('invalid state')) {
+    return 'Cấu trúc dữ liệu bên trong tệp lưu không hợp lệ.';
+  }
+  if (lower.includes('newer') && lower.includes('tab')) {
+    return 'Đã phát hiện bản lưu mới hơn ở thẻ trình duyệt khác.';
+  }
+  if (lower.includes('primary save was damaged') || lower.includes('restored clean backup')) {
+    return 'Bản lưu chính gặp lỗi và đã được khôi phục tự động từ bản sao lưu an toàn.';
+  }
+  if (lower.includes('primary save missing')) {
+    return 'Không thấy bản lưu chính; đã khôi phục tự động từ bản sao lưu.';
+  }
+  if (lower.includes('storage nearly full')) {
+    return 'Bộ nhớ trình duyệt sắp đầy; hệ thống đã ưu tiên bảo toàn bản lưu chính.';
+  }
+  if (lower.includes('loaded newer in-memory')) {
+    return 'Đã nạp tiến trình mới hơn từ bộ nhớ phiên hiện tại.';
+  }
+  if (lower.includes('unreadable')) {
+    return 'Dữ liệu lưu cũ không thể đọc được. Bắt đầu phiên mới và giữ nguyên bản dự phòng.';
+  }
+  return raw;
 }

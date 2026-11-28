@@ -1,9 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { MOVES_BY_ID } from '../../src/data/moves.ts';
+import { SPECIES_BY_ID } from '../../src/data/species.ts';
+import { createCreatureInstance } from '../../src/domain/creatures.ts';
+import { PRIMARY_SAVE_KEY, serializeSaveEnvelope } from '../../src/domain/save.ts';
+import { createInitialGameState } from '../../src/domain/state.ts';
 
 const SCREENSHOT_DIR = path.join(process.cwd(), 'docs', 'screenshots');
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+
+const DIR_TO_KEY: Readonly<Record<string, string>> = {
+  up: 'ArrowUp',
+  down: 'ArrowDown',
+  left: 'ArrowLeft',
+  right: 'ArrowRight',
+};
 
 const FORBIDDEN_ENGLISH_UI_STRINGS = [
   'Field Journal',
@@ -20,13 +32,33 @@ const FORBIDDEN_ENGLISH_UI_STRINGS = [
   'Ranger Rowan',
   'Scout Mai',
   'Warden Sylvan',
+  'Primary save was damaged',
+  'Checksum mismatch',
 ];
 
-test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
-  test('guides a simulated Vietnamese A1 beginner through onboarding, wayfinding, battle assist, guaranteed first catch, and Lost Helper using in-game info only', async ({
+async function followOnScreenCompassUntil(
+  page: Page,
+  predicate: () => Promise<boolean>,
+  maxSteps: number = 45,
+): Promise<boolean> {
+  for (let i = 0; i < maxSteps; i++) {
+    if (await predicate()) return true;
+    const compass = page.getByTestId('hud-compass-arrow');
+    if (!(await compass.isVisible())) return await predicate();
+    const arrived = await compass.getAttribute('data-arrived');
+    if (arrived === 'true') return await predicate();
+    const dir = await compass.getAttribute('data-dir');
+    if (!dir || !DIR_TO_KEY[dir]) return await predicate();
+    await page.keyboard.press(DIR_TO_KEY[dir]);
+  }
+  return await predicate();
+}
+
+test.describe('Beginner Experience: Guidance-Driven Vietnamese A1 Verification', () => {
+  test('plays onboarding purely by following on-screen compass arrows, unified HUD, single battle recommendation, and Lost Helper', async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium-desktop', 'Desktop beginner walkthrough');
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'Desktop guidance-driven walkthrough');
 
     const consoleErrors: string[] = [];
     const failedResponses: string[] = [];
@@ -39,6 +71,7 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     });
 
     await page.goto('/');
+    await expect(page.getByTestId('app-version-badge')).toContainText('v1.2.0');
     await expect(page.getByTestId('btn-new-game')).toContainText('Bắt đầu hành trình mới');
     await expect(page.getByTestId('select-ui-language')).toHaveValue('vi');
     await expect(page.getByTestId('select-content-language')).toHaveValue('bilingual');
@@ -53,49 +86,60 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     await page.getByTestId('btn-dialogue-next').click();
     await page.getByTestId('btn-dialogue-next').click();
 
-    // Step 2: Verify onboarding strip, compass arrow, and minimap appear cleanly in Mosslight Camp
+    // Verify unified HUD + compass + onboarding strip all point to Scout Mai (NO contradictory west-trail text!)
     await expect(page.getByTestId('onboarding-strip')).toBeVisible();
     await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'move_around');
     await expect(page.getByTestId('hud-compass-arrow')).toBeVisible();
     await expect(page.getByTestId('overworld-minimap')).toBeVisible();
+    await expect(page.getByTestId('hud-goal-text')).toContainText('Trinh sát Mai');
 
     if (!process.env.CI) {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '18-beginner-camp-guidance.png') });
     }
 
-    // Walk south & east toward Scout Mai (16,15) from spawn (15,13): 4 steps clears move_around (3+ steps) & stands right beside Scout Mai!
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowRight');
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowDown');
-    await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'talk_npc');
-    // Now at (15,15) right next to Scout Mai (16,15): nearby interact hint must be visible!
+    // Follow ONLY the on-screen compass arrow to Scout Mai (zero hardcoded coordinates!)
+    const reachedMai = await followOnScreenCompassUntil(page, async () => {
+      const arrived = await page.getByTestId('hud-compass-arrow').getAttribute('data-arrived');
+      return arrived === 'true';
+    });
+    expect(reachedMai).toBe(true);
     await expect(page.getByTestId('btn-nearby-interact')).toBeVisible();
     await expect(page.getByTestId('btn-nearby-interact')).toContainText('Trinh sát Mai');
 
-    // Step 3: Talk to Scout Mai (auto-facing interacts even without turning right!)
-    await page.keyboard.press('Space');
+    // Step 3: Talk to Scout Mai by clicking the highlighted Interact pill
+    await page.getByTestId('btn-nearby-interact').click();
     await expect(page.getByTestId('dialogue-box')).toBeVisible();
     await page.getByTestId('btn-dialogue-next').click();
     await expect(page.getByTestId('dialogue-box')).toBeHidden();
-    await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'track_quest');
 
-    // Step 4: Follow trail west to Whisperwood Glen (0,12) via row 12 stone road
-    for (let i = 0; i < 3; i++) {
-      await page.keyboard.press('ArrowUp');
-    }
-    for (let i = 0; i < 15; i++) {
-      await page.keyboard.press('ArrowLeft');
-    }
-    await expect
-      .poll(async () => page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().regionId))
-      .toBe('whisperwood');
+    // If move_around still needs 1 more step, follow the new west arrow cleanly to Whisperwood!
+    const enteredWhisperwood = await followOnScreenCompassUntil(
+      page,
+      async () =>
+        (await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().regionId)) ===
+        'whisperwood',
+      35,
+    );
+    expect(enteredWhisperwood).toBe(true);
+    await expect(page.getByTestId('hud-goal-text')).toContainText('bụi cỏ cao');
 
-    // Walk into Whisperwood tall grass near (27,8) to trigger gentle first Lv.3 wild encounter
-    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowLeft');
-    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
+    // Follow ONLY the on-screen compass arrow to the marked Whisperwood tall grass!
+    const reachedGrass = await followOnScreenCompassUntil(
+      page,
+      async () => {
+        const snap = await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot());
+        if (snap?.hasActiveBattle) return true;
+        const arrived = await page.getByTestId('hud-compass-arrow').getAttribute('data-arrived');
+        return arrived === 'true';
+      },
+      25,
+    );
+    expect(reachedGrass).toBe(true);
 
-    let inBattle = false;
+    // Step gently in tall grass until the first Lv.3 wild battle starts
+    let inBattle = await page.evaluate(
+      () => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().hasActiveBattle ?? false,
+    );
     for (let s = 0; s < 30 && !inBattle; s++) {
       await page.keyboard.press(s % 2 === 0 ? 'ArrowUp' : 'ArrowDown');
       inBattle = await page.evaluate(
@@ -104,44 +148,54 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     }
     expect(inBattle).toBe(true);
     await expect(page.getByTestId('battle-deck')).toBeVisible();
-    await expect(page.getByTestId('battle-assist-bar')).toBeVisible();
+
+    // TURN 1: Single Primary Recommendation MUST be 'move' (1 move card highlighted, bag tab NOT highlighted!)
+    await expect(page.getByTestId('battle-assist-bar')).toHaveAttribute('data-primary-action', 'move');
     await expect(page.locator('.lw-move-card[data-recommended="true"]')).toHaveCount(1);
+    await expect(page.getByTestId('battle-tab-bag')).not.toHaveAttribute('data-recommended', 'true');
 
     if (!process.env.CI) {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '19-beginner-battle-assist.png') });
     }
 
-    // Step 5: Click the recommended move once
+    // Click ONLY the recommended move button
     await page.locator('.lw-move-card[data-recommended="true"] button').first().click();
 
-    // Step 6: Open Chimes & Bag, verify guaranteed 100% first capture, and throw Moss Charm!
+    // TURN 2: Single Primary Recommendation MUST switch cleanly to 'capture' (0 move cards highlighted, bag tab highlighted!)
+    await expect(page.getByTestId('battle-assist-bar')).toHaveAttribute(
+      'data-primary-action',
+      'capture',
+    );
+    await expect(page.locator('.lw-move-card[data-recommended="true"]')).toHaveCount(0);
+    await expect(page.getByTestId('battle-tab-bag')).toHaveAttribute('data-recommended', 'true');
+
     await page.getByTestId('battle-tab-bag').click();
+    await expect(page.getByTestId('btn-battle-item-moss_charm')).toHaveAttribute(
+      'data-recommended',
+      'true',
+    );
     await expect(page.getByTestId('btn-battle-item-moss_charm')).toContainText('100%');
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '23-beginner-capture-recommend.png') });
+    }
     await page.getByTestId('btn-battle-item-moss_charm').click();
 
-    // Must succeed on the very first throw!
+    // Guaranteed 100% capture on the first charm throw!
     await expect(page.getByTestId('btn-battle-finish')).toBeVisible();
     await expect(page.locator('.lw-battle-log')).toHaveAttribute('data-captured', 'true');
     await page.getByTestId('btn-battle-finish').click();
 
-    // Step 7: Walk to Glen Clearing Campfire (24,9) from (27,7/8) and heal!
+    // Step 7: Follow ONLY the on-screen compass arrow to Glen Clearing Campfire and heal!
     await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'campfire_heal');
-    const pos = await page.evaluate(
-      () => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos,
+    await expect(page.getByTestId('hud-goal-text')).toContainText('Lửa Trại');
+    const reachedCampfire = await followOnScreenCompassUntil(
+      page,
+      async () => (await page.getByTestId('hud-compass-arrow').getAttribute('data-arrived')) === 'true',
+      25,
     );
-    const dy = 9 - (pos?.y ?? 8);
-    for (let i = 0; i < Math.abs(dy); i++) {
-      await page.keyboard.press(dy > 0 ? 'ArrowDown' : 'ArrowUp');
-    }
-    const dx = 25 - (pos?.x ?? 27);
-    for (let i = 0; i < Math.abs(dx); i++) {
-      await page.keyboard.press(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
-    }
-    // Ensure facing left toward campfire at (24,9) and interact
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('Space');
+    expect(reachedCampfire).toBe(true);
+    await page.getByTestId('btn-nearby-interact').click();
     await expect(page.getByTestId('dialogue-box')).toBeVisible();
-    // Dismiss campfire dialogue without entering optional quiz
     const choices = page.locator('[data-testid^="dialogue-choice-"]');
     if ((await choices.count()) > 0) {
       await choices.last().click();
@@ -150,12 +204,13 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     }
     await expect(page.getByTestId('dialogue-box')).toBeHidden();
 
-    // Step 8: Optional English lookup step -> verify beginner can skip it cleanly with zero penalty!
+    // Step 8: Optional English lookup step -> skip cleanly to prove English study is 100% optional
     await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'optional_gloss');
     await page.getByTestId('btn-skip-onboarding-step').click();
 
-    // Step 9: Open Field Journal, inspect structured quest card, click "Dẫn đường", and inspect Team Move Manager
+    // Step 9: Open highlighted Field Journal -> inspect structured quest -> switch tracked quest -> manage moves
     await expect(page.getByTestId('onboarding-strip')).toHaveAttribute('data-step', 'open_journal');
+    await expect(page.getByTestId('btn-open-journal')).toHaveClass(/lw-btn-highlight/);
     await page.getByTestId('btn-open-journal').click();
     await expect(page.getByTestId('journal-modal')).toBeVisible();
     await expect(page.getByTestId('quest-card-q02_whisperwood_echo')).toBeVisible();
@@ -166,40 +221,68 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     await expect(page.getByTestId('quest-card-q02_whisperwood_echo')).not.toContainText(
       'Warden Sylvan',
     );
+    await expect(page.getByTestId('quest-card-q02_whisperwood_echo')).not.toContainText(
+      'Rừng Thầm Sylvan',
+    );
 
     if (!process.env.CI) {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '20-beginner-quests-wayfinding.png') });
     }
 
-    // Click "Dẫn đường" on the side quest to test active quest-tracking switch, then re-open Journal for Team Move Manager
+    // Switch tracked quest mid-way to side quest q04_first_bond & verify HUD updates
     await page.getByTestId('btn-track-quest-q04_first_bond').click();
     await expect(page.getByTestId('journal-modal')).toBeHidden();
+    await expect(page.getByTestId('onboarding-strip')).toBeHidden();
+    await expect(page.getByTestId('hud-goal-text')).toContainText('3 loài sinh vật');
+
+    // Re-open Journal to verify Team Move Manager
     await page.getByTestId('btn-open-journal').click();
     await page.getByTestId('journal-tab-team').click();
     await page.getByTestId('btn-manage-moves-0').click();
     await expect(page.getByTestId('move-manager-panel')).toBeVisible();
     await page.getByTestId('btn-close-journal').click();
 
-    // Open "Tôi bị lạc" contextual helper modal
+    // Open "Tôi bị lạc", verify unified text, expand 8-Step Quick Guide, and verify Replay Guide button
     await page.getByTestId('btn-im-lost').click();
     await expect(page.getByTestId('lost-helper-modal')).toBeVisible();
     await expect(page.getByTestId('lost-helper-modal')).toContainText('Rừng Thầm');
+    await expect(page.getByTestId('lost-helper-modal')).toContainText('3 loài sinh vật');
     if (!process.env.CI) {
       await page.screenshot({ path: path.join(SCREENSHOT_DIR, '21-lost-helper-modal.png') });
     }
-    await page.getByTestId('btn-close-lost-helper').click();
+    await page.getByTestId('btn-lost-quick-guide').click();
+    await expect(page.getByTestId('lost-quick-guide-panel')).toBeVisible();
+    await page.getByTestId('btn-lost-restart-guide').click();
     await expect(page.getByTestId('lost-helper-modal')).toBeHidden();
+    // Replaying guide brings onboarding strip back cleanly without losing party or items!
+    await expect(page.getByTestId('onboarding-strip')).toBeVisible();
 
     expect(consoleErrors).toEqual([]);
     expect(failedResponses).toEqual([]);
   });
 
-  test('audits zero untranslated English UI strings in Vietnamese mode and verifies live language, difficulty, and guidance switches without data loss', async ({
+  test('audits zero English UI leaks in vi_only mode, verifies web-bundled LICENSE/CREDITS, and checks live mode switches', async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium-desktop', 'Desktop localization & mode audit');
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'Desktop localization & credits audit');
 
     await page.goto('/');
+
+    // Verify in-app Credits & License modal AND web-bundled LICENSE.txt + CREDITS.md HTTP 200!
+    await page.getByTestId('btn-open-credits').click();
+    await expect(page.getByTestId('credits-modal')).toBeVisible();
+    await expect(page.getByTestId('credits-modal')).toContainText('v1.2.0');
+    await expect(page.getByTestId('credits-modal')).toContainText('Kenney Vleugels');
+    await expect(page.getByTestId('credits-modal')).toContainText('Lanea Zimmerman');
+    const licRes = await page.request.get('./LICENSE.txt');
+    expect(licRes.status()).toBe(200);
+    expect(await licRes.text()).toContain('MIT License');
+    const credRes = await page.request.get('./CREDITS.md');
+    expect(credRes.status()).toBe(200);
+    expect(await credRes.text()).toContain('CC-BY');
+    await page.getByTestId('btn-close-credits').click();
+    await expect(page.getByTestId('credits-modal')).toBeHidden();
+
     await page.getByTestId('select-ui-language').selectOption('vi');
     await page.getByTestId('select-content-language').selectOption('vi_only');
     await page.getByTestId('checkbox-skip-tutorial').check();
@@ -220,13 +303,11 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     await page.getByTestId('btn-dialogue-next').click();
     await page.getByTestId('btn-dialogue-next').click();
 
-    // Audit HUD and Lost Helper in vi_only mode
     const hudText = (await page.locator('.lw-hud').textContent()) ?? '';
     for (const forbidden of FORBIDDEN_ENGLISH_UI_STRINGS) {
       expect(hudText).not.toContain(forbidden);
     }
 
-    // Audit all 7 Journal tabs in vi + vi_only mode
     await page.getByTestId('btn-open-journal').click();
     for (const tabId of [
       'journal-tab-quests',
@@ -254,16 +335,13 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     const snapBefore = await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot());
     await page.getByTestId('settings-ui-language').selectOption('en');
     await expect(page.getByTestId('journal-modal')).toContainText('Field Journal');
-
     await page.getByTestId('settings-content-language').selectOption('en_assist');
     await page.getByTestId('settings-content-language').selectOption('en_immersion');
     await page.getByTestId('settings-content-language').selectOption('bilingual');
-
     await page.getByTestId('settings-difficulty').selectOption('adventure');
     await page.getByTestId('settings-difficulty').selectOption('challenge');
     await page.getByTestId('settings-difficulty').selectOption('relaxed');
 
-    // Toggle guidance modes and confirm HUD minimap/compass visibility responds immediately
     await page.getByTestId('settings-ui-language').selectOption('vi');
     await page.getByTestId('settings-guidance-mode').selectOption('minimal');
     await page.getByTestId('btn-close-journal').click();
@@ -290,6 +368,96 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     expect(snapAfter?.regionId).toBe(snapBefore?.regionId);
   });
 
+  test('migrates a returning v1.1 GitHub Pages production save cleanly without losing party, tokens, quests, or lexicon', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-desktop', 'Production v1.1 save compatibility check');
+
+    // Construct an exact legacy v1.1 (e0b9e27) save lacking beginner-experience fields
+    const legacyState = createInitialGameState(1101);
+    legacyState.starterChosen = 'mosskit';
+    legacyState.flags.has_starter = true;
+    legacyState.tokens = 345;
+    legacyState.regionId = 'whisperwood';
+    legacyState.playerPos = { x: 25, y: 9, facing: 'left' };
+    legacyState.party = [
+      createCreatureInstance({
+        uid: 'prod_mosskit_1',
+        species: SPECIES_BY_ID.mosskit!,
+        level: 8,
+        bondedRegion: 'mosslight_hub',
+        movesById: MOVES_BY_ID,
+      }),
+      createCreatureInstance({
+        uid: 'prod_dewgrub_2',
+        species: SPECIES_BY_ID.dewgrub!,
+        level: 5,
+        bondedRegion: 'whisperwood',
+        movesById: MOVES_BY_ID,
+      }),
+    ];
+    legacyState.discoveredSpecies = ['mosskit', 'dewgrub'];
+    legacyState.caughtSpecies = ['mosskit', 'dewgrub'];
+    legacyState.quests.q01_first_partner = {
+      questId: 'q01_first_partner',
+      status: 'completed',
+      rewardClaimed: true,
+    };
+    legacyState.quests.q02_whisperwood_echo = {
+      questId: 'q02_whisperwood_echo',
+      status: 'active',
+      rewardClaimed: false,
+    };
+    legacyState.lexicon.lex_valley = {
+      wordId: 'lex_valley',
+      exposures: 4,
+      glossLookups: 1,
+      savedByPlayer: true,
+      mastery: 1,
+      lastSeenStep: 12,
+      contextsSeen: ['hub_starter'],
+    };
+
+    const stripped = structuredClone(legacyState) as unknown as Record<string, unknown>;
+    const strippedSettings = stripped.settings as Record<string, unknown>;
+    strippedSettings.supportMode = 'contextual';
+    delete strippedSettings.uiLanguage;
+    delete strippedSettings.contentLanguage;
+    delete strippedSettings.difficulty;
+    delete strippedSettings.guidanceMode;
+    delete strippedSettings.battleAssist;
+    delete stripped.trackedQuestId;
+    delete stripped.onboarding;
+
+    const rawProdEnvelope = serializeSaveEnvelope(
+      stripped as unknown as ReturnType<typeof createInitialGameState>,
+      14,
+      2,
+    );
+
+    await page.addInitScript(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, value);
+      },
+      { key: PRIMARY_SAVE_KEY, value: rawProdEnvelope },
+    );
+
+    await page.goto('/');
+    await expect(page.getByTestId('btn-continue-game')).toBeVisible();
+    await page.getByTestId('btn-continue-game').click();
+
+    await expect(page.locator('.lw-hud-ribbon')).toContainText('Thung Lũng Rừng Thầm');
+    await expect(page.locator('.lw-hud-ribbon')).toContainText('345');
+    await expect(page.getByTestId('onboarding-strip')).toBeHidden();
+
+    const snap = await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot());
+    expect(snap?.partyCount).toBe(2);
+    expect(snap?.caughtCount).toBe(2);
+    expect(snap?.difficulty).toBe('adventure');
+    expect(snap?.contentLanguage).toBe('en_assist');
+    expect(snap?.uiLanguage).toBe('vi');
+  });
+
   test('supports skipping tutorial cleanly with full starter items on desktop and mobile viewports', async ({
     page,
   }, testInfo) => {
@@ -304,7 +472,6 @@ test.describe('Beginner Experience: Vietnamese A1 Player Verification', () => {
     await page.getByTestId('btn-dialogue-next').click();
     await page.getByTestId('btn-dialogue-next').click();
 
-    // Onboarding strip must stay hidden while all starter items & tokens remain intact!
     await expect(page.getByTestId('onboarding-strip')).toBeHidden();
     await expect(page.locator('.lw-hud-ribbon')).toContainText('230');
 

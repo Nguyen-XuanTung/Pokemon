@@ -424,6 +424,56 @@ select {
   border-color: #264d2a;
 }
 
+.lw-btn-moss:hover:not(:disabled) {
+  background: #2f5c34;
+  color: #fffaf0;
+}
+
+.lw-btn-highlight {
+  box-shadow:
+    0 0 0 3px rgba(230, 184, 50, 0.85),
+    0 2px 8px rgba(230, 184, 50, 0.45);
+  border-color: #b88412;
+  animation: lwPulseGlow 1.5s ease-in-out infinite;
+}
+
+.lw-root[data-reduced-motion='true'] .lw-btn-highlight {
+  animation: none;
+}
+
+@keyframes lwPulseGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(230, 184, 50, 0.72),
+      0 2px 6px rgba(230, 184, 50, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(230, 184, 50, 0.98),
+      0 3px 12px rgba(230, 184, 50, 0.6);
+  }
+}
+
+.lw-quick-guide-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lw-credits-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.lw-credits-links a {
+  text-decoration: none;
+  display: inline-block;
+}
+
 .lw-top-bar-group {
   display: flex;
   flex-direction: column;

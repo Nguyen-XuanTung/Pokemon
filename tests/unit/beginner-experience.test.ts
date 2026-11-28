@@ -379,24 +379,43 @@ describe('10-step onboarding, guaranteed first capture, Battle Assist, Move Mana
     controller.movePlayer('up');
     expect(getActiveOnboardingPrompt(controller.state)?.id).toBe('talk_npc');
 
-    // Step 5 & 6: first tutorial wild battle + guaranteed 100% capture after 1 attack!
+    // Step 5 & 6: first tutorial wild battle -> Turn 1 recommends move ONLY, Turn 2 guarantees 100% capture ONLY!
     controller.startWildEncounter('dewgrub', 3);
     expect(
       shouldGuaranteeFirstTutorialCapture({
         state: controller.state,
         enemyHpRatio: 1,
-        turnCount: 0,
+        turnCount: 1,
       }),
     ).toBe(false);
+    const turn1Plan = computeBattleAssistPlan({
+      session: controller.activeBattle!,
+      state: controller.state,
+      speciesById: SPECIES_BY_ID,
+      movesById: MOVES_BY_ID,
+      itemsById: ITEMS_BY_ID,
+    });
+    expect(turn1Plan.primaryAction.kind).toBe('move');
+    expect(turn1Plan.moveAnnotations.filter((a) => a.isRecommended)).toHaveLength(1);
 
     controller.submitBattleAction({ kind: 'move', moveIndex: 0 });
     expect(
       shouldGuaranteeFirstTutorialCapture({
         state: controller.state,
         enemyHpRatio: 0.9,
-        turnCount: 1,
+        turnCount: 2,
       }),
     ).toBe(true);
+    const turn2Plan = computeBattleAssistPlan({
+      session: controller.activeBattle!,
+      state: controller.state,
+      speciesById: SPECIES_BY_ID,
+      movesById: MOVES_BY_ID,
+      itemsById: ITEMS_BY_ID,
+    });
+    expect(turn2Plan.primaryAction.kind).toBe('capture');
+    // Zero move cards may be marked recommended when capture is the primary recommendation!
+    expect(turn2Plan.moveAnnotations.filter((a) => a.isRecommended)).toHaveLength(0);
 
     controller.submitBattleAction({ kind: 'item', itemId: 'moss_charm' });
     expect(controller.activeBattle?.outcome).toBe('captured');
@@ -557,6 +576,70 @@ describe('10-step onboarding, guaranteed first capture, Battle Assist, Move Mana
     expect(loaded.state?.settings.guidanceMode).toBe('full');
     expect(loaded.state?.settings.battleAssist).toBe(true);
     expect(loaded.state?.onboarding?.skipped).toBe(true);
+
+    // Verify unified wayfinding: during onboarding, HUD goal action and Lost Helper match onboarding step (NOT tracked main quest!)
+    const unifiedCtrl = new GameController(
+      new SaveRepository(new MemoryStorage(), GAME_SAVE_VALIDATION_REGISTRY),
+    );
+    unifiedCtrl.startNewGame(606);
+    unifiedCtrl.advanceDialogue();
+    unifiedCtrl.advanceDialogue();
+    unifiedCtrl.selectDialogueChoice(unifiedCtrl.activeDialogue!.node.lines[2]!.choices![0]!);
+    unifiedCtrl.advanceDialogue();
+    unifiedCtrl.advanceDialogue();
+    expect(unifiedCtrl.navigationPlan.goalSource).toBe('onboarding');
+    expect(unifiedCtrl.navigationPlan.destinationLabelVi).toContain('Trinh sát Mai');
+    expect(unifiedCtrl.navigationPlan.activeGoalActionVi).toContain('Trinh sát Mai');
+    const unifiedLost = unifiedCtrl.getLostHelperReport();
+    expect(unifiedLost.nextActionVi).toBe(unifiedCtrl.navigationPlan.activeGoalActionVi);
+    expect(unifiedLost.targetLabelVi).toContain('Trinh sát Mai');
+
+    // After skipping onboarding, unified plan cleanly switches to tracked main quest (Whisperwood)!
+    unifiedCtrl.skipOnboardingGuide();
+    expect(unifiedCtrl.navigationPlan.goalSource).toBe('quest');
+    expect(unifiedCtrl.navigationPlan.destinationLabelVi).toContain('Rừng Thầm');
+
+    // Verify unreachable target produces clear reason instead of silent failure
+    const trappedState = createInitialGameState(707);
+    trappedState.flags.has_starter = true;
+    trappedState.playerPos = { x: 0, y: 0, facing: 'down' }; // surrounded by forest trees
+    const unreachablePlan = computeNavigationPlan({
+      state: trappedState,
+      mapsById: MAPS_BY_ID,
+      npcs: NPCS,
+      npcsById: NPCS_BY_ID,
+      quests: QUESTS,
+      speciesById: SPECIES_BY_ID,
+      guidanceOverride: {
+        titleEn: 'Test unreachable',
+        titleVi: 'Kiểm tra không tìm được đường',
+        actionEn: 'Reach Scout Mai',
+        actionVi: 'Gặp Trinh sát Mai',
+        target: {
+          regionId: 'mosslight_hub',
+          x: 16,
+          y: 15,
+          kind: 'npc',
+          labelEn: 'Scout Mai',
+          labelVi: 'Trinh sát Mai',
+        },
+      },
+    });
+    expect(unreachablePlan.unreachable).toBe(true);
+    expect(unreachablePlan.unreachableReasonVi).toBeTruthy();
+
+    // Verify emergency charm safety net prevents soft-lock in Relaxed mode when broke and 0 charms
+    unifiedCtrl.state.inventory = unifiedCtrl.state.inventory.filter(
+      (i) => ITEMS_BY_ID[i.itemId]?.category !== 'charm',
+    );
+    unifiedCtrl.state.tokens = 10;
+    unifiedCtrl.startWildEncounter('flarecrest', 25);
+    unifiedCtrl.state.party[0]!.currentHp = 1;
+    unifiedCtrl.submitBattleAction({ kind: 'observe' });
+    unifiedCtrl.finishAndCloseBattle();
+    expect(
+      unifiedCtrl.state.inventory.find((i) => i.itemId === 'moss_charm')?.quantity ?? 0,
+    ).toBeGreaterThanOrEqual(2);
 
     const invalid = structuredClone(loaded.state!);
     (invalid.settings as unknown as { difficulty: string }).difficulty = 'nightmare';

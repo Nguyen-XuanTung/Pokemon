@@ -8,9 +8,16 @@ import { QUESTS } from '../data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../data/species.ts';
 import { getUnlockedSpeciesMoves } from '../domain/creatures.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
-import { getUiStrings, localizePos, localizeSpeakerName, pickText } from '../domain/i18n.ts';
+import {
+  getUiStrings,
+  localizePos,
+  localizeSaveNotice,
+  localizeSpeakerName,
+  pickText,
+} from '../domain/i18n.ts';
 import { isWordDueForReencounter, pickIndependentExample } from '../domain/learning.ts';
 import { buildQuestObjectiveDetail, resolveTrackedQuest } from '../domain/navigation.ts';
+import { getOnboardingQuickGuideEntries } from '../domain/onboarding.ts';
 import { isQuestConditionMet } from '../domain/quests.ts';
 import type {
   BattleSpeedMode,
@@ -22,7 +29,7 @@ import type {
   RegionId,
   UiLanguage,
 } from '../domain/types.ts';
-import type { GameController, JournalTab } from '../game/controller.ts';
+import { APP_VERSION, type GameController, type JournalTab } from '../game/controller.ts';
 import {
   createCreatureSpriteSpan,
   createItemSpriteSpan,
@@ -1025,7 +1032,7 @@ function renderSettingsTab(
       if (!res.ok) {
         controller.pushToast(
           `Import rejected: ${res.error ?? 'invalid'}`,
-          `Từ chối tệp lưu lỗi: ${res.error ?? 'không hợp lệ'}`,
+          `Từ chối tệp lưu lỗi: ${localizeSaveNotice(res.error ?? 'không hợp lệ', 'vi')}`,
         );
         onRerender();
       }
@@ -1043,6 +1050,11 @@ function renderSettingsTab(
     });
     saveRow.appendChild(syncBtn);
   }
+  const creditsBtn = el('button', 'lw-btn lw-btn-sm', `${t.creditsBtn} (v${APP_VERSION})`);
+  creditsBtn.setAttribute('data-testid', 'btn-settings-credits');
+  creditsBtn.addEventListener('click', () => controller.openCreditsModal());
+  saveRow.appendChild(creditsBtn);
+
   container.appendChild(saveRow);
   void LEXICON_INDEX;
 }
@@ -1295,7 +1307,100 @@ export function buildLostHelperModal(controller: GameController): HTMLElement {
     controller.closeModal();
   });
   actions.appendChild(trackMainBtn);
+
+  const restartGuideBtn = el('button', 'lw-btn lw-btn-sm', t.lostRestartGuideBtn);
+  restartGuideBtn.setAttribute('data-testid', 'btn-lost-restart-guide');
+  restartGuideBtn.addEventListener('click', () => {
+    controller.restartOnboardingGuide();
+    controller.closeModal();
+  });
+  actions.appendChild(restartGuideBtn);
+
+  const quickGuideContainer = el('div', 'lw-quick-guide-list');
+  quickGuideContainer.style.display = 'none';
+  quickGuideContainer.setAttribute('data-testid', 'lost-quick-guide-panel');
+  for (const item of getOnboardingQuickGuideEntries()) {
+    const row = el('div', 'lw-journal-entry');
+    row.appendChild(
+      el('strong', '', `${item.stepNumber}. ${pickText(uiLang, item.titleEn, item.titleVi)}`),
+    );
+    row.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, item.summaryEn, item.summaryVi)));
+    quickGuideContainer.appendChild(row);
+  }
+
+  const toggleGuideBtn = el('button', 'lw-btn lw-btn-sm', t.lostQuickGuideBtn);
+  toggleGuideBtn.setAttribute('data-testid', 'btn-lost-quick-guide');
+  toggleGuideBtn.addEventListener('click', () => {
+    const isHidden = quickGuideContainer.style.display === 'none';
+    quickGuideContainer.style.display = isHidden ? 'flex' : 'none';
+    toggleGuideBtn.textContent = isHidden ? t.lostHideQuickGuideBtn : t.lostQuickGuideBtn;
+  });
+  actions.appendChild(toggleGuideBtn);
+
   body.appendChild(actions);
+  body.appendChild(quickGuideContainer);
+  card.appendChild(body);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
+export function buildCreditsModal(controller: GameController): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
+  const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
+  const card = el('section', 'lw-notebook');
+  card.style.maxWidth = '660px';
+  card.setAttribute('data-testid', 'credits-modal');
+
+  const header = el('header', 'lw-notebook-header');
+  header.appendChild(el('strong', '', t.creditsModalTitle));
+  const closeBtn = el('button', 'lw-btn lw-btn-sm', t.creditsCloseBtn);
+  closeBtn.setAttribute('data-testid', 'btn-close-credits');
+  closeBtn.addEventListener('click', () => controller.closeModal());
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const body = el('div', 'lw-notebook-body');
+  body.appendChild(el('p', 'lw-ending-lead', t.creditsVersionLine(APP_VERSION)));
+  body.appendChild(el('p', 'lw-hud-quest', t.creditsLicenseSummary));
+
+  body.appendChild(el('h4', '', t.creditsThirdPartyTitle));
+  const entries: ReadonlyArray<readonly [string, string]> = [
+    ['Roguelike/RPG Pack (Kenney Vleugels)', 'CC0 1.0 Universal (tileset.png)'],
+    ['Zelda-like tilesets and sprites (ArMM1998)', 'CC0 1.0 Universal (structures.png)'],
+    ['Tiny 16: Basic (Lanea Zimmerman / Sharm)', 'CC-BY 3.0 / CC-BY 4.0 (characters.png, tileset.png)'],
+    ['Hazy Hills & Gothicvania Swamp (Luis Zuno / @ansimuz)', 'CC-BY 3.0 & CC0 1.0 (battle-bg.png)'],
+    ['Parallax Backgrounds (Admurin)', 'CC-BY 4.0 (battle-bg.png)'],
+    ['Sunset Temple Tiles (Pyromantic)', 'CC0 1.0 / CC-BY 3.0 (battle-bg.png)'],
+    ['Phaser 3.90.0, Vite 8.4.0, Vitest 5.1.2', 'MIT License'],
+    ['TypeScript 5.8.3, Playwright 1.65.1', 'Apache-2.0 License'],
+  ];
+  for (const [name, license] of entries) {
+    const row = el('div', 'lw-list-row');
+    row.append(el('strong', '', name), el('span', 'lw-hud-quest', license));
+    body.appendChild(row);
+  }
+
+  const links = el('div', 'lw-credits-links');
+  const licLink = document.createElement('a');
+  licLink.href = './LICENSE.txt';
+  licLink.target = '_blank';
+  licLink.rel = 'noopener noreferrer';
+  licLink.className = 'lw-btn lw-btn-sm';
+  licLink.setAttribute('data-testid', 'link-license-txt');
+  licLink.textContent = t.creditsViewLicenseLink;
+
+  const credLink = document.createElement('a');
+  credLink.href = './CREDITS.md';
+  credLink.target = '_blank';
+  credLink.rel = 'noopener noreferrer';
+  credLink.className = 'lw-btn lw-btn-primary lw-btn-sm';
+  credLink.setAttribute('data-testid', 'link-credits-md');
+  credLink.textContent = t.creditsViewCreditsLink;
+
+  links.append(licLink, credLink);
+  body.appendChild(links);
 
   card.appendChild(body);
   backdrop.appendChild(card);

@@ -63,15 +63,33 @@ export interface NearbyInteractable {
   readonly directlyFacing: boolean;
 }
 
+export interface ActiveGuidanceOverride {
+  readonly titleEn: string;
+  readonly titleVi: string;
+  readonly actionEn: string;
+  readonly actionVi: string;
+  readonly target?: NavigationTargetSpec | null;
+}
+
 export interface NavigationPlan {
   readonly active: boolean;
+  readonly goalSource: 'onboarding' | 'quest' | 'postgame';
+  readonly activeGoalTitleEn: string;
+  readonly activeGoalTitleVi: string;
+  readonly activeGoalActionEn: string;
+  readonly activeGoalActionVi: string;
   readonly objective: QuestObjectiveDetail | null;
   readonly destinationInCurrentRegion: GridPoint | null;
   readonly destinationLabelEn: string;
   readonly destinationLabelVi: string;
+  readonly destinationKind?: NavigationTargetSpec['kind'];
   readonly waypoints: ReadonlyArray<GridPoint>;
   readonly firstStepDir: Direction | null;
   readonly distanceSteps: number;
+  readonly arrivedAtTarget: boolean;
+  readonly unreachable: boolean;
+  readonly unreachableReasonEn?: string;
+  readonly unreachableReasonVi?: string;
   readonly isCrossRegion: boolean;
   readonly blockedByGate: boolean;
   readonly gateRequirementEn?: string;
@@ -372,9 +390,12 @@ export function buildQuestObjectiveDetail(params: {
     const npc = npcsById[npcId];
     if (!npc) return;
     const nameVi = localizeSpeakerName(npc.name, 'vi');
+    const shortName = npc.name.split(' ').pop() ?? npc.name;
+    const cleanRoleVi = npc.roleVi.replace(new RegExp(`\\s+${shortName}$`), '');
     targetRegion = npc.regionId;
     targetLabelEn = npc.name;
-    targetLabelVi = `${nameVi} (${npc.roleVi})`;
+    targetLabelVi =
+      cleanRoleVi && !nameVi.includes(cleanRoleVi) ? `${nameVi} (${cleanRoleVi})` : nameVi;
     target = {
       regionId: npc.regionId,
       x: npc.x,
@@ -672,8 +693,18 @@ export function computeNavigationPlan(params: {
   quests: ReadonlyArray<QuestDefinition>;
   speciesById: Readonly<Record<string, SpeciesDefinition>>;
   overrideTarget?: NavigationTargetSpec | null;
+  guidanceOverride?: ActiveGuidanceOverride | null;
 }): NavigationPlan {
-  const { state, mapsById, npcs, npcsById, quests, speciesById, overrideTarget } = params;
+  const {
+    state,
+    mapsById,
+    npcs,
+    npcsById,
+    quests,
+    speciesById,
+    overrideTarget,
+    guidanceOverride,
+  } = params;
   const currentMap = mapsById[state.regionId];
   const npcsInRegion = npcs.filter((n) => n.regionId === state.regionId);
   const nearbyInteractable = findNearbyInteractable({
@@ -683,7 +714,7 @@ export function computeNavigationPlan(params: {
   });
 
   const trackedQuest = resolveTrackedQuest(state, quests);
-  const objective = trackedQuest
+  const rawObjective = trackedQuest
     ? buildQuestObjectiveDetail({
         quest: trackedQuest,
         state,
@@ -692,18 +723,57 @@ export function computeNavigationPlan(params: {
         speciesById,
       })
     : null;
+  const objective = rawObjective && !rawObjective.isCompleted ? rawObjective : null;
 
-  const targetSpec = overrideTarget ?? objective?.target ?? null;
+  const isOnboardingOverride = Boolean(guidanceOverride);
+  const goalSource: NavigationPlan['goalSource'] = isOnboardingOverride
+    ? 'onboarding'
+    : objective
+      ? 'quest'
+      : 'postgame';
+
+  const activeGoalTitleEn = isOnboardingOverride
+    ? guidanceOverride!.titleEn
+    : objective
+      ? objective.titleEn
+      : 'Post-game exploration';
+  const activeGoalTitleVi = isOnboardingOverride
+    ? guidanceOverride!.titleVi
+    : objective
+      ? objective.titleVi
+      : 'Khám phá hậu cốt truyện';
+  const activeGoalActionEn = isOnboardingOverride
+    ? guidanceOverride!.actionEn
+    : objective
+      ? objective.whatEn
+      : 'Explore Verdant Basin, bond with new Wildkin, or challenge Wardens for mastery rematches.';
+  const activeGoalActionVi = isOnboardingOverride
+    ? guidanceOverride!.actionVi
+    : objective
+      ? objective.whatVi
+      : 'Tự do khám phá Thung Lũng Rêu Xanh, thu phục thêm sinh vật hoặc tái đấu các Thủ lĩnh.';
+
+  const targetSpec = isOnboardingOverride
+    ? (guidanceOverride!.target ?? null)
+    : (overrideTarget ?? objective?.target ?? null);
+
   if (!targetSpec) {
     return {
       active: false,
+      goalSource,
+      activeGoalTitleEn,
+      activeGoalTitleVi,
+      activeGoalActionEn,
+      activeGoalActionVi,
       objective,
       destinationInCurrentRegion: null,
-      destinationLabelEn: '',
-      destinationLabelVi: '',
+      destinationLabelEn: isOnboardingOverride ? activeGoalTitleEn : '',
+      destinationLabelVi: isOnboardingOverride ? activeGoalTitleVi : '',
       waypoints: [],
       firstStepDir: null,
       distanceSteps: 0,
+      arrivedAtTarget: false,
+      unreachable: false,
       isCrossRegion: false,
       blockedByGate: false,
       nearbyInteractable,
@@ -713,17 +783,55 @@ export function computeNavigationPlan(params: {
   if (targetSpec.regionId === state.regionId) {
     const stopAdjacent = targetSpec.kind === 'npc' || targetSpec.kind === 'prop';
     const allowTargetPortal = targetSpec.kind === 'portal';
-    const waypoints = computeLocalBfsPath({
-      map: currentMap,
-      npcsInRegion,
-      state,
-      startX: state.playerPos.x,
-      startY: state.playerPos.y,
-      targetX: targetSpec.x,
-      targetY: targetSpec.y,
-      stopAdjacent,
-      allowTargetPortal,
-    });
+    const manhattan =
+      Math.abs(targetSpec.x - state.playerPos.x) + Math.abs(targetSpec.y - state.playerPos.y);
+    const standingTile = getTileAt(currentMap, state.playerPos.x, state.playerPos.y);
+    const arrivedAtTarget = stopAdjacent
+      ? manhattan === 1
+      : targetSpec.kind === 'tall_grass'
+        ? standingTile === 'tall_grass' || standingTile === 'reed_marsh' || manhattan === 0
+        : manhattan === 0;
+
+    const waypoints = arrivedAtTarget
+      ? []
+      : computeLocalBfsPath({
+          map: currentMap,
+          npcsInRegion,
+          state,
+          startX: state.playerPos.x,
+          startY: state.playerPos.y,
+          targetX: targetSpec.x,
+          targetY: targetSpec.y,
+          stopAdjacent,
+          allowTargetPortal,
+        });
+
+    if (!arrivedAtTarget && waypoints.length === 0) {
+      return {
+        active: false,
+        goalSource,
+        activeGoalTitleEn,
+        activeGoalTitleVi,
+        activeGoalActionEn,
+        activeGoalActionVi,
+        objective,
+        destinationInCurrentRegion: { x: targetSpec.x, y: targetSpec.y },
+        destinationLabelEn: targetSpec.labelEn,
+        destinationLabelVi: targetSpec.labelVi,
+        destinationKind: targetSpec.kind,
+        waypoints: [],
+        firstStepDir: null,
+        distanceSteps: 0,
+        arrivedAtTarget: false,
+        unreachable: true,
+        unreachableReasonEn: `Cannot find an open path to ${targetSpec.labelEn} from your current tile. Step back onto the main trail or check another quest in your Journal.`,
+        unreachableReasonVi: `Không tìm thấy lối đi thông thoáng tới ${targetSpec.labelVi} từ vị trí hiện tại. Hãy lùi lại lối mòn chính hoặc kiểm tra mục tiêu khác trong Sổ thực địa.`,
+        isCrossRegion: false,
+        blockedByGate: false,
+        nearbyInteractable,
+      };
+    }
+
     const first = waypoints[0];
     let firstStepDir: Direction | null = null;
     if (first) {
@@ -731,7 +839,7 @@ export function computeNavigationPlan(params: {
       else if (first.x < state.playerPos.x) firstStepDir = 'left';
       else if (first.y > state.playerPos.y) firstStepDir = 'down';
       else if (first.y < state.playerPos.y) firstStepDir = 'up';
-    } else if (Math.abs(targetSpec.x - state.playerPos.x) + Math.abs(targetSpec.y - state.playerPos.y) === 1) {
+    } else if (arrivedAtTarget && stopAdjacent) {
       if (targetSpec.x > state.playerPos.x) firstStepDir = 'right';
       else if (targetSpec.x < state.playerPos.x) firstStepDir = 'left';
       else if (targetSpec.y > state.playerPos.y) firstStepDir = 'down';
@@ -740,13 +848,21 @@ export function computeNavigationPlan(params: {
 
     return {
       active: true,
+      goalSource,
+      activeGoalTitleEn,
+      activeGoalTitleVi,
+      activeGoalActionEn,
+      activeGoalActionVi,
       objective,
       destinationInCurrentRegion: { x: targetSpec.x, y: targetSpec.y },
       destinationLabelEn: targetSpec.labelEn,
       destinationLabelVi: targetSpec.labelVi,
+      destinationKind: targetSpec.kind,
       waypoints,
       firstStepDir,
       distanceSteps: waypoints.length,
+      arrivedAtTarget,
+      unreachable: false,
       isCrossRegion: false,
       blockedByGate: false,
       nearbyInteractable,
@@ -762,22 +878,34 @@ export function computeNavigationPlan(params: {
   });
 
   if (!portalRoute || portalRoute.length === 0) {
-    const fallbackGate = currentMap.portals.find((p) => p.targetRegion === targetSpec.regionId);
+    const fallbackGate =
+      currentMap.portals.find((p) => p.targetRegion === targetSpec.regionId) ??
+      mapsById.mosslight_hub.portals.find((p) => p.targetRegion === targetSpec.regionId);
     const gateDesc = fallbackGate?.requiredFlag
       ? describeGateFlag(fallbackGate.requiredFlag)
       : {
           en: objective?.unmetRequirementEn ?? 'Complete the active main trial to unlock the route.',
-          vi: objective?.unmetRequirementVi ?? 'Hãy hoàn thành thử thách chính hiện tại để mở khóa lối đi.',
+          vi:
+            objective?.unmetRequirementVi ??
+            'Hãy hoàn thành thử thách cốt truyện hiện tại để mở khóa lối đi.',
         };
     return {
       active: false,
+      goalSource,
+      activeGoalTitleEn,
+      activeGoalTitleVi,
+      activeGoalActionEn,
+      activeGoalActionVi,
       objective,
       destinationInCurrentRegion: null,
       destinationLabelEn: targetSpec.labelEn,
       destinationLabelVi: targetSpec.labelVi,
+      destinationKind: targetSpec.kind,
       waypoints: [],
       firstStepDir: null,
       distanceSteps: 0,
+      arrivedAtTarget: false,
+      unreachable: false,
       isCrossRegion: true,
       blockedByGate: true,
       gateRequirementEn: gateDesc.en,
@@ -798,6 +926,35 @@ export function computeNavigationPlan(params: {
     stopAdjacent: false,
     allowTargetPortal: true,
   });
+
+  if (waypoints.length === 0 && (state.playerPos.x !== nextPortal.x || state.playerPos.y !== nextPortal.y)) {
+    return {
+      active: false,
+      goalSource,
+      activeGoalTitleEn,
+      activeGoalTitleVi,
+      activeGoalActionEn,
+      activeGoalActionVi,
+      objective,
+      destinationInCurrentRegion: { x: nextPortal.x, y: nextPortal.y },
+      destinationLabelEn: nextPortal.labelEn,
+      destinationLabelVi: nextPortal.labelVi,
+      destinationKind: 'portal',
+      waypoints: [],
+      firstStepDir: null,
+      distanceSteps: 0,
+      arrivedAtTarget: false,
+      unreachable: true,
+      unreachableReasonEn: `Cannot reach ${nextPortal.labelEn} from your current spot. Return to the main path first.`,
+      unreachableReasonVi: `Không tìm thấy đường tới ${nextPortal.labelVi} từ vị trí hiện tại. Hãy quay lại đường mòn chính trước.`,
+      isCrossRegion: true,
+      blockedByGate: false,
+      nextPortalLabelEn: nextPortal.labelEn,
+      nextPortalLabelVi: nextPortal.labelVi,
+      nearbyInteractable,
+    };
+  }
+
   const first = waypoints[0];
   let firstStepDir: Direction | null = null;
   if (first) {
@@ -809,13 +966,21 @@ export function computeNavigationPlan(params: {
 
   return {
     active: true,
+    goalSource,
+    activeGoalTitleEn,
+    activeGoalTitleVi,
+    activeGoalActionEn,
+    activeGoalActionVi,
     objective,
     destinationInCurrentRegion: { x: nextPortal.x, y: nextPortal.y },
     destinationLabelEn: nextPortal.labelEn,
     destinationLabelVi: nextPortal.labelVi,
+    destinationKind: 'portal',
     waypoints,
     firstStepDir,
     distanceSteps: waypoints.length,
+    arrivedAtTarget: false,
+    unreachable: false,
     isCrossRegion: true,
     blockedByGate: false,
     nextPortalLabelEn: nextPortal.labelEn,
@@ -855,42 +1020,69 @@ export function buildLostHelperReport(params: {
       needsHealFirst,
       nextActionEn: navPlan.gateRequirementEn ?? 'Complete the current story trial first.',
       nextActionVi: navPlan.gateRequirementVi ?? 'Hãy hoàn thành thử thách cốt truyện trước đó.',
-      targetLabelEn: navPlan.destinationLabelEn,
-      targetLabelVi: navPlan.destinationLabelVi,
-      routeSummaryEn: 'The route ahead is still locked until the requirement above is complete.',
-      routeSummaryVi: 'Lối đi tới mục tiêu này đang khóa, cần hoàn thành điều kiện phía trên trước.',
+      targetLabelEn: navPlan.destinationLabelEn || navPlan.activeGoalTitleEn,
+      targetLabelVi: navPlan.destinationLabelVi || navPlan.activeGoalTitleVi,
+      routeSummaryEn:
+        'The route to this destination is locked. Click Track Main Story Quest below to see how to unlock it.',
+      routeSummaryVi:
+        'Lối đi tới mục tiêu này đang khóa. Hãy bấm nút Theo dõi nhiệm vụ chính bên dưới để mở khóa trước.',
     };
   }
 
-  const obj = navPlan.objective;
-  const routeSummaryEn = navPlan.firstStepDir
-    ? navPlan.isCrossRegion
-      ? `Head ${dirNamesEn[navPlan.firstStepDir]} about ${navPlan.distanceSteps} steps to ${navPlan.nextPortalLabelEn ?? 'the region exit'}.`
-      : navPlan.distanceSteps === 0
-        ? `You are right next to ${navPlan.destinationLabelEn}. Press Space or Enter to interact!`
-        : `Head ${dirNamesEn[navPlan.firstStepDir]} about ${navPlan.distanceSteps} steps to reach ${navPlan.destinationLabelEn}.`
-    : 'You are in the right area. Explore nearby or check your Journal.';
+  if (navPlan.unreachable) {
+    return {
+      regionNameEn: currentMap.nameEn,
+      regionNameVi: currentMap.nameVi,
+      needsHealFirst,
+      nextActionEn: navPlan.activeGoalActionEn,
+      nextActionVi: navPlan.activeGoalActionVi,
+      targetLabelEn: navPlan.destinationLabelEn || navPlan.activeGoalTitleEn,
+      targetLabelVi: navPlan.destinationLabelVi || navPlan.activeGoalTitleVi,
+      routeSummaryEn:
+        navPlan.unreachableReasonEn ??
+        'Could not calculate a direct route from your current tile. Move back to the main path.',
+      routeSummaryVi:
+        navPlan.unreachableReasonVi ??
+        'Chưa thể tính đường trực tiếp từ ô hiện tại. Hãy quay lại lối mòn chính.',
+    };
+  }
 
-  const routeSummaryVi = navPlan.firstStepDir
-    ? navPlan.isCrossRegion
-      ? `Đi về hướng ${dirNamesVi[navPlan.firstStepDir]} khoảng ${navPlan.distanceSteps} bước tới ${navPlan.nextPortalLabelVi ?? 'lối chuyển vùng'}.`
-      : navPlan.distanceSteps === 0
-        ? `Bạn đã đứng ngay cạnh ${navPlan.destinationLabelVi}. Nhấn Space hoặc nút Tương tác ngay!`
-        : `Đi theo đường sáng về hướng ${dirNamesVi[navPlan.firstStepDir]} khoảng ${navPlan.distanceSteps} bước tới ${navPlan.destinationLabelVi}.`
-    : 'Bạn đang ở đúng khu vực rồi. Hãy quan sát xung quanh hoặc mở Sổ thực địa.';
+  let routeSummaryEn: string;
+  let routeSummaryVi: string;
 
+  if (navPlan.arrivedAtTarget) {
+    if (navPlan.destinationKind === 'tall_grass') {
+      routeSummaryEn = `You are inside ${navPlan.destinationLabelEn}! Walk back and forth a few steps to meet a wild creature.`;
+      routeSummaryVi = `Bạn đang đứng trong ${navPlan.destinationLabelVi}. Hãy đi qua lại vài bước để gặp sinh vật hoang dã.`;
+    } else {
+      routeSummaryEn = `You have arrived right beside ${navPlan.destinationLabelEn}. Press Space, Enter, or click Interact now.`;
+      routeSummaryVi = `Bạn đã tới ngay cạnh ${navPlan.destinationLabelVi}. Hãy nhấn Space, Enter hoặc bấm nút Tương tác ngay.`;
+    }
+  } else if (navPlan.firstStepDir) {
+    if (navPlan.isCrossRegion) {
+      routeSummaryEn = `Follow the glowing path ${dirNamesEn[navPlan.firstStepDir]} about ${navPlan.distanceSteps} steps to ${navPlan.nextPortalLabelEn ?? 'the region exit'}.`;
+      routeSummaryVi = `Đi theo vệt sáng về hướng ${dirNamesVi[navPlan.firstStepDir]} khoảng ${navPlan.distanceSteps} bước tới ${navPlan.nextPortalLabelVi ?? 'lối chuyển vùng'}.`;
+    } else {
+      routeSummaryEn = `Follow the glowing path ${dirNamesEn[navPlan.firstStepDir]} about ${navPlan.distanceSteps} steps to ${navPlan.destinationLabelEn}.`;
+      routeSummaryVi = `Đi theo vệt sáng về hướng ${dirNamesVi[navPlan.firstStepDir]} khoảng ${navPlan.distanceSteps} bước tới ${navPlan.destinationLabelVi}.`;
+    }
+  } else if (navPlan.goalSource === 'onboarding') {
+    routeSummaryEn = navPlan.activeGoalActionEn;
+    routeSummaryVi = navPlan.activeGoalActionVi;
+  } else {
+    routeSummaryEn = 'You are in the right area. Explore nearby or open your Field Journal.';
+    routeSummaryVi = 'Bạn đang ở đúng khu vực. Hãy quan sát xung quanh hoặc mở Sổ thực địa.';
+  }
+
+  const obj = navPlan.goalSource === 'quest' ? navPlan.objective : null;
   return {
     regionNameEn: currentMap.nameEn,
     regionNameVi: currentMap.nameVi,
     needsHealFirst,
-    nextActionEn:
-      obj?.whatEn ??
-      'Explore Verdant Basin, bond with new Wildkin, or challenge Wardens for rematches.',
-    nextActionVi:
-      obj?.whatVi ??
-      'Tự do khám phá Thung Lũng Rêu Xanh, thu phục thêm sinh vật hoặc tái đấu các Thủ lĩnh.',
-    targetLabelEn: obj?.targetLabelEn ?? currentMap.nameEn,
-    targetLabelVi: obj?.targetLabelVi ?? currentMap.nameVi,
+    nextActionEn: navPlan.activeGoalActionEn,
+    nextActionVi: navPlan.activeGoalActionVi,
+    targetLabelEn: navPlan.destinationLabelEn || obj?.targetLabelEn || currentMap.nameEn,
+    targetLabelVi: navPlan.destinationLabelVi || obj?.targetLabelVi || currentMap.nameVi,
     routeSummaryEn,
     routeSummaryVi,
     recommendedPrepEn: obj?.recommendedPrepEn,

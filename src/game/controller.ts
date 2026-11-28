@@ -134,6 +134,8 @@ export interface ToastBanner {
   readonly messageVi: string;
 }
 
+export const APP_VERSION = '1.2.0';
+
 export type ActiveModal =
   | 'none'
   | 'title'
@@ -141,7 +143,8 @@ export type ActiveModal =
   | 'supply_post'
   | 'camp_review'
   | 'ending_banner'
-  | 'lost_helper';
+  | 'lost_helper'
+  | 'credits';
 
 export interface MoveLearnNotice {
   readonly partyIndex: number;
@@ -206,6 +209,7 @@ export class GameController {
 
   private nextToastId = 1;
   private nextVisualCueId = 1;
+  private creditsReturnModal: ActiveModal = 'none';
   private readonly listeners = new Set<() => void>();
   private playTimerId: number | null = null;
 
@@ -235,7 +239,21 @@ export class GameController {
   }
 
   public refreshGuidanceAndNavigation(): void {
+    const prevPrompt = this.activeOnboardingPrompt;
     this.activeOnboardingPrompt = getActiveOnboardingPrompt(this.state);
+    if (
+      prevPrompt &&
+      !this.activeOnboardingPrompt &&
+      this.state.onboarding?.completed &&
+      !this.state.onboarding?.skipped &&
+      !this.state.flags.onboarding_celebrated
+    ) {
+      this.state.flags.onboarding_celebrated = true;
+      this.pushToast(
+        'Beginner guide complete! You are ready to explore Verdant Basin freely.',
+        'Hoàn tất hướng dẫn mở đầu! Chúc bạn thám hiểm Thung Lũng Rêu Xanh thật vui.',
+      );
+    }
     this.navigationPlan = computeNavigationPlan({
       state: this.state,
       mapsById: MAPS_BY_ID,
@@ -243,8 +261,32 @@ export class GameController {
       npcsById: NPCS_BY_ID,
       quests: QUESTS,
       speciesById: SPECIES_BY_ID,
-      overrideTarget: this.activeOnboardingPrompt?.overrideTarget ?? null,
+      guidanceOverride: this.activeOnboardingPrompt
+        ? {
+            titleEn: this.activeOnboardingPrompt.titleEn,
+            titleVi: this.activeOnboardingPrompt.titleVi,
+            actionEn: this.activeOnboardingPrompt.hudActionEn,
+            actionVi: this.activeOnboardingPrompt.hudActionVi,
+            target: this.activeOnboardingPrompt.overrideTarget ?? null,
+          }
+        : null,
     });
+  }
+
+  private ensureBeginnerHasEmergencyCharms(): void {
+    if ((this.state.settings.difficulty ?? 'relaxed') !== 'relaxed') return;
+    if (!this.state.flags.has_starter) return;
+    const totalCharms = this.state.inventory.reduce((sum, s) => {
+      const def = ITEMS_BY_ID[s.itemId];
+      return sum + (def?.category === 'charm' ? s.quantity : 0);
+    }, 0);
+    if (totalCharms === 0 && this.state.tokens < 45) {
+      addItemToState(this.state, 'moss_charm', 2);
+      this.pushToast(
+        'Camp supply pouch refilled 2 spare Moss Charms so you can keep bonding!',
+        'Trại kiểm lâm gửi tặng 2 Chuông Rêu dự phòng để bạn không bị thiếu chuông thu phục!',
+      );
+    }
   }
 
   private computeDefaultFollowerPos(): { x: number; y: number; facing: Direction } {
@@ -1104,6 +1146,7 @@ export class GameController {
         'Party fully healed at the nearest campfire with zero penalty!',
         'Đội hình đã hồi đầy máu tại lửa trại gần nhất và không bị phạt!',
       );
+      this.ensureBeginnerHasEmergencyCharms();
       this.refreshGuidanceAndNavigation();
       this.persistState();
     }
@@ -1262,8 +1305,21 @@ export class GameController {
     return ok;
   }
 
+  public openCreditsModal(): void {
+    this.creditsReturnModal = this.activeModal === 'title' ? 'title' : this.activeModal === 'journal' ? 'journal' : 'none';
+    this.sound.playSfx('select');
+    this.activeModal = 'credits';
+    this.emitChange();
+  }
+
   public closeModal(): void {
     if (this.activeModal === 'title') return;
+    if (this.activeModal === 'credits') {
+      this.activeModal = this.creditsReturnModal;
+      this.creditsReturnModal = 'none';
+      this.emitChange();
+      return;
+    }
     this.activeModal = 'none';
     this.emitChange();
   }

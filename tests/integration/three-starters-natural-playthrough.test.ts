@@ -206,15 +206,17 @@ function runCompleteUnassistedPlaythrough(
   expectedStarterId: 'mosskit' | 'kindlet' | 'ripplefin',
   expectedFinalEvoId: 'verdantag' | 'pyrelume' | 'tidecrest',
   seed: number,
-): void {
+  difficulty: 'adventure' | 'relaxed' = 'adventure',
+): { readonly battlesWon: number; readonly wildCaught: number; readonly tokens: number; readonly steps: number } {
   const storage = new InMemoryBrowserStorage();
   const controller = new GameController(
     new SaveRepository(storage, GAME_SAVE_VALIDATION_REGISTRY),
   );
 
-  // Start New Game via real UI controller entrypoint ONLY (validate standard Adventure baseline)
+  // Start New Game via real UI controller entrypoint ONLY
   controller.startNewGame(seed, { skipTutorial: true });
-  controller.updateSettings({ difficulty: 'adventure' });
+  controller.updateSettings({ difficulty });
+  const isRelaxed = difficulty === 'relaxed';
   expect(controller.activeDialogue?.node.id).toBe('rowan_intro_choose_starter');
 
   // Advance Rowan intro lines and pick starter choice
@@ -293,7 +295,7 @@ function runCompleteUnassistedPlaythrough(
     tileA: [26, 7],
     tileB: [27, 8],
     campfire: [24, 9],
-    targetLeadLevel: 10,
+    targetLeadLevel: isRelaxed ? 8 : 10,
     minCaughtCount: 3,
     requiredElement: 'leaf',
     bossElementToCounter: 'leaf',
@@ -338,7 +340,7 @@ function runCompleteUnassistedPlaythrough(
     tileA: [7, 10],
     tileB: [8, 10],
     campfire: [5, 10],
-    targetLeadLevel: 15,
+    targetLeadLevel: isRelaxed ? 12 : 15,
     minCaughtCount: 6,
     requiredElement: 'spark',
     bossElementToCounter: 'water',
@@ -349,7 +351,7 @@ function runCompleteUnassistedPlaythrough(
     tileA: [7, 10],
     tileB: [8, 10],
     campfire: [5, 10],
-    targetLeadLevel: 15,
+    targetLeadLevel: isRelaxed ? 12 : 15,
     minCaughtCount: 6,
     requiredElement: 'water',
   });
@@ -389,7 +391,7 @@ function runCompleteUnassistedPlaythrough(
     tileA: [8, 2],
     tileB: [9, 2],
     campfire: [15, 5],
-    targetLeadLevel: 20,
+    targetLeadLevel: isRelaxed ? 17 : 20,
     minCaughtCount: 9,
     requiredElement: 'stone',
     bossElementToCounter: 'ember',
@@ -464,7 +466,7 @@ function runCompleteUnassistedPlaythrough(
     tileA: [11, 17],
     tileB: [11, 18],
     campfire: [15, 16],
-    targetLeadLevel: 24,
+    targetLeadLevel: isRelaxed ? 21 : 24,
     minCaughtCount: 12,
     mustTrainPredicate: () => {
       const st = controller.state.party.find((p) => p.bondedRegion === 'mosslight_hub');
@@ -506,30 +508,49 @@ function runCompleteUnassistedPlaythrough(
   expect(controller.state.stats.campReviewsCompleted).toBe(0);
   expect(controller.state.tokens).toBeGreaterThanOrEqual(0);
   expect(playOutActiveBattleNaturally).toBeDefined();
+  return {
+    battlesWon: controller.state.stats.battlesWon,
+    wildCaught: controller.state.stats.wildCaught,
+    tokens: controller.state.tokens,
+    steps: controller.state.stepCount,
+  };
 }
 
 describe('Real-action full playthroughs from New Game to Ending for all three starters', () => {
   it(
-    'completes the entire game naturally starting with Mosskit (Leaf)',
+    'completes the entire game naturally on Adventure mode starting with Mosskit (Leaf)',
     { timeout: 30_000 },
     () => {
-      runCompleteUnassistedPlaythrough(0, 'mosskit', 'verdantag', 202601);
+      runCompleteUnassistedPlaythrough(0, 'mosskit', 'verdantag', 202601, 'adventure');
     },
   );
 
   it(
-    'completes the entire game naturally starting with Kindlet (Ember)',
+    'completes the entire game naturally on Adventure mode starting with Kindlet (Ember)',
     { timeout: 30_000 },
     () => {
-      runCompleteUnassistedPlaythrough(1, 'kindlet', 'pyrelume', 202602);
+      runCompleteUnassistedPlaythrough(1, 'kindlet', 'pyrelume', 202602, 'adventure');
     },
   );
 
   it(
-    'completes the entire game naturally starting with Ripplefin (Water)',
+    'completes the entire game naturally on Adventure mode starting with Ripplefin (Water)',
     { timeout: 30_000 },
     () => {
-      runCompleteUnassistedPlaythrough(2, 'ripplefin', 'tidecrest', 202603);
+      runCompleteUnassistedPlaythrough(2, 'ripplefin', 'tidecrest', 202603, 'adventure');
+    },
+  );
+
+  it(
+    'completes the entire game comfortably on Relaxed mode with less grinding for all three starters',
+    { timeout: 45_000 },
+    () => {
+      const m = runCompleteUnassistedPlaythrough(0, 'mosskit', 'verdantag', 202701, 'relaxed');
+      const k = runCompleteUnassistedPlaythrough(1, 'kindlet', 'pyrelume', 202702, 'relaxed');
+      const r = runCompleteUnassistedPlaythrough(2, 'ripplefin', 'tidecrest', 202703, 'relaxed');
+      expect(m.battlesWon).toBeGreaterThan(0);
+      expect(k.battlesWon).toBeGreaterThan(0);
+      expect(r.battlesWon).toBeGreaterThan(0);
     },
   );
 });

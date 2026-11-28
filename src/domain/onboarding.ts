@@ -22,8 +22,80 @@ export interface OnboardingStepPrompt {
   readonly titleVi: string;
   readonly hintEn: string;
   readonly hintVi: string;
+  readonly hudActionEn: string;
+  readonly hudActionVi: string;
   readonly skippableStep: boolean;
+  readonly highlightButtonTestId?: string;
   readonly overrideTarget?: NavigationTargetSpec;
+}
+
+export interface OnboardingQuickGuideEntry {
+  readonly stepNumber: number;
+  readonly titleEn: string;
+  readonly titleVi: string;
+  readonly summaryEn: string;
+  readonly summaryVi: string;
+}
+
+export function getOnboardingQuickGuideEntries(): ReadonlyArray<OnboardingQuickGuideEntry> {
+  return [
+    {
+      stepNumber: 1,
+      titleEn: 'Choose your partner',
+      titleVi: 'Chọn bạn đồng hành đầu tiên',
+      summaryEn: 'Talk to Ranger Rowan and pick Mosskit (Leaf), Kindlet (Ember), or Ripplefin (Water).',
+      summaryVi: 'Trò chuyện cùng Kiểm lâm Rowan để chọn Mosskit (Lá rừng), Kindlet (Lửa ấm) hoặc Ripplefin (Suối nước).',
+    },
+    {
+      stepNumber: 2,
+      titleEn: 'Move and follow the glowing path',
+      titleVi: 'Di chuyển theo vệt sáng và la bàn',
+      summaryEn: 'Use Arrow keys, WASD, or the touch D-pad to follow the golden dots and top-left arrow.',
+      summaryVi: 'Dùng phím mũi tên, WASD hoặc phím chữ thập để đi theo các chấm sáng vàng và mũi tên góc trên trái.',
+    },
+    {
+      stepNumber: 3,
+      titleEn: 'Talk and interact',
+      titleVi: 'Tương tác với nhân vật và vật thể',
+      summaryEn: 'Stand next to a character, sign, chest, or campfire and press Space, Enter, or click Interact.',
+      summaryVi: 'Đứng cạnh nhân vật, biển chỉ đường, rương đồ hay lửa trại rồi nhấn Space, Enter hoặc bấm nút Tương tác.',
+    },
+    {
+      stepNumber: 4,
+      titleEn: 'Battle with Battle Assist',
+      titleVi: 'Chiến đấu cùng Trợ giúp chiến thuật',
+      summaryEn: 'Read the single highlighted recommendation in battle: weaken a wild foe first, heal when low, or switch for element advantage.',
+      summaryVi: 'Làm theo gợi ý duy nhất đang sáng viền trong trận: đánh yếu đối thủ trước khi bắt, hồi máu khi thấp máu hoặc đổi hệ khắc chế.',
+    },
+    {
+      stepNumber: 5,
+      titleEn: 'Bond with wild creatures',
+      titleVi: 'Thu phục sinh vật hoang dã',
+      summaryEn: 'Open Chimes & Bag and use a Moss Charm after weakening the wild creature (your first guided capture is 100% guaranteed).',
+      summaryVi: 'Mở thẻ Chuông và Túi rồi chọn Chuông Rêu sau khi làm yếu sinh vật hoang (lần thu phục hướng dẫn đầu tiên luôn thành công 100%).',
+    },
+    {
+      stepNumber: 6,
+      titleEn: 'Heal free at campfires',
+      titleVi: 'Hồi đầy máu miễn phí tại lửa trại',
+      summaryEn: 'Interact with any glowing campfire to restore full HP and move uses at zero cost. Losing a battle never removes tokens.',
+      summaryVi: 'Tương tác với bất kỳ lửa trại nào để hồi đầy máu và lượt chiêu miễn phí. Thua trận không bao giờ bị trừ huy hiệu.',
+    },
+    {
+      stepNumber: 7,
+      titleEn: 'Optional English word lookup',
+      titleVi: 'Tra từ tiếng Anh tự nguyện',
+      summaryEn: 'Tap any underlined English word in dialogue to see its Vietnamese meaning and hear pronunciation, or switch content to Vietnamese only anytime.',
+      summaryVi: 'Chạm từ tiếng Anh gạch chân trong hội thoại để xem nghĩa và nghe phát âm, hoặc đổi sang Tiếng Việt hoàn toàn trong Cài đặt.',
+    },
+    {
+      stepNumber: 8,
+      titleEn: 'Track quests, manage moves, and use I am Lost',
+      titleVi: 'Theo dõi nhiệm vụ, đổi chiêu và nút Tôi bị lạc',
+      summaryEn: 'Press J or open Field Journal to switch tracked quests or swap moves in Team, or click I am Lost anytime for instant directions.',
+      summaryVi: 'Nhấn J hoặc mở Sổ thực địa để chọn nhiệm vụ Dẫn đường, đổi chiêu trong Đội hình, hoặc bấm Tôi bị lạc bất kỳ lúc nào.',
+    },
+  ];
 }
 
 export function ensureOnboardingState(state: GameState): OnboardingState {
@@ -48,7 +120,10 @@ export function isStepDoneForState(step: OnboardingStepId, state: GameState): bo
     case 'choose_starter':
       return Boolean(state.starterChosen && state.party.length > 0);
     case 'move_around':
-      return ob.stepsMovedSinceStarter >= 3 || Boolean(state.flags.visited_whisperwood);
+      return (
+        ob.stepsMovedSinceStarter >= 2 ||
+        Boolean(state.flags.onboarding_talked_npc || state.flags.visited_whisperwood)
+      );
     case 'talk_npc':
       return Boolean(state.flags.onboarding_talked_npc || state.flags.visited_whisperwood);
     case 'track_quest':
@@ -120,9 +195,24 @@ export function skipCurrentOnboardingStep(state: GameState): void {
 }
 
 export function restartOnboarding(state: GameState): void {
+  // Clear only onboarding-progress tracking flags while preserving 100% of items, party, quests, and story flags
+  delete state.flags.onboarding_talked_npc;
+  delete state.flags.onboarding_fought_once;
+  delete state.flags.onboarding_healed_campfire;
+  delete state.flags.onboarding_skipped_gloss;
+  delete state.flags.onboarding_opened_journal;
+
+  const doneBase: OnboardingStepId[] = state.starterChosen ? ['choose_starter'] : [];
+  if (state.flags.visited_whisperwood) {
+    doneBase.push('move_around', 'talk_npc', 'track_quest');
+  }
+  if (state.stats.wildCaught > 0) {
+    doneBase.push('first_battle', 'first_capture');
+  }
+
   state.onboarding = {
     currentStep: state.starterChosen ? 'move_around' : 'choose_starter',
-    completedSteps: state.starterChosen ? ['choose_starter'] : [],
+    completedSteps: doneBase,
     skipped: false,
     completed: false,
     stepsMovedSinceStarter: 0,
@@ -140,7 +230,8 @@ export function shouldGuaranteeFirstTutorialCapture(params: {
   if (ob.skipped || ob.firstCaptureGuaranteedUsed || params.state.stats.wildCaught > 0) {
     return false;
   }
-  return params.enemyHpRatio <= 0.85 || params.turnCount >= 1;
+  // BattleSession starts at turnCount = 1; guarantee 100% right after 1 player turn (turnCount >= 2) or enemy HP <= 85%
+  return params.enemyHpRatio <= 0.85 || params.turnCount >= 2;
 }
 
 export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPrompt | null {
@@ -159,8 +250,10 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         total,
         titleEn: 'Choose your first partner',
         titleVi: 'Chọn bạn đồng hành đầu tiên',
-        hintEn: 'Talk to Ranger Rowan and pick Mosskit, Kindlet, or Ripplefin.',
-        hintVi: 'Trò chuyện với Trưởng đoàn Rowan để chọn Mosskit, Kindlet hoặc Ripplefin.',
+        hintEn: 'Walk to Ranger Rowan above you and press Space or click Next to pick Mosskit, Kindlet, or Ripplefin.',
+        hintVi: 'Gặp Kiểm lâm Rowan ngay phía trước rồi bấm Tiếp theo để chọn Mosskit, Kindlet hoặc Ripplefin.',
+        hudActionEn: 'Talk to Ranger Rowan and pick your first partner.',
+        hudActionVi: 'Nói chuyện với Kiểm lâm Rowan để chọn bạn đồng hành đầu tiên.',
         skippableStep: false,
         overrideTarget: {
           regionId: 'mosslight_hub',
@@ -168,7 +261,7 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
           y: 8,
           kind: 'npc',
           labelEn: 'Ranger Rowan',
-          labelVi: 'Trưởng đoàn Rowan',
+          labelVi: 'Kiểm lâm Rowan',
         },
       };
     case 'move_around':
@@ -176,10 +269,12 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         id: 'move_around',
         index: idx,
         total,
-        titleEn: 'Try moving along the path',
-        titleVi: 'Làm quen bước đi',
-        hintEn: 'Use arrow keys, WASD, or the touch D-pad to walk a few steps toward Scout Mai.',
-        hintVi: 'Dùng phím mũi tên, WASD hoặc cụm phím cảm ứng đi vài bước dọc theo đường sáng.',
+        titleEn: 'Walk along the golden path',
+        titleVi: 'Làm quen bước đi theo đường sáng',
+        hintEn: 'Press Arrow keys, WASD, or the touch D-pad to walk a few steps south toward Scout Mai.',
+        hintVi: 'Bấm phím mũi tên, WASD hoặc phím chữ thập đi vài bước theo vệt sáng xuống gặp Trinh sát Mai.',
+        hudActionEn: 'Walk south along the golden dots toward Scout Mai.',
+        hudActionVi: 'Đi theo vệt sáng vàng xuống phía Nam tới chỗ Trinh sát Mai.',
         skippableStep: false,
         overrideTarget: {
           regionId: 'mosslight_hub',
@@ -195,11 +290,14 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         id: 'talk_npc',
         index: idx,
         total,
-        titleEn: 'Talk to a village Ranger',
-        titleVi: 'Tương tác với nhân vật',
-        hintEn: 'Stand next to Scout Mai or any villager and press Space / Enter (or tap Act).',
-        hintVi: 'Đứng cạnh Trinh sát Mai (hoặc biển chỉ đường) rồi nhấn Space / Enter hoặc nút Tương tác.',
+        titleEn: 'Talk to Scout Mai',
+        titleVi: 'Trò chuyện cùng Trinh sát Mai',
+        hintEn: 'Stand beside Scout Mai (golden ring) and press Space, Enter, or click the Interact button below.',
+        hintVi: 'Đứng cạnh Trinh sát Mai (có vòng sáng vàng) rồi nhấn Space, Enter hoặc bấm nút Tương tác.',
+        hudActionEn: 'Stand beside Scout Mai and press Space or click Interact.',
+        hudActionVi: 'Đứng cạnh Trinh sát Mai rồi nhấn Space hoặc bấm Tương tác.',
         skippableStep: false,
+        highlightButtonTestId: 'btn-nearby-interact',
         overrideTarget: {
           regionId: 'mosslight_hub',
           x: 16,
@@ -214,10 +312,12 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         id: 'track_quest',
         index: idx,
         total,
-        titleEn: 'Follow the glowing trail west',
-        titleVi: 'Theo đường dẫn sang Rừng Thầm',
-        hintEn: 'Follow the golden trail west across the village to enter Whisperwood Glen.',
-        hintVi: 'Đi theo vệt sáng vàng về hướng Tây tới cổng làng để bước vào Thung Lũng Rừng Thầm.',
+        titleEn: 'Follow the trail west to Whisperwood',
+        titleVi: 'Theo đường sáng sang Rừng Thầm',
+        hintEn: 'Use the Left arrow key or D-pad to follow the golden dots west out of Mosslight Camp into Whisperwood Glen.',
+        hintVi: 'Đi theo vệt sáng vàng về hướng Tây ra khỏi cổng làng Trại Đèn Rêu để vào Thung Lũng Rừng Thầm.',
+        hudActionEn: 'Follow the golden trail west to enter Whisperwood Glen.',
+        hudActionVi: 'Đi theo vệt sáng hướng Tây qua cổng làng sang Thung Lũng Rừng Thầm.',
         skippableStep: false,
         overrideTarget: {
           regionId: 'mosslight_hub',
@@ -233,10 +333,12 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         id: 'first_battle',
         index: idx,
         total,
-        titleEn: 'Enter tall grass for a gentle first battle',
-        titleVi: 'Thử trận chiến đầu tiên',
-        hintEn: 'Step into the nearby tall grass in Whisperwood Glen and try a recommended move.',
-        hintVi: 'Bước vào bụi cỏ cao ngay gần lối vào Rừng Thầm và chọn một chiêu thức khuyên dùng.',
+        titleEn: 'Step into tall grass for your first battle',
+        titleVi: 'Thử trận chiến đầu tiên trong cỏ cao',
+        hintEn: 'Walk onto the marked Whisperwood tall grass nearby. In battle, click the single highlighted move to weaken the wild creature.',
+        hintVi: 'Bước vào bụi cỏ cao có vòng sáng vàng gần lối vào. Khi vào trận, bấm chiêu có nhãn Khuyên dùng để làm yếu đối thủ 1 lượt.',
+        hudActionEn: 'Step into the nearby Whisperwood tall grass to start a gentle battle.',
+        hudActionVi: 'Bước vào bụi cỏ cao Rừng Thầm để bắt đầu trận làm quen cấp 3.',
         skippableStep: false,
         overrideTarget: {
           regionId: 'whisperwood',
@@ -254,8 +356,10 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         total,
         titleEn: 'Bond with your first wild creature',
         titleVi: 'Thu phục sinh vật đầu tiên',
-        hintEn: 'Weaken a wild creature once, then open Chimes & Bag and use a Moss Charm (100% guaranteed!).',
-        hintVi: 'Đánh giảm máu sinh vật hoang 1 lượt rồi mở thẻ Chuông và Túi chọn Chuông Rêu (bảo đảm thành công!).',
+        hintEn: 'After 1 attack in tall grass, open the highlighted Chimes & Bag tab and click Moss Charm (100% guaranteed!).',
+        hintVi: 'Sau 1 lượt đánh trong trận, bấm thẻ Chuông và Túi (đang sáng viền) rồi chọn Chuông Rêu để thu phục chắc chắn 100%.',
+        hudActionEn: 'Weaken a wild creature once, then open Chimes & Bag to use Moss Charm.',
+        hudActionVi: 'Đánh 1 lượt rồi mở thẻ Chuông và Túi dùng Chuông Rêu (bắt chắc chắn 100%).',
         skippableStep: false,
         overrideTarget: {
           regionId: 'whisperwood',
@@ -271,11 +375,14 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
         id: 'campfire_heal',
         index: idx,
         total,
-        titleEn: 'Rest beside the clearing campfire',
-        titleVi: 'Hồi phục đội hình tại lửa trại',
-        hintEn: 'Walk to the warm Glen Campfire nearby and interact to restore all HP and move uses.',
-        hintVi: 'Đi theo vệt sáng tới Lửa Trại Trảng Rừng gần đó và nhấn Tương tác để hồi đầy máu miễn phí.',
+        titleEn: 'Heal free beside the campfire',
+        titleVi: 'Hồi đầy máu miễn phí tại lửa trại',
+        hintEn: 'Follow the golden path to the nearby Glen Campfire, stand beside it, and press Space or click Interact to restore full HP.',
+        hintVi: 'Đi theo vệt sáng tới Lửa Trại Trảng Rừng ngay gần đó rồi nhấn Space hoặc bấm nút Tương tác để hồi đầy máu miễn phí.',
+        hudActionEn: 'Walk to Glen Clearing Campfire and press Space or Interact to heal.',
+        hudActionVi: 'Tới Lửa Trại Trảng Rừng gần đó và nhấn Tương tác để hồi đầy máu.',
         skippableStep: true,
+        highlightButtonTestId: 'btn-nearby-interact',
         overrideTarget: {
           regionId: 'whisperwood',
           x: 24,
@@ -285,27 +392,52 @@ export function getActiveOnboardingPrompt(state: GameState): OnboardingStepPromp
           labelVi: 'Lửa Trại Trảng Rừng',
         },
       };
-    case 'optional_gloss':
+    case 'optional_gloss': {
+      const signTarget: NavigationTargetSpec =
+        state.regionId === 'mosslight_hub'
+          ? {
+              regionId: 'mosslight_hub',
+              x: 11,
+              y: 13,
+              kind: 'prop',
+              labelEn: 'Basin Trail Signpost',
+              labelVi: 'Biển chỉ đường Thung lũng',
+            }
+          : {
+              regionId: 'whisperwood',
+              x: 28,
+              y: 11,
+              kind: 'prop',
+              labelEn: 'Whisperwood Trail Sign',
+              labelVi: 'Biển chỉ dẫn Rừng Thầm',
+            };
       return {
         id: 'optional_gloss',
         index: idx,
         total,
-        titleEn: 'Optional: tap any underlined English word',
+        titleEn: 'Optional: tap an underlined English word',
         titleVi: 'Tùy chọn: thử chạm từ tiếng Anh để tra nghĩa',
-        hintEn: 'Talk to a sign or Ranger and tap any underlined English word, or skip this optional step.',
-        hintVi: 'Chạm một từ tiếng Anh gạch chân trong hộp thoại để xem nghĩa và nghe phát âm, hoặc bấm Bỏ qua bước này.',
+        hintEn: 'Read the nearby trail sign and tap any underlined English word to hear it, or click Skip Step anytime.',
+        hintVi: 'Đọc biển chỉ dẫn gần đó rồi chạm một từ tiếng Anh gạch chân để xem nghĩa, hoặc bấm Bỏ qua bước này.',
+        hudActionEn: 'Optional: read a sign and tap an underlined English word, or click Skip Step.',
+        hudActionVi: 'Tùy chọn: đọc biển chỉ dẫn để thử tra từ tiếng Anh, hoặc bấm Bỏ qua bước này.',
         skippableStep: true,
+        overrideTarget: signTarget,
       };
+    }
     case 'open_journal':
       return {
         id: 'open_journal',
         index: idx,
         total,
         titleEn: 'Open your Field Journal',
-        titleVi: 'Mở Sổ thực địa',
-        hintEn: 'Press J or click Journal at the top-right to view quests, your team, and settings.',
-        hintVi: 'Nhấn phím J hoặc nút Sổ thực địa ở góc trên phải để xem nhiệm vụ, đội hình và cài đặt.',
+        titleVi: 'Mở Sổ thực địa để xem nhiệm vụ và đội hình',
+        hintEn: 'Press J or click the highlighted Field Journal button at the top-right to view quests, team moves, and settings.',
+        hintVi: 'Nhấn phím J hoặc bấm nút Sổ thực địa đang sáng viền ở góc trên phải để xem nhiệm vụ, đổi chiêu và cài đặt.',
+        hudActionEn: 'Press J or click the highlighted Field Journal button at the top-right.',
+        hudActionVi: 'Nhấn phím J hoặc bấm nút Sổ thực địa đang sáng viền ở góc trên phải.',
         skippableStep: true,
+        highlightButtonTestId: 'btn-open-journal',
       };
     case 'free_explore':
       return null;

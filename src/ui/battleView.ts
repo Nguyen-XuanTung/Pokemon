@@ -264,52 +264,14 @@ export function buildBattleView(
   narrativeCol.appendChild(logBox);
 
   if (showAssist && battle.outcome === 'ongoing') {
-    let tipText = '';
-    if (assistPlan.lowHpWarning.active) {
-      tipText = t.battleLowHpAlert(
-        assistPlan.lowHpWarning.currentHp,
-        assistPlan.lowHpWarning.maxHp,
-      );
-    } else if (assistPlan.switchSuggestion) {
-      const s = assistPlan.switchSuggestion;
-      const elName = pickText(uiLang, ELEMENT_LABELS[s.element].en, ELEMENT_LABELS[s.element].vi);
-      tipText = t.battleSwitchTip(s.speciesName, elName);
-    } else if (
-      assistPlan.captureAdvice &&
-      !controller.state.caughtSpecies.includes(enemy.speciesId)
-    ) {
-      tipText = assistPlan.captureAdvice.shouldWeakenFirst
-        ? t.battleCaptureWeakenTip(assistPlan.captureAdvice.bestChancePct)
-        : t.battleCaptureReadyTip(
-            assistPlan.captureAdvice.bestChancePct,
-            assistPlan.captureAdvice.guaranteed,
-          );
-    } else {
-      const recAnn = assistPlan.moveAnnotations[assistPlan.recommendedMoveIndex];
-      const recSlot = player.moves[assistPlan.recommendedMoveIndex];
-      const recDef = recSlot ? MOVES_BY_ID[recSlot.moveId] : undefined;
-      if (recDef && recAnn && recDef.power > 0) {
-        const moveEl = pickText(
-          uiLang,
-          ELEMENT_LABELS[recDef.element].en,
-          ELEMENT_LABELS[recDef.element].vi,
-        );
-        const foeEl = pickText(
-          uiLang,
-          ELEMENT_LABELS[enemySpec.element].en,
-          ELEMENT_LABELS[enemySpec.element].vi,
-        );
-        tipText = t.battleElementExplain(moveEl, foeEl, recAnn.multiplier);
-      } else {
-        tipText = pickText(
-          uiLang,
-          assistPlan.recommendedReasonEn,
-          assistPlan.recommendedReasonVi,
-        );
-      }
-    }
+    const tipText = pickText(
+      uiLang,
+      assistPlan.primaryAction.reasonEn,
+      assistPlan.primaryAction.reasonVi,
+    );
     const assistBox = el('div', 'lw-battle-assist-bar');
     assistBox.setAttribute('data-testid', 'battle-assist-bar');
+    assistBox.dataset.primaryAction = assistPlan.primaryAction.kind;
     assistBox.appendChild(el('strong', '', `${t.battleAssistTitle} `));
     assistBox.appendChild(document.createTextNode(tipText));
     narrativeCol.appendChild(assistBox);
@@ -333,21 +295,36 @@ export function buildBattleView(
     battle.kind === 'wild'
       ? t.battleTabBagWild(guaranteedFirstCatch ? 100 : bestCharmPct)
       : t.battleTabBagPlain;
-  const teamLabel = t.battleTabTeam(battle.playerParty.length, showAssist && hasBenchCounter);
+  const teamLabel = t.battleTabTeam(
+    battle.playerParty.length,
+    showAssist && assistPlan.primaryAction.kind === 'switch' && hasBenchCounter,
+  );
+
+  const primaryKind = assistPlan.primaryAction.kind;
+  const bagTabRecommended =
+    showAssist &&
+    (primaryKind === 'capture' || (primaryKind === 'heal' && Boolean(assistPlan.primaryAction.itemId)));
+  const teamTabRecommended = showAssist && primaryKind === 'switch';
 
   const nav = el('div', 'lw-choice-list lw-battle-tabs');
-  for (const [tabKey, label] of [
-    ['moves', t.battleTabMoves],
-    ['bag', bagLabel],
-    ['team', teamLabel],
-    ['tactics', t.battleTabTactics],
+  for (const [tabKey, label, isRecTab] of [
+    ['moves', t.battleTabMoves, false],
+    ['bag', bagLabel, bagTabRecommended],
+    ['team', teamLabel, teamTabRecommended],
+    ['tactics', t.battleTabTactics, false],
   ] as const) {
-    const b = el(
-      'button',
-      battleTab === tabKey ? 'lw-btn lw-btn-primary' : 'lw-btn',
-      label,
-    );
+    const cls = [
+      'lw-btn',
+      battleTab === tabKey ? 'lw-btn-primary' : '',
+      isRecTab ? 'lw-btn-highlight' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const b = el('button', cls, label);
     b.setAttribute('data-testid', `battle-tab-${tabKey}`);
+    if (isRecTab) {
+      b.dataset.recommended = 'true';
+    }
     b.addEventListener('click', () => onSelectTab(tabKey));
     nav.appendChild(b);
   }
@@ -374,7 +351,7 @@ export function buildBattleView(
       const moveLabel = uiLang === 'en' ? mDef.name : (mDef.nameVi ?? mDef.name);
       const useMoveBtn = el(
         'button',
-        'lw-btn lw-btn-primary',
+        isRec ? 'lw-btn lw-btn-primary lw-btn-highlight' : 'lw-btn lw-btn-primary',
         `${moveLabel} (${slot.pp}/${slot.maxPp})`,
       );
       useMoveBtn.setAttribute('data-testid', `btn-move-${idx}`);
@@ -392,6 +369,9 @@ export function buildBattleView(
         head.appendChild(el('span', 'lw-badge lw-badge-eff-good', t.battleEffectiveTag));
       } else if (mult < 0.95) {
         head.appendChild(el('span', 'lw-badge', t.battleResistedTag));
+      }
+      if (showAssist && ann?.koRisk) {
+        head.appendChild(el('span', 'lw-badge lw-badge-danger', t.battleKoRiskTag));
       }
       if (isRec) {
         head.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleRecommendedTag));
@@ -426,9 +406,18 @@ export function buildBattleView(
         turnCount: battle.turnCount,
       });
 
+    const recommendedItemId =
+      showAssist && assistPlan.primaryAction.kind === 'capture'
+        ? assistPlan.primaryAction.charmId
+        : showAssist && assistPlan.primaryAction.kind === 'heal'
+          ? assistPlan.primaryAction.itemId
+          : undefined;
+
     for (const slot of usableItems) {
       const def = ITEMS_BY_ID[slot.itemId]!;
-      const card = el('div', 'lw-move-card');
+      const isRecItem = Boolean(recommendedItemId && def.id === recommendedItemId);
+      const card = el('div', isRecItem ? 'lw-move-card lw-move-card-recommended' : 'lw-move-card');
+      card.dataset.recommended = String(isRecItem);
       let extra = '';
       if (def.category === 'charm' && battle.kind === 'wild') {
         if (guaranteed) {
@@ -448,16 +437,25 @@ export function buildBattleView(
       const row = el('div', 'lw-hud-title');
       row.appendChild(createItemSpriteSpan(def.id));
       const itemName = pickText(uiLang, def.nameEn, def.nameVi);
-      const btn = el(
-        'button',
-        def.category === 'charm' ? 'lw-btn lw-btn-moss' : 'lw-btn',
-        `${itemName} x${slot.quantity}${extra}`,
-      );
+      const btnClass = [
+        'lw-btn',
+        def.category === 'charm' ? 'lw-btn-moss' : '',
+        isRecItem ? 'lw-btn-highlight' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const btn = el('button', btnClass, `${itemName} x${slot.quantity}${extra}`);
       btn.setAttribute('data-testid', `btn-battle-item-${def.id}`);
+      if (isRecItem) {
+        btn.dataset.recommended = 'true';
+      }
       btn.addEventListener('click', () =>
         controller.submitBattleAction({ kind: 'item', itemId: def.id }),
       );
       row.appendChild(btn);
+      if (isRecItem) {
+        row.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleRecommendedTag));
+      }
       card.appendChild(row);
       card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, def.descriptionEn, def.descriptionVi)));
       list.appendChild(card);
@@ -465,27 +463,45 @@ export function buildBattleView(
     commandCol.appendChild(list);
   } else if (battleTab === 'team') {
     const list = el('div', 'lw-move-grid');
+    const recommendedSwitchIdx =
+      showAssist && assistPlan.primaryAction.kind === 'switch'
+        ? assistPlan.primaryAction.partyIndex
+        : -1;
     battle.playerParty.forEach((member, idx) => {
       const sp = SPECIES_BY_ID[member.speciesId]!;
       const matchMult = getTypeMultiplier(sp.element, enemySpec.element);
-      const card = el('div', 'lw-move-card');
+      const isRecSwitch = idx === recommendedSwitchIdx;
+      const card = el('div', isRecSwitch ? 'lw-move-card lw-move-card-recommended' : 'lw-move-card');
       card.dataset.level = String(member.level);
+      card.dataset.recommended = String(isRecSwitch);
       const row = el('div', 'lw-hud-title');
       row.appendChild(
         createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
       );
+      const btnClass = [
+        'lw-btn',
+        matchMult > 1.1 && idx !== battle.activePlayerIndex ? 'lw-btn-moss' : '',
+        isRecSwitch ? 'lw-btn-highlight' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
       const btn = el(
         'button',
-        matchMult > 1.1 && idx !== battle.activePlayerIndex ? 'lw-btn lw-btn-moss' : 'lw-btn',
+        btnClass,
         `${sp.name} ${t.levelShort(member.level)} (${member.currentHp}/${member.maxHp})`,
       ) as HTMLButtonElement;
       btn.disabled = idx === battle.activePlayerIndex || member.currentHp <= 0;
+      if (isRecSwitch) {
+        btn.dataset.recommended = 'true';
+      }
       btn.addEventListener('click', () => {
         onSelectTab('moves');
         controller.submitBattleAction({ kind: 'switch', partyIndex: idx });
       });
       row.appendChild(btn);
-      if (matchMult > 1.1) {
+      if (isRecSwitch) {
+        row.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleRecommendedTag));
+      } else if (matchMult > 1.1) {
         row.appendChild(el('span', 'lw-badge lw-badge-eff-good', t.battleCountersFoe));
       }
       card.appendChild(row);

@@ -4,7 +4,13 @@ import { NPCS } from '../data/npcs.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
-import { getUiStrings, localizePos, localizeSpeakerName, pickText } from '../domain/i18n.ts';
+import {
+  getUiStrings,
+  localizePos,
+  localizeSaveNotice,
+  localizeSpeakerName,
+  pickText,
+} from '../domain/i18n.ts';
 import { pickIndependentExample, resolveSenseForContext } from '../domain/learning.ts';
 import { getNpcQuestMarker, isPortalUnlocked } from '../domain/navigation.ts';
 import type {
@@ -15,10 +21,11 @@ import type {
   UiLanguage,
 } from '../domain/types.ts';
 import { getTileAt } from '../domain/world.ts';
-import type { GameController } from '../game/controller.ts';
+import { APP_VERSION, type GameController } from '../game/controller.ts';
 import { buildBattleView, type BattleDeckTab } from './battleView.ts';
 import {
   buildCampReviewModal,
+  buildCreditsModal,
   buildEndingBannerModal,
   buildJournalModal,
   buildLostHelperModal,
@@ -258,6 +265,11 @@ export class GameUiRenderer {
       return;
     }
 
+    if (this.controller.activeModal === 'credits' && !this.controller.state.starterChosen && !this.controller.activeBattle) {
+      this.overlayEl.appendChild(buildCreditsModal(this.controller));
+      return;
+    }
+
     const inBattleNow = Boolean(this.controller.activeBattle);
     if (inBattleNow && !this.wasInBattle) {
       this.battleTab = 'moves';
@@ -333,6 +345,8 @@ export class GameUiRenderer {
       this.overlayEl.appendChild(buildEndingBannerModal(this.controller));
     } else if (this.controller.activeModal === 'lost_helper') {
       this.overlayEl.appendChild(buildLostHelperModal(this.controller));
+    } else if (this.controller.activeModal === 'credits') {
+      this.overlayEl.appendChild(buildCreditsModal(this.controller));
     }
 
     if (this.controller.activeBattle && typeof window !== 'undefined') {
@@ -355,7 +369,11 @@ export class GameUiRenderer {
     titleWrap.appendChild(el('div', 'lw-title-kicker', t.appTagline));
     titleWrap.appendChild(el('strong', 'lw-title-heading', 'LingoWild'));
     header.appendChild(titleWrap);
-    header.appendChild(el('span', 'lw-badge', t.offlineBadge));
+    const badgeWrap = el('div', 'lw-hud-actions');
+    const verBadge = el('span', 'lw-badge', `v${APP_VERSION}`);
+    verBadge.setAttribute('data-testid', 'app-version-badge');
+    badgeWrap.append(verBadge, el('span', 'lw-badge', t.offlineBadge));
+    header.appendChild(badgeWrap);
     card.appendChild(header);
 
     const body = el('div', 'lw-notebook-body');
@@ -384,7 +402,9 @@ export class GameUiRenderer {
     body.appendChild(el('p', 'lw-title-desc', t.titleDesc));
 
     if (this.controller.statusNotice) {
-      body.appendChild(el('p', 'lw-battle-log', this.controller.statusNotice));
+      body.appendChild(
+        el('p', 'lw-battle-log', localizeSaveNotice(this.controller.statusNotice, uiLang)),
+      );
     }
 
     const prefsGrid = el('div', 'lw-title-prefs');
@@ -505,13 +525,18 @@ export class GameUiRenderer {
       void f.text().then((txt) => {
         const res = this.controller.importSaveFileContent(txt);
         if (!res.ok) {
-          this.controller.statusNotice = `${t.importErrorPrefix}${res.error ?? ''}`;
+          this.controller.statusNotice = `${t.importErrorPrefix}${localizeSaveNotice(res.error ?? '', uiLang)}`;
           this.render();
         }
       });
     });
     importLabel.appendChild(fileInput);
     btnRow.appendChild(importLabel);
+
+    const creditsBtn = el('button', 'lw-btn lw-btn-sm', t.creditsBtn);
+    creditsBtn.setAttribute('data-testid', 'btn-open-credits');
+    creditsBtn.addEventListener('click', () => this.controller.openCreditsModal());
+    btnRow.appendChild(creditsBtn);
 
     body.appendChild(btnRow);
     card.appendChild(body);
@@ -554,26 +579,59 @@ export class GameUiRenderer {
     }
     ribbon.appendChild(titleRow);
 
-    if (nav.objective && !nav.objective.isCompleted) {
+    if (nav.goalSource === 'onboarding' || nav.goalSource === 'quest') {
       const qRow = el('div', 'lw-hud-quest-row');
-      if (guidance !== 'off' && nav.firstStepDir) {
-        const compass = el('span', 'lw-compass-pill');
-        compass.setAttribute('data-testid', 'hud-compass-arrow');
-        compass.innerHTML = COMPASS_ARROW_SVG[nav.firstStepDir];
-        compass.appendChild(
-          document.createTextNode(
-            nav.distanceSteps > 0
-              ? ` ${t.directionLabels[nav.firstStepDir]} (${nav.distanceSteps})`
-              : ` ${t.directionLabels[nav.firstStepDir]}`,
-          ),
-        );
-        qRow.appendChild(compass);
+      qRow.dataset.goalSource = nav.goalSource;
+      if (guidance !== 'off') {
+        if (nav.blockedByGate) {
+          const lockPill = el('span', 'lw-compass-pill', t.hudLockedBadge);
+          lockPill.setAttribute('data-testid', 'hud-compass-arrow');
+          lockPill.dataset.blocked = 'true';
+          qRow.appendChild(lockPill);
+        } else if (nav.unreachable) {
+          const unreachPill = el('span', 'lw-compass-pill', t.hudUnreachableBadge);
+          unreachPill.setAttribute('data-testid', 'hud-compass-arrow');
+          unreachPill.dataset.unreachable = 'true';
+          qRow.appendChild(unreachPill);
+        } else if (nav.arrivedAtTarget) {
+          const arrivedPill = el('span', 'lw-compass-pill lw-badge-eff-good', t.hudArrivedBadge);
+          arrivedPill.setAttribute('data-testid', 'hud-compass-arrow');
+          arrivedPill.dataset.arrived = 'true';
+          arrivedPill.dataset.steps = '0';
+          if (nav.firstStepDir) arrivedPill.dataset.dir = nav.firstStepDir;
+          qRow.appendChild(arrivedPill);
+        } else if (nav.firstStepDir) {
+          const compass = el('span', 'lw-compass-pill');
+          compass.setAttribute('data-testid', 'hud-compass-arrow');
+          compass.dataset.dir = nav.firstStepDir;
+          compass.dataset.steps = String(nav.distanceSteps);
+          compass.dataset.arrived = 'false';
+          compass.innerHTML = COMPASS_ARROW_SVG[nav.firstStepDir];
+          compass.appendChild(
+            document.createTextNode(
+              nav.distanceSteps > 0
+                ? ` ${t.directionLabels[nav.firstStepDir]} (${nav.distanceSteps})`
+                : ` ${t.directionLabels[nav.firstStepDir]}`,
+            ),
+          );
+          qRow.appendChild(compass);
+        }
       }
-      const objectiveText =
-        nav.isCrossRegion && nav.nextPortalLabelVi
-          ? `${pickText(uiLang, nav.objective.whatEn, nav.objective.whatVi)} (${t.hudCrossRegionHint(pickText(uiLang, nav.nextPortalLabelEn ?? '', nav.nextPortalLabelVi))})`
-          : pickText(uiLang, nav.objective.whatEn, nav.objective.whatVi);
-      qRow.appendChild(el('div', 'lw-hud-quest lw-hud-quest-clamp', objectiveText));
+      const unifiedAction = pickText(uiLang, nav.activeGoalActionEn, nav.activeGoalActionVi);
+      const objectiveText = nav.blockedByGate
+        ? pickText(uiLang, nav.gateRequirementEn ?? unifiedAction, nav.gateRequirementVi ?? unifiedAction)
+        : nav.unreachable
+          ? pickText(
+              uiLang,
+              nav.unreachableReasonEn ?? unifiedAction,
+              nav.unreachableReasonVi ?? unifiedAction,
+            )
+          : nav.isCrossRegion && nav.nextPortalLabelVi
+            ? `${unifiedAction} (${t.hudCrossRegionHint(pickText(uiLang, nav.nextPortalLabelEn ?? '', nav.nextPortalLabelVi))})`
+            : unifiedAction;
+      const qTextEl = el('div', 'lw-hud-quest lw-hud-quest-clamp', objectiveText);
+      qTextEl.setAttribute('data-testid', 'hud-goal-text');
+      qRow.appendChild(qTextEl);
       ribbon.appendChild(qRow);
     } else if (state.flags.main_story_completed) {
       ribbon.appendChild(
@@ -585,6 +643,8 @@ export class GameUiRenderer {
       );
     }
     hud.appendChild(ribbon);
+
+    const highlightTargetId = this.controller.activeOnboardingPrompt?.highlightButtonTestId;
 
     const actions = el('div', 'lw-hud-actions lw-interactive');
     const lostBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', t.hudLostBtn);
@@ -599,7 +659,13 @@ export class GameUiRenderer {
     interactBtn.setAttribute('data-testid', 'btn-hud-interact');
     interactBtn.addEventListener('click', () => this.controller.interactFacing());
 
-    const journalBtn = el('button', 'lw-btn lw-btn-primary lw-btn-sm', t.hudJournalBtn);
+    const journalBtn = el(
+      'button',
+      highlightTargetId === 'btn-open-journal'
+        ? 'lw-btn lw-btn-primary lw-btn-sm lw-btn-highlight'
+        : 'lw-btn lw-btn-primary lw-btn-sm',
+      t.hudJournalBtn,
+    );
     journalBtn.setAttribute('data-testid', 'btn-open-journal');
     journalBtn.addEventListener('click', () => this.controller.openJournal('quests'));
 
@@ -734,10 +800,14 @@ export class GameUiRenderer {
       this.controller.state.settings.touchControls === 'always' ||
       (typeof window !== 'undefined' && window.innerWidth <= 960);
 
+    const shouldHighlightNearby =
+      this.controller.activeOnboardingPrompt?.highlightButtonTestId === 'btn-nearby-interact';
     const wrap = el('div', 'lw-nearby-wrap');
     const btn = el(
       'button',
-      'lw-nearby-pill lw-interactive',
+      shouldHighlightNearby
+        ? 'lw-nearby-pill lw-interactive lw-btn-highlight'
+        : 'lw-nearby-pill lw-interactive',
       t.hudNearbyPrompt(pickText(uiLang, nearby.labelEn, nearby.labelVi), isTouch),
     ) as HTMLButtonElement;
     btn.type = 'button';
@@ -895,9 +965,12 @@ export class GameUiRenderer {
     if (
       bossWarn &&
       settings.battleAssist !== false &&
-      (bossWarn.isUnderleveled || bossWarn.needsHeal) &&
+      (bossWarn.isUnderleveled || bossWarn.needsHeal || bossWarn.needsTonics) &&
       dlg.lineIndex === 0
     ) {
+      const counterText = bossWarn.counterElements
+        .map((c) => pickText(uiLang, ELEMENT_LABELS[c].en, ELEMENT_LABELS[c].vi))
+        .join(', ');
       const warnEl = el(
         'div',
         'lw-battle-assist-bar lw-boss-warn-bar',
@@ -906,6 +979,8 @@ export class GameUiRenderer {
           bossWarn.maxPartyLevel,
           bossWarn.recommendedLevel,
           bossWarn.needsHeal,
+          bossWarn.needsTonics,
+          counterText,
         ),
       );
       warnEl.setAttribute('data-testid', 'boss-readiness-warning');

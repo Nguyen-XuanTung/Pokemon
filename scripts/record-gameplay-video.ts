@@ -426,12 +426,14 @@ async function main(): Promise<void> {
     await page.getByTestId('btn-close-journal').click();
     await page.waitForTimeout(1200);
 
-    // 9. Open "Tôi bị lạc" contextual helper modal to show instant orientation
+    // 9. Open "Tôi bị lạc", expand Quick Guide, and show Credits & License modal cleanly
     await page.getByTestId('btn-im-lost').click();
     await page.getByTestId('lost-helper-modal').waitFor({ state: 'visible' });
-    await page.waitForTimeout(3200);
+    await page.waitForTimeout(2400);
+    await page.getByTestId('btn-lost-quick-guide').click();
+    await page.waitForTimeout(2200);
     await page.getByTestId('btn-close-lost-helper').click();
-    await page.waitForTimeout(1800);
+    await page.waitForTimeout(1200);
 
     const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
     await context.close();

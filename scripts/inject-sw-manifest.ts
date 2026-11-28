@@ -19,7 +19,7 @@ export function computeSwManifestForDirectory(distDir: string): SwManifestResult
       const stat = fs.statSync(full);
       if (stat.isDirectory()) {
         walk(full);
-      } else if (/\.(html|js|css|png|json|svg|woff2?)$/i.test(entry) && entry !== 'sw.js') {
+      } else if (/\.(html|js|css|png|json|svg|txt|md|woff2?)$/i.test(entry) && entry !== 'sw.js') {
         const rel = './' + path.relative(distDir, full).replace(/\\/g, '/');
         discovered.push({ rel, full });
       }
@@ -48,10 +48,24 @@ export function computeSwManifestForDirectory(distDir: string): SwManifestResult
   return { urls, contentHash, version };
 }
 
+export function copyLicenseFilesIntoDist(distDir: string, rootDir: string = process.cwd()): void {
+  const pairs: ReadonlyArray<readonly [string, string]> = [
+    ['LICENSE', 'LICENSE.txt'],
+    ['CREDITS.md', 'CREDITS.md'],
+  ];
+  for (const [srcName, dstName] of pairs) {
+    const src = path.join(rootDir, srcName);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(distDir, dstName));
+    }
+  }
+}
+
 export function injectSwManifestIntoDist(distDir: string): SwManifestResult | null {
   const swPath = path.join(distDir, 'sw.js');
   if (!fs.existsSync(swPath)) return null;
 
+  copyLicenseFilesIntoDist(distDir);
   const manifest = computeSwManifestForDirectory(distDir);
   let swSource = fs.readFileSync(swPath, 'utf8');
   swSource = swSource.replace(
