@@ -3,10 +3,12 @@ import {
   type ExpGainResult,
 } from './creatures.ts';
 import { resolveCaptureAttempt, type CaptureAttemptResult } from './capture.ts';
+import { getDifficultyProfile } from './difficulty.ts';
 import { describeEffectiveness, getTypeMultiplier } from './elements.ts';
 import type { SeededRng } from './rng.ts';
 import type {
   CreatureInstance,
+  DifficultyMode,
   ElementType,
   InventorySlot,
   ItemDefinition,
@@ -86,6 +88,8 @@ export interface BattleContextData {
   readonly itemsById: Readonly<Record<string, ItemDefinition>>;
   readonly inventory: InventorySlot[];
   readonly rng: SeededRng;
+  readonly difficulty?: DifficultyMode;
+  readonly guaranteedCapture?: boolean;
 }
 
 function freshStages(): StatStages {
@@ -155,17 +159,18 @@ function selectEnemyMoveIndex(
     return -1;
   }
 
-  if (session.isBoss && playerSpecies) {
+  const profile = getDifficultyProfile(ctx.difficulty);
+  if (((session.isBoss && profile.smartBossAi) || profile.smartAllOpponentAi) && playerSpecies) {
     const weighted = usable.map((entry) => {
       const def = entry.def!;
       let weight = 10;
       if (def.power > 0) {
         const mult = getTypeMultiplier(def.element, playerSpecies.element);
-        weight = Math.round(def.power * mult);
-      } else if (def.healRatio && enemy.currentHp < enemy.maxHp * 0.45) {
-        weight = 75;
+        weight = Math.round(def.power * mult * (profile.smartAllOpponentAi ? 1.35 : 1));
+      } else if (def.healRatio && enemy.currentHp < enemy.maxHp * 0.48) {
+        weight = 85;
       } else if (def.statusEffect && player.status === null) {
-        weight = 45;
+        weight = profile.smartAllOpponentAi ? 55 : 45;
       }
       return { item: entry.idx, weight: Math.max(5, weight) };
     });
@@ -256,7 +261,7 @@ function executeMove(params: {
     actor: actorSide,
     element: moveDef.element,
     messageEn: `${isPlayerAttacker ? '' : 'Foe '}${attackerLabel} uses ${moveDef.name}!`,
-    messageVi: `${isPlayerAttacker ? '' : 'Đối phương '}${attackerLabel} dùng chiêu ${moveDef.name}!`,
+    messageVi: `${isPlayerAttacker ? '' : 'Đối phương '}${attackerLabel} dùng chiêu ${moveDef.nameVi ?? moveDef.name}!`,
   });
 
   if (moveDef.accuracy < 100 && !ctx.rng.chance(moveDef.accuracy / 100)) {
@@ -279,8 +284,12 @@ function executeMove(params: {
     const typeMult = getTypeMultiplier(moveDef.element, defenderSpecies.element);
     const variance = 0.9 + ctx.rng.nextFloat() * 0.14;
     const levelFactor = (2 * attacker.level) / 5 + 2;
+    const profile = getDifficultyProfile(ctx.difficulty);
+    const diffMult = isPlayerAttacker
+      ? profile.playerDamageMultiplier
+      : profile.enemyDamageMultiplier;
     const baseDamage = ((levelFactor * moveDef.power * (atkEffective / defEffective)) / 24 + 2);
-    const damage = Math.max(1, Math.round(baseDamage * stab * typeMult * variance));
+    const damage = Math.max(1, Math.round(baseDamage * stab * typeMult * variance * diffMult));
 
     defender.currentHp = Math.max(0, defender.currentHp - damage);
     const eff = describeEffectiveness(typeMult);
@@ -406,10 +415,11 @@ function handleEnemyFaintAndProgression(
 
   const activePlayer = session.playerParty[session.activePlayerIndex];
   if (activePlayer && activePlayer.currentHp > 0 && enemySpecies) {
+    const profile = getDifficultyProfile(ctx.difficulty);
     const trainerBonus = session.kind === 'trainer' ? 1.35 : 1;
     const rawExp = Math.max(
       8,
-      Math.round(((enemySpecies.expYield * enemy.level) / 4.2) * trainerBonus),
+      Math.round(((enemySpecies.expYield * enemy.level) / 4.2) * trainerBonus * profile.expMultiplier),
     );
     const expRes = awardCreatureExperience({
       creature: activePlayer,
@@ -438,7 +448,7 @@ function handleEnemyFaintAndProgression(
         logs.push({
           kind: 'exp',
           messageEn: `${playerName} learned ${mDef.name}!`,
-          messageVi: `${playerName} học được chiêu mới ${mDef.name}!`,
+          messageVi: `${playerName} học được chiêu mới ${mDef.nameVi ?? mDef.name}!`,
         });
       }
     }
@@ -628,10 +638,13 @@ export function stepBattleTurn(
         messageEn: `You offered a ${itemDef.nameEn} toward ${enemySpec.name}...`,
         messageVi: `Bạn đưa ${itemDef.nameVi} về phía ${enemySpec.name}...`,
       });
+      const diffProfile = getDifficultyProfile(ctx.difficulty);
       const result = resolveCaptureAttempt({
         target: enemy,
         species: enemySpec,
         charmMultiplier: itemDef.captureMultiplier ?? 1,
+        difficultyMultiplier: diffProfile.captureBonusMultiplier,
+        guaranteedSuccess: ctx.guaranteedCapture,
         rng: ctx.rng,
       });
       session.lastCaptureAttempt = result;

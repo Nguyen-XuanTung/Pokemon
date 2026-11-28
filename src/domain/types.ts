@@ -6,6 +6,35 @@ export type StatusId = 'burn' | 'poison' | 'sleep' | 'paralyze';
 
 export type CefrBand = 'A1' | 'A2' | 'B1' | 'B2';
 
+export type UiLanguage = 'vi' | 'en';
+
+export type ContentLanguageMode = 'vi_only' | 'bilingual' | 'en_assist' | 'en_immersion';
+
+export type DifficultyMode = 'relaxed' | 'adventure' | 'challenge';
+
+export type GuidanceMode = 'full' | 'minimal' | 'off';
+
+export type OnboardingStepId =
+  | 'choose_starter'
+  | 'move_around'
+  | 'talk_npc'
+  | 'track_quest'
+  | 'first_battle'
+  | 'first_capture'
+  | 'campfire_heal'
+  | 'optional_gloss'
+  | 'open_journal'
+  | 'free_explore';
+
+export interface OnboardingState {
+  currentStep: OnboardingStepId;
+  completedSteps: OnboardingStepId[];
+  skipped: boolean;
+  completed: boolean;
+  stepsMovedSinceStarter: number;
+  firstCaptureGuaranteedUsed: boolean;
+}
+
 export type LanguageSupportMode = 'immersion' | 'contextual' | 'bilingual';
 
 export type BattleSpeedMode = 'normal' | 'fast' | 'instant';
@@ -63,6 +92,7 @@ export interface MoveStatEffect {
 export interface MoveDefinition {
   readonly id: string;
   readonly name: string;
+  readonly nameVi?: string;
   readonly element: ElementType;
   readonly category: 'physical' | 'special' | 'support';
   readonly power: number;
@@ -443,6 +473,11 @@ export interface KeyBindingMap {
 }
 
 export interface GameSettings {
+  uiLanguage?: UiLanguage;
+  contentLanguage?: ContentLanguageMode;
+  difficulty?: DifficultyMode;
+  guidanceMode?: GuidanceMode;
+  battleAssist?: boolean;
   cefrBand: CefrBand;
   supportMode: LanguageSupportMode;
   bgmVolume: number;
@@ -493,6 +528,8 @@ export interface GameState {
   defeatedTrainers: string[];
   openedProps: string[];
   quests: Record<string, QuestProgress>;
+  trackedQuestId?: string | null;
+  onboarding?: OnboardingState;
   lexicon: Record<string, WordMemoryRecord>;
   stats: PlayerStats;
   settings: GameSettings;

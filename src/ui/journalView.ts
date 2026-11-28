@@ -2,13 +2,34 @@ import { DIALOGUES } from '../data/dialogues.ts';
 import { ITEMS_BY_ID } from '../data/items.ts';
 import { LEXICON_ENTRIES, LEXICON_INDEX } from '../data/lexicon.ts';
 import { MAPS, MAPS_BY_ID } from '../data/maps.ts';
+import { MOVES_BY_ID } from '../data/moves.ts';
+import { NPCS_BY_ID } from '../data/npcs.ts';
 import { QUESTS } from '../data/quests.ts';
-import { SPECIES_BY_ID } from '../data/species.ts';
+import { SPECIES, SPECIES_BY_ID } from '../data/species.ts';
+import { getUnlockedSpeciesMoves } from '../domain/creatures.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
+import {
+  getUiStrings,
+  localizePos,
+  localizeSaveNotice,
+  localizeSpeakerName,
+  pickText,
+} from '../domain/i18n.ts';
 import { isWordDueForReencounter, pickIndependentExample } from '../domain/learning.ts';
+import { buildQuestObjectiveDetail, resolveTrackedQuest } from '../domain/navigation.ts';
+import { getOnboardingQuickGuideEntries } from '../domain/onboarding.ts';
 import { isQuestConditionMet } from '../domain/quests.ts';
-import type { BattleSpeedMode, KeyBindingMap, RegionId } from '../domain/types.ts';
-import type { GameController, JournalTab } from '../game/controller.ts';
+import type {
+  BattleSpeedMode,
+  CefrBand,
+  ContentLanguageMode,
+  DifficultyMode,
+  GuidanceMode,
+  KeyBindingMap,
+  RegionId,
+  UiLanguage,
+} from '../domain/types.ts';
+import { APP_VERSION, type GameController, type JournalTab } from '../game/controller.ts';
 import {
   createCreatureSpriteSpan,
   createItemSpriteSpan,
@@ -25,6 +46,7 @@ export interface JournalViewState {
   campAnsweredCurrent: boolean;
   campAnsweredMessageVi: string;
   awaitingKeyRebind: keyof KeyBindingMap | null;
+  managingMovesPartyIndex: number | null;
 }
 
 const SECRET_FLAGS = [
@@ -39,19 +61,18 @@ export function buildJournalModal(
   viewState: JournalViewState,
   onRerender: () => void,
 ): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
   const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
   const notebook = el('section', 'lw-notebook');
   notebook.setAttribute('data-testid', 'journal-modal');
 
   const header = el('header', 'lw-notebook-header');
   header.appendChild(
-    el(
-      'strong',
-      '',
-      `Field Journal | Bonded: ${controller.state.caughtSpecies.length}/30 | Tokens: ${controller.state.tokens}`,
-    ),
+    el('strong', '', t.journalHeader(controller.state.caughtSpecies.length, controller.state.tokens)),
   );
-  const closeBtn = el('button', 'lw-btn lw-btn-sm', 'Close (Esc)');
+  const closeBtn = el('button', 'lw-btn lw-btn-sm', t.journalCloseBtn);
   closeBtn.setAttribute('data-testid', 'btn-close-journal');
   closeBtn.addEventListener('click', () => controller.closeModal());
   header.appendChild(closeBtn);
@@ -59,13 +80,13 @@ export function buildJournalModal(
 
   const tabsRow = el('nav', 'lw-tabs');
   const tabDefs: ReadonlyArray<[JournalTab, string]> = [
-    ['quests', 'Quests'],
-    ['map', 'Basin Map'],
-    ['team', 'Team'],
-    ['bag', 'Bag'],
-    ['compendium', 'Wildkin (30)'],
-    ['lexicon', 'Lexicon'],
-    ['settings', 'Settings & Save'],
+    ['quests', t.journalTabs.quests],
+    ['map', t.journalTabs.map],
+    ['team', t.journalTabs.team],
+    ['bag', t.journalTabs.bag],
+    ['compendium', t.journalTabs.compendium],
+    ['lexicon', t.journalTabs.lexicon],
+    ['settings', t.journalTabs.settings],
   ];
   for (const [key, label] of tabDefs) {
     const tb = el('button', 'lw-tab-btn', label);
@@ -83,7 +104,7 @@ export function buildJournalModal(
   const tab = controller.journalTab;
   if (tab === 'quests') renderQuestsTab(controller, body);
   else if (tab === 'map') renderWorldMapTab(controller, body);
-  else if (tab === 'team') renderTeamTab(controller, body);
+  else if (tab === 'team') renderTeamTab(controller, body, viewState, onRerender);
   else if (tab === 'bag') renderBagTab(controller, body);
   else if (tab === 'compendium') renderCompendiumTab(controller, body, onRerender);
   else if (tab === 'lexicon') renderLexiconTab(controller, body, viewState, onRerender);
@@ -96,43 +117,114 @@ export function buildJournalModal(
 
 function renderQuestsTab(controller: GameController, container: HTMLElement): void {
   const state = controller.state;
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
 
   const secretsFound = SECRET_FLAGS.filter((f) => Boolean(state.flags[f])).length;
   const masteryBanner = el('div', 'lw-journal-entry lw-mastery-card');
   masteryBanner.style.marginBottom = '10px';
-  masteryBanner.appendChild(
-    el('strong', '', 'Expedition & Post-Game Mastery | Tiến Độ Khám Phá Chuyên Sâu'),
-  );
+  masteryBanner.appendChild(el('strong', '', t.questMasteryTitle));
   masteryBanner.appendChild(
     el(
       'div',
       'lw-hud-quest',
-      `Habitat Traces: ${state.discoveredTraces.length}/4 | Secret Caches: ${secretsFound}/4 | Warden Rematches: ${state.rematchCleared.length}/4 | Gleaming Variants: ${state.gleamingSpecies.length} | Chronicles Read: ${state.readLoreIds.length}`,
+      t.questMasteryStats(
+        state.discoveredTraces.length,
+        secretsFound,
+        state.rematchCleared.length,
+        state.gleamingSpecies.length,
+        state.readLoreIds.length,
+      ),
     ),
   );
   container.appendChild(masteryBanner);
 
+  const tracked = resolveTrackedQuest(state, QUESTS);
+
   for (const q of QUESTS) {
     const prog = state.quests[q.id];
     if (!prog) continue;
-    const card = el('div', 'lw-journal-entry');
+    const detail = buildQuestObjectiveDetail({
+      quest: q,
+      state,
+      mapsById: MAPS_BY_ID,
+      npcsById: NPCS_BY_ID,
+      speciesById: SPECIES_BY_ID,
+    });
+    const isTracked = tracked?.id === q.id && prog.status === 'active';
+
+    const card = el('div', isTracked ? 'lw-journal-entry lw-quest-tracked' : 'lw-journal-entry');
+    card.setAttribute('data-testid', `quest-card-${q.id}`);
     card.style.marginBottom = '8px';
+
+    const headRow = el('div', 'lw-battle-header-row');
     const head = el('div', 'lw-hud-title');
     head.appendChild(
-      el('strong', '', `${q.isMainStory ? '[Main] ' : '[Field] '}${q.titleEn} | ${q.titleVi}`),
+      el(
+        'strong',
+        '',
+        `${q.isMainStory ? t.questMainTag : t.questFieldTag}${pickText(uiLang, q.titleEn, q.titleVi)}`,
+      ),
     );
     head.appendChild(
-      el('span', 'lw-badge', prog.status === 'completed' ? 'Completed' : 'Active'),
+      el(
+        'span',
+        prog.status === 'completed' ? 'lw-badge lw-badge-eff-good' : 'lw-badge',
+        prog.status === 'completed' ? t.questDoneBadge : t.questActiveBadge,
+      ),
     );
-    card.appendChild(head);
-    card.appendChild(el('div', 'lw-hud-quest', `${q.summaryEn} | ${q.summaryVi}`));
+    if (isTracked) {
+      head.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.questTrackingBadge));
+    }
+    headRow.appendChild(head);
+
+    if (prog.status === 'active' && !isTracked) {
+      const guideBtn = el('button', 'lw-btn lw-btn-primary lw-btn-sm', t.questTrackBtn);
+      guideBtn.setAttribute('data-testid', `btn-track-quest-${q.id}`);
+      guideBtn.addEventListener('click', () => {
+        controller.setTrackedQuest(q.id);
+        controller.closeModal();
+      });
+      headRow.appendChild(guideBtn);
+    }
+    card.appendChild(headRow);
+
+    if (prog.status === 'active') {
+      const detailGrid = el('div', 'lw-quest-detail-grid');
+      const addDetailRow = (label: string, value: string, danger: boolean = false) => {
+        const line = el('div', danger ? 'lw-quest-detail-row lw-quest-detail-warn' : 'lw-quest-detail-row');
+        line.appendChild(el('strong', '', `${label} `));
+        line.appendChild(document.createTextNode(value));
+        detailGrid.appendChild(line);
+      };
+      addDetailRow(t.questFieldWhat, pickText(uiLang, detail.whatEn, detail.whatVi));
+      addDetailRow(t.questFieldTarget, pickText(uiLang, detail.targetLabelEn, detail.targetLabelVi));
+      addDetailRow(t.questFieldRegion, pickText(uiLang, detail.regionNameEn, detail.regionNameVi));
+      addDetailRow(t.questFieldProgress, pickText(uiLang, detail.progressEn, detail.progressVi));
+      if (detail.unmetRequirementEn || detail.unmetRequirementVi) {
+        addDetailRow(
+          t.questFieldUnmet,
+          pickText(uiLang, detail.unmetRequirementEn ?? '', detail.unmetRequirementVi ?? ''),
+          true,
+        );
+      }
+      if (detail.recommendedPrepEn || detail.recommendedPrepVi) {
+        addDetailRow(
+          t.questFieldPrep,
+          pickText(uiLang, detail.recommendedPrepEn ?? '', detail.recommendedPrepVi ?? ''),
+        );
+      }
+      card.appendChild(detailGrid);
+    } else {
+      card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, q.summaryEn, q.summaryVi)));
+    }
 
     for (const st of q.steps) {
       const done = isQuestConditionMet(st.condition, state, SPECIES_BY_ID);
       const stepLine = el(
         'div',
         'lw-quest-step',
-        `${done ? '[x]' : '[ ]'} ${st.descriptionEn} | ${st.descriptionVi}`,
+        `${done ? '[x]' : '[ ]'} ${pickText(uiLang, st.descriptionEn, st.descriptionVi)}`,
       );
       card.appendChild(stepLine);
     }
@@ -142,13 +234,10 @@ function renderQuestsTab(controller: GameController, container: HTMLElement): vo
 
 function renderWorldMapTab(controller: GameController, container: HTMLElement): void {
   const state = controller.state;
-  container.appendChild(
-    el(
-      'p',
-      'lw-hud-quest',
-      'Verdant Basin Regional Atlas | Bản đồ năm vùng sinh thái liên thông quanh Trại Đèn Rêu.',
-    ),
-  );
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
+  container.appendChild(el('p', 'lw-hud-quest', t.mapIntro));
 
   const layoutGrid = el('div', 'lw-atlas-compass');
   const nodeMeta: ReadonlyArray<{
@@ -156,40 +245,40 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
     slotClass: string;
     unlockFlag?: string;
     stoneFlag?: string;
-    directionLabel: string;
+    dirKey: 'north' | 'west' | 'center' | 'east' | 'south';
   }> = [
     {
       regionId: 'starfall_sanctuary',
       slotClass: 'lw-atlas-north',
       unlockFlag: 'warden_kaelen_cleared',
       stoneFlag: 'main_story_completed',
-      directionLabel: 'North Summit',
+      dirKey: 'north',
     },
     {
       regionId: 'whisperwood',
       slotClass: 'lw-atlas-west',
       unlockFlag: 'has_starter',
       stoneFlag: 'warden_sylvan_cleared',
-      directionLabel: 'West Woodland',
+      dirKey: 'west',
     },
     {
       regionId: 'mosslight_hub',
       slotClass: 'lw-atlas-center',
-      directionLabel: 'Central Village',
+      dirKey: 'center',
     },
     {
       regionId: 'reedwater_fen',
       slotClass: 'lw-atlas-east',
       unlockFlag: 'warden_sylvan_cleared',
       stoneFlag: 'warden_mirella_cleared',
-      directionLabel: 'East Wetland',
+      dirKey: 'east',
     },
     {
       regionId: 'terracotta_ridge',
       slotClass: 'lw-atlas-south',
       unlockFlag: 'warden_mirella_cleared',
       stoneFlag: 'warden_kaelen_cleared',
-      directionLabel: 'South Canyon',
+      dirKey: 'south',
     },
   ];
 
@@ -205,73 +294,75 @@ function renderWorldMapTab(controller: GameController, container: HTMLElement): 
     if (isHere) card.dataset.current = 'true';
 
     const top = el('div', 'lw-hud-title');
-    top.appendChild(el('span', 'lw-badge', item.directionLabel));
+    top.appendChild(el('span', 'lw-badge', t.mapDirections[item.dirKey]));
     if (isHere) {
       top.appendChild(
         el(
           'span',
           'lw-badge lw-badge-eff-good',
-          `Here (${state.playerPos.x},${state.playerPos.y})`,
+          t.mapHereBadge(state.playerPos.x, state.playerPos.y),
         ),
       );
     } else if (!isUnlocked) {
-      top.appendChild(el('span', 'lw-badge', 'Gated'));
+      top.appendChild(el('span', 'lw-badge', t.mapGatedBadge));
     } else if (item.stoneFlag && isHarmonized) {
-      top.appendChild(el('span', 'lw-badge lw-badge-eff-good', 'Resonant'));
+      top.appendChild(el('span', 'lw-badge lw-badge-eff-good', t.mapResonantBadge));
     }
     card.appendChild(top);
 
-    card.appendChild(el('strong', '', `${map.nameEn} | ${map.nameVi}`));
-    card.appendChild(el('div', 'lw-hud-quest', map.subtitleVi));
+    card.appendChild(el('strong', '', pickText(uiLang, map.nameEn, map.nameVi)));
+    card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, map.subtitleEn, map.subtitleVi)));
 
     const speciesHere = MAPS.find((m) => m.id === item.regionId)?.encounters.length ?? 0;
     if (speciesHere > 0) {
-      card.appendChild(
-        el(
-          'div',
-          'lw-hud-quest',
-          `Wild habitats: ${speciesHere} species | Trace: ${traceFound ? 'Logged' : 'Unchecked'}`,
-        ),
-      );
+      card.appendChild(el('div', 'lw-hud-quest', t.mapHabitatsInfo(speciesHere, traceFound)));
     }
     layoutGrid.appendChild(card);
   }
   container.appendChild(layoutGrid);
 }
 
-function renderTeamTab(controller: GameController, container: HTMLElement): void {
+function renderTeamTab(
+  controller: GameController,
+  container: HTMLElement,
+  viewState: JournalViewState,
+  onRerender: () => void,
+): void {
   const state = controller.state;
-  container.appendChild(
-    el(
-      'h4',
-      '',
-      `Active Expedition Team (${state.party.length}/6) | Lead walks behind you on the map`,
-    ),
-  );
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
+  container.appendChild(el('h4', '', t.teamHeader(state.party.length)));
   state.party.forEach((member, idx) => {
     const sp = SPECIES_BY_ID[member.speciesId]!;
+    const elLabel = pickText(uiLang, ELEMENT_LABELS[sp.element].en, ELEMENT_LABELS[sp.element].vi);
+    const roleLabel = pickText(uiLang, ROLE_LABELS[sp.combatRole].en, ROLE_LABELS[sp.combatRole].vi);
+
+    const wrap = el('div', 'lw-team-member-wrap');
     const row = el('div', 'lw-list-row');
+    row.dataset.element = sp.element;
+    row.dataset.isReserve = 'false';
     const left = el('div', 'lw-hud-title');
     left.appendChild(
       createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
     );
     const info = el('div', '');
-    const gleamTag = member.isRareVariant ? ' [Gleaming]' : '';
+    const gleamTag = member.isRareVariant ? ` [${t.battleGleamingBadge}]` : '';
     info.appendChild(
       el(
         'strong',
         '',
-        `${idx === 0 ? '[Lead] ' : ''}${sp.name}${gleamTag} Lv.${member.level} (${ELEMENT_LABELS[sp.element].en} | ${ROLE_LABELS[sp.combatRole].en})`,
+        `${idx === 0 ? t.teamLeadTag : ''}${sp.name}${gleamTag} ${t.levelShort(member.level)} (${elLabel} | ${roleLabel})`,
       ),
     );
     const evoHint = sp.evolvesTo
-      ? ` | Evolves Lv.${sp.evolvesTo.level} -> ${SPECIES_BY_ID[sp.evolvesTo.speciesId]?.name ?? ''}`
-      : ' | Final Form';
+      ? t.teamEvolvesHint(sp.evolvesTo.level, SPECIES_BY_ID[sp.evolvesTo.speciesId]?.name ?? '')
+      : t.teamFinalForm;
     info.appendChild(
       el(
         'div',
         'lw-hud-quest',
-        `HP ${member.currentHp}/${member.maxHp} | ATK ${member.stats.atk} DEF ${member.stats.def} SPD ${member.stats.spd}${evoHint}`,
+        `${t.teamStatsLine(member.currentHp, member.maxHp, member.stats.atk, member.stats.def, member.stats.spd)}${evoHint}`,
       ),
     );
     left.appendChild(info);
@@ -279,36 +370,129 @@ function renderTeamTab(controller: GameController, container: HTMLElement): void
 
     const actions = el('div', 'lw-hud-actions');
     if (idx > 0) {
-      const leadBtn = el('button', 'lw-btn lw-btn-sm', 'Make Lead');
+      const leadBtn = el('button', 'lw-btn lw-btn-sm', t.teamMakeLeadBtn);
+      leadBtn.dataset.action = 'make-lead';
       leadBtn.addEventListener('click', () => controller.makePartyLead(idx));
       actions.appendChild(leadBtn);
     }
     if (member.currentHp < member.maxHp) {
-      const healBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', 'Use Dew Tonic');
+      const healBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', t.teamUseTonicBtn);
       healBtn.addEventListener('click', () => controller.useBagItemInField('dew_tonic', idx));
       actions.appendChild(healBtn);
     }
+    const isManaging = viewState.managingMovesPartyIndex === idx;
+    const movesBtn = el(
+      'button',
+      isManaging ? 'lw-btn lw-btn-primary lw-btn-sm' : 'lw-btn lw-btn-sm',
+      isManaging ? t.teamCloseMovesBtn : t.teamManageMovesBtn,
+    );
+    movesBtn.setAttribute('data-testid', `btn-manage-moves-${idx}`);
+    movesBtn.addEventListener('click', () => {
+      viewState.managingMovesPartyIndex = isManaging ? null : idx;
+      onRerender();
+    });
+    actions.appendChild(movesBtn);
     row.appendChild(actions);
-    container.appendChild(row);
+    wrap.appendChild(row);
+
+    if (isManaging) {
+      const panel = el('div', 'lw-journal-entry lw-move-manager');
+      panel.setAttribute('data-testid', 'move-manager-panel');
+      panel.appendChild(el('div', 'lw-hud-quest', t.teamMoveGuideIntro));
+      panel.appendChild(el('strong', '', t.teamActiveMovesTitle));
+      const activeGrid = el('div', 'lw-move-grid');
+      activeGrid.style.margin = '6px 0';
+      member.moves.forEach((slot, sIdx) => {
+        const mDef = MOVES_BY_ID[slot.moveId];
+        if (!mDef) return;
+        const mCard = el('div', 'lw-move-card');
+        const mEl = ELEMENT_LABELS[mDef.element];
+        mCard.style.borderLeft = `4px solid ${mEl.color}`;
+        const mName = uiLang === 'en' ? mDef.name : (mDef.nameVi ?? mDef.name);
+        mCard.appendChild(
+          el(
+            'strong',
+            '',
+            `${sIdx + 1}. ${mName} (${pickText(uiLang, mEl.en, mEl.vi)}${mDef.power > 0 ? ` ${mDef.power}` : ` ${t.battleSupportTag}`})`,
+          ),
+        );
+        mCard.appendChild(
+          el('div', 'lw-hud-quest', pickText(uiLang, mDef.descriptionEn, mDef.descriptionVi)),
+        );
+        activeGrid.appendChild(mCard);
+      });
+      panel.appendChild(activeGrid);
+
+      const unlocked = getUnlockedSpeciesMoves(member, SPECIES, MOVES_BY_ID).filter(
+        (m) => !member.moves.some((s) => s.moveId === m.id),
+      );
+      if (unlocked.length > 0) {
+        panel.appendChild(el('strong', '', t.teamAvailableMovesTitle));
+        for (const cand of unlocked) {
+          const candRow = el('div', 'lw-list-row');
+          const cInfo = el('div', '');
+          const cEl = ELEMENT_LABELS[cand.element];
+          const cName = uiLang === 'en' ? cand.name : (cand.nameVi ?? cand.name);
+          cInfo.appendChild(
+            el(
+              'strong',
+              '',
+              `${cName} (${pickText(uiLang, cEl.en, cEl.vi)}${cand.power > 0 ? ` ${cand.power}` : ` ${t.battleSupportTag}`})`,
+            ),
+          );
+          cInfo.appendChild(
+            el('div', 'lw-hud-quest', pickText(uiLang, cand.descriptionEn, cand.descriptionVi)),
+          );
+          candRow.appendChild(cInfo);
+
+          const swapBtns = el('div', 'lw-choice-list');
+          member.moves.forEach((slot, slotIdx) => {
+            const existingDef = MOVES_BY_ID[slot.moveId];
+            const existingName = existingDef
+              ? uiLang === 'en'
+                ? existingDef.name
+                : (existingDef.nameVi ?? existingDef.name)
+              : slot.moveId;
+            const sBtn = el(
+              'button',
+              'lw-btn lw-btn-sm',
+              t.teamReplaceSlotLabel(slotIdx + 1, existingName),
+            );
+            sBtn.addEventListener('click', () => {
+              controller.swapCreatureMove(idx, slotIdx, cand.id);
+              onRerender();
+            });
+            swapBtns.appendChild(sBtn);
+          });
+          candRow.appendChild(swapBtns);
+          panel.appendChild(candRow);
+        }
+      }
+      wrap.appendChild(panel);
+    }
+
+    container.appendChild(wrap);
   });
 
   if (state.sanctuaryBox.length > 0) {
-    container.appendChild(
-      el('h4', '', `Sanctuary Reserve (${state.sanctuaryBox.length} partners)`),
-    );
+    container.appendChild(el('h4', '', t.teamReserveHeader(state.sanctuaryBox.length)));
     state.sanctuaryBox.forEach((boxMember, bIdx) => {
       const sp = SPECIES_BY_ID[boxMember.speciesId]!;
+      const elLabel = pickText(uiLang, ELEMENT_LABELS[sp.element].en, ELEMENT_LABELS[sp.element].vi);
       const row = el('div', 'lw-list-row');
+      row.dataset.element = sp.element;
+      row.dataset.isReserve = 'true';
       const left = el('div', 'lw-hud-title');
       left.appendChild(
         createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(boxMember.isRareVariant) }),
       );
       left.appendChild(
-        el('span', '', `${sp.name} Lv.${boxMember.level} (${ELEMENT_LABELS[sp.element].en})`),
+        el('span', '', `${sp.name} ${t.levelShort(boxMember.level)} (${elLabel})`),
       );
       row.appendChild(left);
 
-      const swapBtn = el('button', 'lw-btn lw-btn-sm', 'Swap with Last Slot');
+      const swapBtn = el('button', 'lw-btn lw-btn-sm', t.teamSwapReserveBtn);
+      swapBtn.dataset.action = 'swap-reserve';
       swapBtn.addEventListener('click', () =>
         controller.swapPartyAndReserve(Math.max(0, state.party.length - 1), bIdx),
       );
@@ -319,7 +503,15 @@ function renderTeamTab(controller: GameController, container: HTMLElement): void
 }
 
 function renderBagTab(controller: GameController, container: HTMLElement): void {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const contentLang = controller.state.settings.contentLanguage ?? 'bilingual';
+  const t = getUiStrings(uiLang);
+
   const nonEmpty = controller.state.inventory.filter((s) => s.quantity > 0);
+  if (nonEmpty.length === 0) {
+    container.appendChild(el('p', '', t.bagEmpty));
+    return;
+  }
   for (const slot of nonEmpty) {
     const def = ITEMS_BY_ID[slot.itemId];
     if (!def) continue;
@@ -327,15 +519,21 @@ function renderBagTab(controller: GameController, container: HTMLElement): void 
     const info = el('div', '');
     const titleLine = el('div', 'lw-hud-title');
     titleLine.appendChild(createItemSpriteSpan(def.id));
-    titleLine.appendChild(el('strong', '', `${def.nameEn} (${def.nameVi}) x${slot.quantity}`));
+    titleLine.appendChild(
+      el('strong', '', `${pickText(uiLang, def.nameEn, def.nameVi)} x${slot.quantity}`),
+    );
     info.appendChild(titleLine);
     const desc = el('div', 'lw-hud-quest');
-    desc.appendChild(renderInteractiveEnglish(controller, def.descriptionEn, 'bag_item'));
+    if (contentLang === 'vi_only' || uiLang === 'vi') {
+      desc.textContent = def.descriptionVi;
+    } else {
+      desc.appendChild(renderInteractiveEnglish(controller, def.descriptionEn, 'bag_item'));
+    }
     info.appendChild(desc);
     row.appendChild(info);
 
     if (def.category === 'tonic' || def.category === 'remedy' || def.category === 'lantern') {
-      const useBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', 'Use');
+      const useBtn = el('button', 'lw-btn lw-btn-moss lw-btn-sm', t.bagUseBtn);
       useBtn.addEventListener('click', () => controller.useBagItemInField(def.id, 0));
       row.appendChild(useBtn);
     }
@@ -349,11 +547,19 @@ function renderCompendiumTab(
   onRerender: () => void,
 ): void {
   const state = controller.state;
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const contentLang = state.settings.contentLanguage ?? 'bilingual';
+  const t = getUiStrings(uiLang);
+
   container.appendChild(
     el(
       'p',
       'lw-hud-quest',
-      `Discovered: ${state.discoveredSpecies.length}/30 | Bonded: ${state.caughtSpecies.length}/30 | Gleaming Variants: ${state.gleamingSpecies.length}/30`,
+      t.compendiumStats(
+        state.discoveredSpecies.length,
+        state.caughtSpecies.length,
+        state.gleamingSpecies.length,
+      ),
     ),
   );
   const grid = el('div', 'lw-species-grid');
@@ -361,25 +567,21 @@ function renderCompendiumTab(
     const seen = state.discoveredSpecies.includes(sp.id);
     const caught = state.caughtSpecies.includes(sp.id);
     const hasGleaming = state.gleamingSpecies.includes(sp.id);
+    const habitatNames = sp.habitatIds
+      .map((h) => pickText(uiLang, MAPS_BY_ID[h].nameEn, MAPS_BY_ID[h].nameVi))
+      .join(', ');
     const card = el('div', 'lw-journal-entry');
     if (!seen) {
       const top = el('div', 'lw-hud-title');
       top.appendChild(createCreatureSpriteSpan(sp.dexNumber, { silhouette: true }));
       const meta = el('div', '');
       meta.appendChild(
-        el('strong', '', `#${String(sp.dexNumber).padStart(2, '0')} Uncharted Wildkin`),
+        el('strong', '', t.compendiumUncharted(String(sp.dexNumber).padStart(2, '0'))),
       );
-      meta.appendChild(
-        el(
-          'div',
-          'lw-hud-quest',
-          `Habitat: ${sp.habitatIds.map((h) => MAPS_BY_ID[h].nameEn).join(', ')}`,
-        ),
-      );
+      meta.appendChild(el('div', 'lw-hud-quest', t.compendiumHabitat(habitatNames)));
       if (sp.preferredTime && sp.preferredTime.length > 0) {
-        meta.appendChild(
-          el('div', 'lw-hud-quest', `Active time: ${sp.preferredTime.join(', ')}`),
-        );
+        const times = sp.preferredTime.map((tm) => t.timeLabels[tm]).join(', ');
+        meta.appendChild(el('div', 'lw-hud-quest', t.compendiumActiveTime(times)));
       }
       top.appendChild(meta);
       card.appendChild(top);
@@ -391,33 +593,47 @@ function renderCompendiumTab(
         el(
           'strong',
           '',
-          `#${String(sp.dexNumber).padStart(2, '0')} ${sp.name} ${caught ? '[Bonded]' : '[Sighted]'}`,
+          `#${String(sp.dexNumber).padStart(2, '0')} ${sp.name} ${caught ? t.compendiumBondedTag : t.compendiumSightedTag}`,
         ),
       );
       const tags = el('div', 'lw-hud-title');
       const rInfo = RARITY_LABELS[sp.rarity];
-      const rBadge = el('span', 'lw-badge lw-badge-element', rInfo.en);
+      const rBadge = el('span', 'lw-badge lw-badge-element', pickText(uiLang, rInfo.en, rInfo.vi));
       rBadge.style.background = rInfo.color;
-      tags.append(rBadge, el('span', 'lw-badge', ROLE_LABELS[sp.combatRole].en));
+      tags.append(
+        rBadge,
+        el(
+          'span',
+          'lw-badge',
+          pickText(uiLang, ROLE_LABELS[sp.combatRole].en, ROLE_LABELS[sp.combatRole].vi),
+        ),
+      );
       if (hasGleaming) {
-        tags.appendChild(el('span', 'lw-badge lw-badge-gleaming', 'Gleaming'));
+        tags.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleGleamingBadge));
       }
       meta.appendChild(tags);
       top.appendChild(meta);
       card.appendChild(top);
 
-      card.appendChild(el('div', 'lw-hud-quest', `${sp.titleEn} | ${sp.titleVi}`));
+      card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, sp.titleEn, sp.titleVi)));
       if (caught) {
         const note = el('div', 'lw-compendium-note');
-        note.appendChild(renderInteractiveEnglish(controller, sp.fieldNoteEn, 'compendium'));
+        if (contentLang === 'vi_only') {
+          note.textContent = sp.fieldNoteVi;
+        } else {
+          note.appendChild(renderInteractiveEnglish(controller, sp.fieldNoteEn, 'compendium'));
+          if (contentLang === 'bilingual') {
+            note.appendChild(el('div', 'lw-hud-quest', sp.fieldNoteVi));
+          }
+        }
         card.appendChild(note);
         if (sp.evolvesTo) {
           const nextName = SPECIES_BY_ID[sp.evolvesTo.speciesId]?.name ?? sp.evolvesTo.speciesId;
           card.appendChild(
-            el('div', 'lw-hud-quest', `Evolution: Lv.${sp.evolvesTo.level} -> ${nextName}`),
+            el('div', 'lw-hud-quest', t.compendiumEvoLine(sp.evolvesTo.level, nextName)),
           );
         }
-        const storyBtn = el('button', 'lw-btn lw-btn-sm', 'Read Field Story');
+        const storyBtn = el('button', 'lw-btn lw-btn-sm', t.compendiumReadStoryBtn);
         storyBtn.addEventListener('click', () => {
           controller.closeModal();
           controller.openDialogueById(`field_story_${sp.id}`);
@@ -425,13 +641,7 @@ function renderCompendiumTab(
         });
         card.appendChild(storyBtn);
       } else {
-        card.appendChild(
-          el(
-            'div',
-            'lw-hud-quest',
-            `Habitat: ${sp.habitatIds.map((h) => MAPS_BY_ID[h].nameEn).join(', ')} (Bond with a chime to unlock full ecological notes)`,
-          ),
-        );
+        card.appendChild(el('div', 'lw-hud-quest', t.compendiumUnlockHint(habitatNames)));
       }
     }
     grid.appendChild(card);
@@ -446,22 +656,26 @@ function renderLexiconTab(
   onRerender: () => void,
 ): void {
   const state = controller.state;
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
   const encounteredCount = Object.keys(state.lexicon).length;
   const savedCount = Object.values(state.lexicon).filter((m) => m.savedByPlayer).length;
   const masteredCount = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
   const dueCount = Object.values(state.lexicon).filter((m) =>
     isWordDueForReencounter(m, state),
   ).length;
+  const dispatchCount = DIALOGUES.filter((d) => d.contextTag === 'ranger_dispatch').length;
 
   const filterBar = el('div', 'lw-choice-list');
   filterBar.style.marginBottom = '10px';
   for (const [fKey, label] of [
-    ['encountered', `Encountered (${encounteredCount})`],
-    ['saved', `Saved (${savedCount})`],
-    ['mastered', `Mastered (${masteredCount})`],
-    ['due', `Due Now (${dueCount})`],
-    ['all', `All (${LEXICON_ENTRIES.length})`],
-    ['dispatches', `Field Advisories (${DIALOGUES.filter((d) => d.contextTag === 'ranger_dispatch').length})`],
+    ['encountered', t.lexiconFilters.encountered(encounteredCount)],
+    ['saved', t.lexiconFilters.saved(savedCount)],
+    ['mastered', t.lexiconFilters.mastered(masteredCount)],
+    ['due', t.lexiconFilters.due(dueCount)],
+    ['all', t.lexiconFilters.all(LEXICON_ENTRIES.length)],
+    ['dispatches', t.lexiconFilters.dispatches(dispatchCount)],
   ] as const) {
     const b = el(
       'button',
@@ -483,9 +697,13 @@ function renderLexiconTab(
       const isRead = state.readLoreIds.includes(disp.id);
       const row = el('div', 'lw-list-row');
       row.appendChild(
-        el('span', '', `${isRead ? '[Read] ' : '[Unread] '}${disp.speaker} (${disp.cefr})`),
+        el(
+          'span',
+          '',
+          `${isRead ? t.lexiconReadTag : t.lexiconUnreadTag}${localizeSpeakerName(disp.speaker, uiLang)} (${disp.cefr})`,
+        ),
       );
-      const readBtn = el('button', 'lw-btn lw-btn-sm', 'Read Note');
+      const readBtn = el('button', 'lw-btn lw-btn-sm', t.lexiconReadNoteBtn);
       readBtn.addEventListener('click', () => {
         controller.closeModal();
         controller.openDialogueById(disp.id);
@@ -509,9 +727,7 @@ function renderLexiconTab(
   }).slice(0, 90);
 
   if (items.length === 0) {
-    container.appendChild(
-      el('p', '', 'No entries match this filter yet. Explore trails and chat with Rangers naturally!'),
-    );
+    container.appendChild(el('p', '', t.lexiconEmpty));
     return;
   }
 
@@ -520,40 +736,32 @@ function renderLexiconTab(
     const ex = pickIndependentExample(entry, state.regionId, mem?.exposures ?? 0);
     const row = el('div', 'lw-list-row');
     const left = el('div', '');
-    const statusLabel =
-      mem && mem.mastery >= 3
-        ? ' [Mastered]'
-        : mem?.savedByPlayer
-          ? ' [Saved]'
-          : mem
-            ? ' [Encountered]'
-            : '';
     left.appendChild(
       el(
         'strong',
         '',
-        `${entry.word} ${entry.phonetic} [${entry.pos} | ${entry.cefr}] : ${entry.meaningVi}${statusLabel}`,
+        `${entry.word} ${entry.phonetic} [${localizePos(entry.pos, uiLang)} | ${entry.cefr}] : ${entry.meaningVi}`,
       ),
     );
     left.appendChild(
       el(
         'div',
         'lw-hud-quest',
-        `Encountered ${mem?.exposures ?? 0}x | Lookups ${mem?.glossLookups ?? 0}x | Mastery ${mem?.mastery ?? 0}/3`,
+        t.lexiconStatsLine(mem?.exposures ?? 0, mem?.glossLookups ?? 0, mem?.mastery ?? 0),
       ),
     );
-    left.appendChild(el('div', 'lw-hud-quest', ex.en));
+    left.appendChild(el('div', 'lw-hud-quest lw-lexicon-example', `${ex.en} | ${ex.vi}`));
     row.appendChild(left);
 
     const acts = el('div', 'lw-hud-actions');
-    const speakBtn = el('button', 'lw-btn lw-btn-sm', 'Listen');
+    const speakBtn = el('button', 'lw-btn lw-btn-sm', t.lexiconListenBtn);
     speakBtn.addEventListener('click', () =>
       controller.sound.speakEnglishWord(entry.word, entry.phonetic),
     );
     const saveBtn = el(
       'button',
       mem?.savedByPlayer ? 'lw-btn lw-btn-moss lw-btn-sm' : 'lw-btn lw-btn-sm',
-      mem?.savedByPlayer ? 'Saved' : 'Save',
+      mem?.savedByPlayer ? t.lexiconSavedBtn : t.lexiconSaveBtn,
     );
     saveBtn.addEventListener('click', () => controller.toggleSavedWordById(entry.id));
     acts.append(speakBtn, saveBtn);
@@ -569,16 +777,20 @@ function renderSettingsTab(
   onRerender: () => void,
 ): void {
   const s = controller.state.settings;
+  const uiLang: UiLanguage = s.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
 
   const addSelectRow = (
     label: string,
     current: string,
     options: ReadonlyArray<[string, string]>,
     onChange: (val: string) => void,
+    testId?: string,
   ) => {
     const row = el('div', 'lw-list-row');
     row.appendChild(el('span', '', label));
     const sel = document.createElement('select');
+    if (testId) sel.setAttribute('data-testid', testId);
     for (const [val, text] of options) {
       const opt = document.createElement('option');
       opt.value = val;
@@ -592,59 +804,95 @@ function renderSettingsTab(
   };
 
   addSelectRow(
-    'Adaptive English Band (Mức hội thoại & gợi ý từ):',
+    t.labelUiLanguage,
+    uiLang,
+    [
+      ['vi', t.uiLanguageOptions.vi],
+      ['en', t.uiLanguageOptions.en],
+    ],
+    (v) => controller.updateSettings({ uiLanguage: v as UiLanguage }),
+    'settings-ui-language',
+  );
+
+  addSelectRow(
+    t.labelContentLanguage,
+    s.contentLanguage ?? 'bilingual',
+    [
+      ['vi_only', t.contentLanguageOptions.vi_only],
+      ['bilingual', t.contentLanguageOptions.bilingual],
+      ['en_assist', t.contentLanguageOptions.en_assist],
+      ['en_immersion', t.contentLanguageOptions.en_immersion],
+    ],
+    (v) => controller.updateSettings({ contentLanguage: v as ContentLanguageMode }),
+    'settings-content-language',
+  );
+
+  addSelectRow(
+    t.labelEnglishBand,
     s.cefrBand,
     [
-      ['A1', 'A1 (Cơ bản)'],
-      ['A2', 'A2 (Sơ cấp)'],
-      ['B1', 'B1 (Trung cấp)'],
-      ['B2', 'B2 (Nâng cao)'],
+      ['A1', t.cefrOptions.A1],
+      ['A2', t.cefrOptions.A2],
+      ['B1', t.cefrOptions.B1],
+      ['B2', t.cefrOptions.B2],
     ],
-    (v) => controller.updateSettings({ cefrBand: v as 'A1' | 'A2' | 'B1' | 'B2' }),
+    (v) => controller.updateSettings({ cefrBand: v as CefrBand }),
+    'settings-cefr-band',
   );
 
   addSelectRow(
-    'Language Support Mode (Chế độ hỗ trợ):',
-    s.supportMode,
+    t.labelDifficulty,
+    s.difficulty ?? 'relaxed',
     [
-      ['contextual', 'Contextual (Chạm từ xem nghĩa)'],
-      ['bilingual', 'Bilingual (Hiện sẵn phụ đề tiếng Việt)'],
-      ['immersion', 'Immersion (Chỉ tiếng Anh, chạm từ khi cần)'],
+      ['relaxed', t.difficultyOptions.relaxed],
+      ['adventure', t.difficultyOptions.adventure],
+      ['challenge', t.difficultyOptions.challenge],
     ],
-    (v) =>
-      controller.updateSettings({
-        supportMode: v as 'immersion' | 'contextual' | 'bilingual',
-      }),
+    (v) => controller.updateSettings({ difficulty: v as DifficultyMode }),
+    'settings-difficulty',
   );
 
   addSelectRow(
-    'Battle Animation Pace (Nhịp hoạt ảnh chiến đấu):',
+    t.labelGuidanceMode,
+    s.guidanceMode ?? 'full',
+    [
+      ['full', t.guidanceOptions.full],
+      ['minimal', t.guidanceOptions.minimal],
+      ['off', t.guidanceOptions.off],
+    ],
+    (v) => controller.updateSettings({ guidanceMode: v as GuidanceMode }),
+    'settings-guidance-mode',
+  );
+
+  addSelectRow(
+    t.settingsBattleSpeedLabel,
     s.battleSpeed ?? 'normal',
     [
-      ['normal', 'Normal (1x Chuẩn)'],
-      ['fast', 'Fast (2x Nhanh)'],
-      ['instant', 'Instant (Bỏ qua hoạt ảnh)'],
+      ['normal', t.settingsBattleSpeedOptions.normal],
+      ['fast', t.settingsBattleSpeedOptions.fast],
+      ['instant', t.settingsBattleSpeedOptions.instant],
     ],
     (v) => controller.updateSettings({ battleSpeed: v as BattleSpeedMode }),
+    'settings-battle-speed',
   );
 
   addSelectRow(
-    'Touch D-Pad Controls (Cụm điều khiển cảm ứng):',
+    t.settingsTouchLabel,
     s.touchControls,
     [
-      ['auto', 'Auto (Tự động trên thiết bị cảm ứng)'],
-      ['always', 'Always Show (Luôn hiện)'],
-      ['off', 'Hidden (Ẩn)'],
+      ['auto', t.settingsTouchOptions.auto],
+      ['always', t.settingsTouchOptions.always],
+      ['off', t.settingsTouchOptions.off],
     ],
     (v) => controller.updateSettings({ touchControls: v as 'auto' | 'always' | 'off' }),
   );
 
   addSelectRow(
-    'Text Size (Cỡ chữ):',
+    t.settingsTextScaleLabel,
     s.textScale,
     [
-      ['normal', 'Normal (Chuẩn)'],
-      ['large', 'Large (Chữ lớn dễ đọc)'],
+      ['normal', t.settingsTextScaleOptions.normal],
+      ['large', t.settingsTextScaleOptions.large],
     ],
     (v) => controller.updateSettings({ textScale: v as 'normal' | 'large' }),
   );
@@ -667,20 +915,27 @@ function renderSettingsTab(
   };
 
   addCheckboxRow(
-    'Show Companion Follower (Sinh vật dẫn đầu đi theo sau):',
+    t.settingsBattleAssistLabel,
+    s.battleAssist !== false,
+    (v) => controller.updateSettings({ battleAssist: v }),
+    'settings-battle-assist',
+  );
+  addCheckboxRow(
+    t.settingsShowFollowerLabel,
     s.showFollower !== false,
     (v) => controller.updateSettings({ showFollower: v }),
     'checkbox-show-follower',
   );
-  addCheckboxRow('High Contrast Mode (Độ tương phản cao):', s.highContrast, (v) =>
+  addCheckboxRow(t.settingsHighContrastLabel, s.highContrast, (v) =>
     controller.updateSettings({ highContrast: v }),
   );
-  addCheckboxRow('Reduced Motion (Giảm chuyển động):', s.reducedMotion, (v) =>
-    controller.updateSettings({ reducedMotion: v }),
+  addCheckboxRow(
+    t.settingsReducedMotionLabel,
+    s.reducedMotion,
+    (v) => controller.updateSettings({ reducedMotion: v }),
+    'settings-reduced-motion',
   );
-  addCheckboxRow('Mute All Audio (Tắt toàn bộ âm thanh):', s.muted, (v) =>
-    controller.updateSettings({ muted: v }),
-  );
+  addCheckboxRow(t.settingsMuteLabel, s.muted, (v) => controller.updateSettings({ muted: v }));
 
   const addSliderRow = (label: string, value: number, onInput: (v: number) => void) => {
     const row = el('div', 'lw-list-row');
@@ -695,29 +950,40 @@ function renderSettingsTab(
     container.appendChild(row);
   };
 
-  addSliderRow('Music Volume (Âm lượng nhạc nền)', s.bgmVolume, (v) =>
+  addSliderRow(t.settingsBgmLabel, s.bgmVolume, (v) =>
     controller.updateSettings({ bgmVolume: v }),
   );
-  addSliderRow('Effects Volume (Âm lượng hiệu ứng)', s.sfxVolume, (v) =>
+  addSliderRow(t.settingsSfxLabel, s.sfxVolume, (v) =>
     controller.updateSettings({ sfxVolume: v }),
   );
 
-  container.appendChild(el('h4', '', 'Keyboard Remap (Đổi phím điều khiển)'));
+  container.appendChild(el('h4', '', t.settingsTutorialHeader));
+  const tutRow = el('div', 'lw-choice-list');
+  const restartTutBtn = el('button', 'lw-btn lw-btn-sm', t.settingsRestartTutorialBtn);
+  restartTutBtn.setAttribute('data-testid', 'btn-restart-onboarding');
+  restartTutBtn.addEventListener('click', () => {
+    controller.restartOnboardingGuide();
+    onRerender();
+  });
+  const skipTutBtn = el('button', 'lw-btn lw-btn-sm', t.settingsSkipTutorialBtn);
+  skipTutBtn.addEventListener('click', () => {
+    controller.skipOnboardingGuide();
+    onRerender();
+  });
+  tutRow.append(restartTutBtn, skipTutBtn);
+  container.appendChild(tutRow);
+
+  container.appendChild(el('h4', '', t.settingsKeyMapHeader));
   const rebindGrid = el('div', 'lw-choice-list');
-  for (const [kField, label] of [
-    ['up', 'Up'],
-    ['down', 'Down'],
-    ['left', 'Left'],
-    ['right', 'Right'],
-    ['interact', 'Interact'],
-    ['journal', 'Journal'],
-  ] as const) {
+  for (const kField of ['up', 'down', 'left', 'right', 'interact', 'journal'] as const) {
+    const label = t.settingsKeyLabels[kField];
     const waiting = viewState.awaitingKeyRebind === kField;
     const b = el(
       'button',
       waiting ? 'lw-btn lw-btn-primary lw-btn-sm' : 'lw-btn lw-btn-sm',
-      waiting ? `Press key for ${label}...` : `${label}: ${s.keyMap[kField]}`,
+      waiting ? t.settingsPressKey(label) : `${label}: ${s.keyMap[kField]}`,
     );
+    b.setAttribute('data-testid', `btn-rebind-${kField}`);
     b.addEventListener('click', () => {
       viewState.awaitingKeyRebind = kField;
       onRerender();
@@ -726,17 +992,12 @@ function renderSettingsTab(
   }
   container.appendChild(rebindGrid);
 
-  container.appendChild(el('h4', '', 'Save & Backup (Lưu trữ an toàn)'));
+  container.appendChild(el('h4', '', t.settingsSaveHeader));
   if (controller.saveRepo.hasMultiTabConflict) {
-    const conflictNote = el(
-      'p',
-      'lw-battle-log',
-      'Phát hiện một tab khác vừa lưu tiến trình mới hơn. Bấm Đồng bộ để tải bản mới nhất trước khi lưu đè.',
-    );
-    container.appendChild(conflictNote);
+    container.appendChild(el('p', 'lw-battle-log', t.settingsMultiTabWarning));
   }
   const saveRow = el('div', 'lw-choice-list');
-  const saveNowBtn = el('button', 'lw-btn lw-btn-moss', 'Save Progress Now');
+  const saveNowBtn = el('button', 'lw-btn lw-btn-moss', t.settingsSaveNowBtn);
   saveNowBtn.setAttribute('data-testid', 'btn-save-now');
   saveNowBtn.addEventListener('click', () => {
     controller.persistState();
@@ -744,7 +1005,7 @@ function renderSettingsTab(
     onRerender();
   });
 
-  const exportBtn = el('button', 'lw-btn lw-btn-primary', 'Export Save (.json)');
+  const exportBtn = el('button', 'lw-btn lw-btn-primary', t.settingsExportBtn);
   exportBtn.setAttribute('data-testid', 'btn-export-save');
   exportBtn.addEventListener('click', () => {
     const json = controller.exportSaveFileContent();
@@ -757,7 +1018,7 @@ function renderSettingsTab(
     URL.revokeObjectURL(url);
   });
 
-  const importLabel = el('label', 'lw-btn', 'Import Save (.json)');
+  const importLabel = el('label', 'lw-btn', t.settingsImportBtn);
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = '.json,application/json';
@@ -771,7 +1032,7 @@ function renderSettingsTab(
       if (!res.ok) {
         controller.pushToast(
           `Import rejected: ${res.error ?? 'invalid'}`,
-          `Từ chối tệp lưu lỗi: ${res.error ?? 'không hợp lệ'}`,
+          `Từ chối tệp lưu lỗi: ${localizeSaveNotice(res.error ?? 'không hợp lệ', 'vi')}`,
         );
         onRerender();
       }
@@ -781,7 +1042,7 @@ function renderSettingsTab(
 
   saveRow.append(saveNowBtn, exportBtn, importLabel);
   if (controller.saveRepo.hasMultiTabConflict) {
-    const syncBtn = el('button', 'lw-btn lw-btn-primary', 'Sync Newer Tab Save');
+    const syncBtn = el('button', 'lw-btn lw-btn-primary', t.settingsSyncTabBtn);
     syncBtn.setAttribute('data-testid', 'btn-sync-newer-tab');
     syncBtn.addEventListener('click', () => {
       controller.syncNewerTabSave();
@@ -789,21 +1050,27 @@ function renderSettingsTab(
     });
     saveRow.appendChild(syncBtn);
   }
+  const creditsBtn = el('button', 'lw-btn lw-btn-sm', `${t.creditsBtn} (v${APP_VERSION})`);
+  creditsBtn.setAttribute('data-testid', 'btn-settings-credits');
+  creditsBtn.addEventListener('click', () => controller.openCreditsModal());
+  saveRow.appendChild(creditsBtn);
+
   container.appendChild(saveRow);
   void LEXICON_INDEX;
 }
 
 export function buildSupplyPostModal(controller: GameController): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
   const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
   const card = el('section', 'lw-notebook');
   card.style.maxWidth = '640px';
   card.setAttribute('data-testid', 'supply-post-modal');
 
   const header = el('header', 'lw-notebook-header');
-  header.appendChild(
-    el('strong', '', `Expedition Supply Post | Your Tokens: ${controller.state.tokens}`),
-  );
-  const closeBtn = el('button', 'lw-btn lw-btn-sm', 'Close');
+  header.appendChild(el('strong', '', t.supplyHeader(controller.state.tokens)));
+  const closeBtn = el('button', 'lw-btn lw-btn-sm', t.supplyCloseBtn);
   closeBtn.addEventListener('click', () => controller.closeModal());
   header.appendChild(closeBtn);
   card.appendChild(header);
@@ -816,13 +1083,17 @@ export function buildSupplyPostModal(controller: GameController): HTMLElement {
     const titleLine = el('div', 'lw-hud-title');
     titleLine.appendChild(createItemSpriteSpan(item.id));
     titleLine.appendChild(
-      el('strong', '', `${item.nameEn} (${item.nameVi}) | ${item.price} Tokens (Bag: ${owned})`),
+      el(
+        'strong',
+        '',
+        `${pickText(uiLang, item.nameEn, item.nameVi)} | ${t.supplyPriceOwned(item.price, owned)}`,
+      ),
     );
     left.appendChild(titleLine);
-    left.appendChild(el('div', 'lw-hud-quest', item.descriptionEn));
+    left.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, item.descriptionEn, item.descriptionVi)));
     row.appendChild(left);
 
-    const buyBtn = el('button', 'lw-btn lw-btn-primary lw-btn-sm', 'Exchange 1x');
+    const buyBtn = el('button', 'lw-btn lw-btn-primary lw-btn-sm', t.supplyBuyBtn);
     buyBtn.setAttribute('data-testid', `btn-buy-${item.id}`);
     buyBtn.addEventListener('click', () => controller.purchaseItem(item.id, 1));
     row.appendChild(buyBtn);
@@ -839,14 +1110,17 @@ export function buildCampReviewModal(
   viewState: JournalViewState,
   onRerender: () => void,
 ): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
   const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
   const card = el('section', 'lw-notebook');
   card.style.maxWidth = '580px';
   card.setAttribute('data-testid', 'camp-review-modal');
 
   const header = el('header', 'lw-notebook-header');
-  header.appendChild(el('strong', '', 'Campfire Word Practice (Tự nguyện, không phạt)'));
-  const skipBtn = el('button', 'lw-btn lw-btn-sm', 'Finish Anytime');
+  header.appendChild(el('strong', '', t.campHeader));
+  const skipBtn = el('button', 'lw-btn lw-btn-sm', t.campSkipBtn);
   skipBtn.addEventListener('click', () => {
     viewState.campAnsweredCurrent = false;
     viewState.campAnsweredMessageVi = '';
@@ -858,22 +1132,20 @@ export function buildCampReviewModal(
   const body = el('div', 'lw-notebook-body');
   const prompt = controller.campPrompts[controller.campPromptIndex];
   if (!prompt) {
-    body.appendChild(el('p', '', 'No words queued yet. Read signs and talk to Rangers first!'));
+    body.appendChild(el('p', '', t.campEmpty));
     card.appendChild(body);
     backdrop.appendChild(card);
     return backdrop;
   }
 
-  const dueTag = prompt.isDueNow ? 'Due for Re-encounter' : 'Optional Warm-up';
   body.appendChild(
     el(
       'div',
       'lw-hud-quest',
-      `Card ${controller.campPromptIndex + 1} of ${controller.campPrompts.length} | ${dueTag}`,
+      t.campCardCounter(controller.campPromptIndex + 1, controller.campPrompts.length, prompt.isDueNow),
     ),
   );
-  const wordHeading = el('h3', '', `${prompt.entry.word} ${prompt.entry.phonetic}`);
-  body.appendChild(wordHeading);
+  body.appendChild(el('h3', '', `${prompt.entry.word} ${prompt.entry.phonetic}`));
   body.appendChild(el('p', 'lw-battle-log', prompt.promptSentenceEn));
 
   const choices = el('div', 'lw-move-grid');
@@ -884,8 +1156,8 @@ export function buildCampReviewModal(
       const res = controller.answerCampfirePrompt(ch.wordId);
       viewState.campAnsweredCurrent = true;
       viewState.campAnsweredMessageVi = res.matched
-        ? `Chính xác! "${prompt.entry.word}" nghĩa là "${prompt.entry.meaningVi}". (${prompt.promptSentenceVi})`
-        : `Gợi nhớ nhẹ nhàng: "${prompt.entry.word}" có nghĩa là "${prompt.entry.meaningVi}". (${prompt.promptSentenceVi})`;
+        ? t.campFeedbackCorrect(prompt.entry.word, prompt.entry.meaningVi, prompt.promptSentenceVi)
+        : t.campFeedbackGentle(prompt.entry.word, prompt.entry.meaningVi, prompt.promptSentenceVi);
       onRerender();
     });
     choices.appendChild(cBtn);
@@ -896,7 +1168,7 @@ export function buildCampReviewModal(
     const fb = el('p', 'lw-battle-log', viewState.campAnsweredMessageVi);
     fb.style.marginTop = '10px';
     body.appendChild(fb);
-    const nextBtn = el('button', 'lw-btn lw-btn-primary', 'Next Card / Tiếp tục');
+    const nextBtn = el('button', 'lw-btn lw-btn-primary', t.campNextBtn);
     nextBtn.addEventListener('click', () => {
       viewState.campAnsweredCurrent = false;
       viewState.campAnsweredMessageVi = '';
@@ -912,30 +1184,21 @@ export function buildCampReviewModal(
 
 export function buildEndingBannerModal(controller: GameController): HTMLElement {
   const state = controller.state;
+  const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
   const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
   const card = el('section', 'lw-notebook lw-ending-card');
   card.style.maxWidth = '620px';
   card.setAttribute('data-testid', 'ending-banner-modal');
 
   const header = el('header', 'lw-notebook-header');
-  header.appendChild(el('strong', '', 'Verdant Basin Harmony Restored | Hoàn Tất Cốt Truyện'));
+  header.appendChild(el('strong', '', t.endingHeader));
   card.appendChild(header);
 
   const body = el('div', 'lw-notebook-body');
-  body.appendChild(
-    el(
-      'p',
-      'lw-ending-lead',
-      'All four Resonance Stones sing together beneath Starfall Sanctuary. Thank you for exploring Verdant Basin side by side with your Wildkin companions!',
-    ),
-  );
-  body.appendChild(
-    el(
-      'p',
-      'lw-hud-quest',
-      'Cả bốn phiến Đá Cộng Hưởng đã ngân vang hòa hợp dưới bầu trời Thánh Địa Sao Rơi. Hậu truyện nay mở ra Tái Đấu Bậc Thầy cùng bốn Thủ lĩnh, săn dấu vết biến thể Ánh Sao và thu phục trọn 30 loài.',
-    ),
-  );
+  body.appendChild(el('p', 'lw-ending-lead', t.endingLead));
+  body.appendChild(el('p', 'lw-hud-quest', t.endingSub));
 
   const showcase = el('div', 'lw-ending-party');
   for (const member of state.party) {
@@ -945,24 +1208,199 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
     chip.appendChild(
       createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
     );
-    chip.appendChild(el('strong', '', `${sp.name} Lv.${member.level}`));
+    chip.appendChild(el('strong', '', `${sp.name} ${t.levelShort(member.level)}`));
     showcase.appendChild(chip);
   }
   body.appendChild(showcase);
 
   const completedQuests = Object.values(state.quests).filter((q) => q.status === 'completed').length;
   const masteredWords = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
-  const statsBox = el(
-    'div',
-    'lw-battle-log',
-    `Steps: ${state.stepCount} | Bonded: ${state.caughtSpecies.length}/30 | Quests: ${completedQuests}/${QUESTS.length} | Warden Rematches: ${state.rematchCleared.length}/4 | Words Encountered: ${Object.keys(state.lexicon).length} (Mastered: ${masteredWords})`,
+  body.appendChild(
+    el(
+      'div',
+      'lw-battle-log',
+      t.endingStats(
+        state.stepCount,
+        state.caughtSpecies.length,
+        completedQuests,
+        QUESTS.length,
+        state.rematchCleared.length,
+        Object.keys(state.lexicon).length,
+        masteredWords,
+      ),
+    ),
   );
-  body.appendChild(statsBox);
 
-  const closeBtn = el('button', 'lw-btn lw-btn-primary', 'Continue Post-Game Exploration / Khám phá hậu truyện');
+  const closeBtn = el('button', 'lw-btn lw-btn-primary', t.endingContinueBtn);
   closeBtn.setAttribute('data-testid', 'btn-close-ending');
   closeBtn.addEventListener('click', () => controller.closeModal());
   body.appendChild(closeBtn);
+
+  card.appendChild(body);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
+export function buildLostHelperModal(controller: GameController): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+  const report = controller.getLostHelperReport();
+
+  const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
+  const card = el('section', 'lw-notebook');
+  card.style.maxWidth = '560px';
+  card.setAttribute('data-testid', 'lost-helper-modal');
+
+  const header = el('header', 'lw-notebook-header');
+  header.appendChild(el('strong', '', t.lostModalTitle));
+  const closeBtn = el('button', 'lw-btn lw-btn-sm', t.lostModalClose);
+  closeBtn.setAttribute('data-testid', 'btn-close-lost-helper');
+  closeBtn.addEventListener('click', () => controller.closeModal());
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const body = el('div', 'lw-notebook-body');
+  body.appendChild(
+    el(
+      'p',
+      'lw-ending-lead',
+      t.lostWhereYouAre(pickText(uiLang, report.regionNameEn, report.regionNameVi)),
+    ),
+  );
+
+  if (report.needsHealFirst) {
+    body.appendChild(el('div', 'lw-battle-assist-bar lw-boss-warn-bar', t.lostHealAdvice));
+  }
+
+  const infoBox = el('div', 'lw-journal-entry');
+  const addLine = (lbl: string, val: string) => {
+    const row = el('div', 'lw-quest-detail-row');
+    row.appendChild(el('strong', '', `${lbl} `));
+    row.appendChild(document.createTextNode(val));
+    infoBox.appendChild(row);
+  };
+  addLine(t.lostNextAction, pickText(uiLang, report.nextActionEn, report.nextActionVi));
+  addLine(t.lostTargetLabel, pickText(uiLang, report.targetLabelEn, report.targetLabelVi));
+  addLine(t.lostDirectionLabel, pickText(uiLang, report.routeSummaryEn, report.routeSummaryVi));
+  if (report.recommendedPrepEn || report.recommendedPrepVi) {
+    addLine(
+      t.questFieldPrep,
+      pickText(uiLang, report.recommendedPrepEn ?? '', report.recommendedPrepVi ?? ''),
+    );
+  }
+  body.appendChild(infoBox);
+
+  const actions = el('div', 'lw-choice-list');
+  if (controller.state.settings.guidanceMode !== 'full') {
+    const enableBtn = el('button', 'lw-btn lw-btn-moss', t.lostEnableGuidanceBtn);
+    enableBtn.setAttribute('data-testid', 'btn-lost-enable-full');
+    enableBtn.addEventListener('click', () => {
+      controller.updateSettings({ guidanceMode: 'full' });
+      controller.closeModal();
+    });
+    actions.appendChild(enableBtn);
+  }
+  const trackMainBtn = el('button', 'lw-btn lw-btn-primary', t.lostTrackMainBtn);
+  trackMainBtn.setAttribute('data-testid', 'btn-lost-track-main');
+  trackMainBtn.addEventListener('click', () => {
+    controller.setTrackedQuest(null);
+    controller.closeModal();
+  });
+  actions.appendChild(trackMainBtn);
+
+  const restartGuideBtn = el('button', 'lw-btn lw-btn-sm', t.lostRestartGuideBtn);
+  restartGuideBtn.setAttribute('data-testid', 'btn-lost-restart-guide');
+  restartGuideBtn.addEventListener('click', () => {
+    controller.restartOnboardingGuide();
+    controller.closeModal();
+  });
+  actions.appendChild(restartGuideBtn);
+
+  const quickGuideContainer = el('div', 'lw-quick-guide-list');
+  quickGuideContainer.style.display = 'none';
+  quickGuideContainer.setAttribute('data-testid', 'lost-quick-guide-panel');
+  for (const item of getOnboardingQuickGuideEntries()) {
+    const row = el('div', 'lw-journal-entry');
+    row.appendChild(
+      el('strong', '', `${item.stepNumber}. ${pickText(uiLang, item.titleEn, item.titleVi)}`),
+    );
+    row.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, item.summaryEn, item.summaryVi)));
+    quickGuideContainer.appendChild(row);
+  }
+
+  const toggleGuideBtn = el('button', 'lw-btn lw-btn-sm', t.lostQuickGuideBtn);
+  toggleGuideBtn.setAttribute('data-testid', 'btn-lost-quick-guide');
+  toggleGuideBtn.addEventListener('click', () => {
+    const isHidden = quickGuideContainer.style.display === 'none';
+    quickGuideContainer.style.display = isHidden ? 'flex' : 'none';
+    toggleGuideBtn.textContent = isHidden ? t.lostHideQuickGuideBtn : t.lostQuickGuideBtn;
+  });
+  actions.appendChild(toggleGuideBtn);
+
+  body.appendChild(actions);
+  body.appendChild(quickGuideContainer);
+  card.appendChild(body);
+  backdrop.appendChild(card);
+  return backdrop;
+}
+
+export function buildCreditsModal(controller: GameController): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
+
+  const backdrop = el('div', 'lw-modal-backdrop lw-interactive');
+  const card = el('section', 'lw-notebook');
+  card.style.maxWidth = '660px';
+  card.setAttribute('data-testid', 'credits-modal');
+
+  const header = el('header', 'lw-notebook-header');
+  header.appendChild(el('strong', '', t.creditsModalTitle));
+  const closeBtn = el('button', 'lw-btn lw-btn-sm', t.creditsCloseBtn);
+  closeBtn.setAttribute('data-testid', 'btn-close-credits');
+  closeBtn.addEventListener('click', () => controller.closeModal());
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const body = el('div', 'lw-notebook-body');
+  body.appendChild(el('p', 'lw-ending-lead', t.creditsVersionLine(APP_VERSION)));
+  body.appendChild(el('p', 'lw-hud-quest', t.creditsLicenseSummary));
+
+  body.appendChild(el('h4', '', t.creditsThirdPartyTitle));
+  const entries: ReadonlyArray<readonly [string, string]> = [
+    ['Roguelike/RPG Pack (Kenney Vleugels)', 'CC0 1.0 Universal (tileset.png)'],
+    ['Zelda-like tilesets and sprites (ArMM1998)', 'CC0 1.0 Universal (structures.png)'],
+    ['Tiny 16: Basic (Lanea Zimmerman / Sharm)', 'CC-BY 3.0 / CC-BY 4.0 (characters.png, tileset.png)'],
+    ['Hazy Hills & Gothicvania Swamp (Luis Zuno / @ansimuz)', 'CC-BY 3.0 & CC0 1.0 (battle-bg.png)'],
+    ['Parallax Backgrounds (Admurin)', 'CC-BY 4.0 (battle-bg.png)'],
+    ['Sunset Temple Tiles (Pyromantic)', 'CC0 1.0 / CC-BY 3.0 (battle-bg.png)'],
+    ['Phaser 3.90.0, Vite 8.4.0, Vitest 5.1.2', 'MIT License'],
+    ['TypeScript 5.8.3, Playwright 1.65.1', 'Apache-2.0 License'],
+  ];
+  for (const [name, license] of entries) {
+    const row = el('div', 'lw-list-row');
+    row.append(el('strong', '', name), el('span', 'lw-hud-quest', license));
+    body.appendChild(row);
+  }
+
+  const links = el('div', 'lw-credits-links');
+  const licLink = document.createElement('a');
+  licLink.href = './LICENSE.txt';
+  licLink.target = '_blank';
+  licLink.rel = 'noopener noreferrer';
+  licLink.className = 'lw-btn lw-btn-sm';
+  licLink.setAttribute('data-testid', 'link-license-txt');
+  licLink.textContent = t.creditsViewLicenseLink;
+
+  const credLink = document.createElement('a');
+  credLink.href = './CREDITS.md';
+  credLink.target = '_blank';
+  credLink.rel = 'noopener noreferrer';
+  credLink.className = 'lw-btn lw-btn-primary lw-btn-sm';
+  credLink.setAttribute('data-testid', 'link-credits-md');
+  credLink.textContent = t.creditsViewCreditsLink;
+
+  links.append(licLink, credLink);
+  body.appendChild(links);
 
   card.appendChild(body);
   backdrop.appendChild(card);

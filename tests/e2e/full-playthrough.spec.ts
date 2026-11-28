@@ -121,25 +121,30 @@ async function resolveBrowserBattle(
 
     const domState = await page.evaluate(() => {
       const finishVisible = Boolean(document.querySelector('[data-testid="btn-battle-finish"]'));
-      const enemyPlate = document.querySelector('.lw-plate-enemy');
-      const enemyStrong = enemyPlate?.querySelector('strong')?.textContent ?? '';
-      const enemyFull = enemyPlate?.textContent ?? '';
-      const enemyEl = enemyPlate?.querySelector('.lw-badge-element')?.textContent?.trim() ?? '';
-      const playerFull = document.querySelector('.lw-combatant-plate')?.textContent ?? '';
-      const moveTexts = Array.from(document.querySelectorAll('.lw-move-card')).map(
-        (el) => el.textContent ?? '',
-      );
+      const enemyPlate = document.querySelector('.lw-plate-enemy') as HTMLElement | null;
+      const playerPlate = document.querySelector('.lw-combatant-plate') as HTMLElement | null;
+      const moveCards = Array.from(document.querySelectorAll('.lw-move-card')).map((el) => {
+        const h = el as HTMLElement;
+        return {
+          text: h.textContent ?? '',
+          category: h.dataset.category ?? 'attack',
+          effectiveness: h.dataset.effectiveness ?? 'normal',
+        };
+      });
       const movesTabActive =
         document
           .querySelector('[data-testid="battle-tab-moves"]')
           ?.classList.contains('lw-btn-primary') ?? false;
       return {
         finishVisible,
-        isWild: enemyStrong.startsWith('Wild '),
-        alreadyBonded: enemyFull.includes('Bonded'),
-        enemyElement: enemyEl,
-        playerFull,
-        moveTexts,
+        isWild: enemyPlate?.dataset.battleKind === 'wild',
+        alreadyBonded: enemyPlate?.dataset.bonded === 'true',
+        enemyElement: enemyPlate?.dataset.element ?? '',
+        playerStatus: playerPlate?.dataset.status ?? 'none',
+        playerHp: Number(playerPlate?.dataset.hp ?? 100),
+        playerMaxHp: Number(playerPlate?.dataset.maxHp ?? 100),
+        playerLevel: Number(playerPlate?.dataset.level ?? 1),
+        moveCards,
         movesTabActive,
       };
     });
@@ -150,7 +155,7 @@ async function resolveBrowserBattle(
       return (await readSnap(page)).caughtCount > caughtBefore;
     }
 
-    const { isWild, alreadyBonded, enemyElement, playerFull: playerPlateFoot } = domState;
+    const { isWild, alreadyBonded, enemyElement, playerStatus } = domState;
 
     let switchedAwayFromMoves = false;
 
@@ -179,10 +184,7 @@ async function resolveBrowserBattle(
     }
 
     // Cure turn-blocking sleep/paralysis in trainer battles so Astraloom's dusk_lull never locks out turns
-    if (
-      !isWild &&
-      (playerPlateFoot.includes('SLEEP') || playerPlateFoot.includes('PARALYZE'))
-    ) {
+    if (!isWild && (playerStatus === 'sleep' || playerStatus === 'paralyze')) {
       await page.getByTestId('battle-tab-bag').click();
       switchedAwayFromMoves = true;
       const herbBtn = page.getByTestId('btn-battle-item-clear_herb');
@@ -193,9 +195,8 @@ async function resolveBrowserBattle(
     }
 
     // Read exact HP from player plate and use strongest tonic first (nectar_flask +180 > orchard_salve +85 > dew_tonic +35)
-    const hpNumbers = playerPlateFoot.match(/HP\s+(\d+)\/(\d+)/);
-    const curHp = hpNumbers ? Number(hpNumbers[1]) : 100;
-    const maxHp = hpNumbers ? Number(hpNumbers[2]) : 100;
+    const curHp = domState.playerHp;
+    const maxHp = domState.playerMaxHp;
     const healThreshold = isWild ? 0.35 : 0.62;
     if (curHp <= maxHp * healThreshold) {
       await page.getByTestId('battle-tab-bag').click();
@@ -220,26 +221,33 @@ async function resolveBrowserBattle(
       }
     }
 
-    let moveTexts = domState.moveTexts;
+    let moveCards = domState.moveCards;
     if (!domState.movesTabActive || switchedAwayFromMoves) {
       await page.getByTestId('battle-tab-moves').click();
-      moveTexts = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('.lw-move-card')).map((el) => el.textContent ?? ''),
+      moveCards = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.lw-move-card')).map((el) => {
+          const h = el as HTMLElement;
+          return {
+            text: h.textContent ?? '',
+            category: h.dataset.category ?? 'attack',
+            effectiveness: h.dataset.effectiveness ?? 'normal',
+          };
+        }),
       );
     }
 
-    // Prefer a move tagged "Effective" with remaining PP, else highest-index learned move with PP
+    // Prefer a move tagged "super" with remaining PP, else highest-index learned attack with PP
     let chosenIdx = 0;
     let bestScore = -999;
-    for (let i = 0; i < moveTexts.length; i++) {
-      const cardText = moveTexts[i] ?? '';
-      if (cardText.includes('(0/')) continue;
+    for (let i = 0; i < moveCards.length; i++) {
+      const card = moveCards[i]!;
+      if (card.text.includes('(0/')) continue;
       let score = i * 5;
-      if (cardText.includes('Support')) {
+      if (card.category === 'support') {
         score -= 500;
-      } else if (cardText.includes('Effective')) {
+      } else if (card.effectiveness === 'super') {
         score += 100;
-      } else if (cardText.includes('Resisted')) {
+      } else if (card.effectiveness === 'resisted') {
         score -= 60;
       }
       if (score > bestScore) {
@@ -248,21 +256,16 @@ async function resolveBrowserBattle(
       }
     }
 
-    // If in a trainer battle and all our active partner's attacks are Resisted, switch only to a trained teammate (within 3 levels)
+    // If in a trainer battle and all our active partner's attacks are Resisted, switch only to a trained teammate (within 4 levels)
     if (!isWild && bestScore < -20 && switchedCount < 2) {
-      const playerPlateTxt =
-        (await page.locator('.lw-combatant-plate').first().textContent()) ?? '';
-      const leadLvMatch = playerPlateTxt.match(/Lv\.(\d+)/);
-      const leadLv = leadLvMatch ? Number(leadLvMatch[1]) : 1;
+      const leadLv = domState.playerLevel;
       await page.getByTestId('battle-tab-team').click();
       const teamCards = page.locator('.lw-move-card');
       const tCount = await teamCards.count();
       let switched = false;
       for (let ti = 0; ti < tCount; ti++) {
         const card = teamCards.nth(ti);
-        const txt = (await card.textContent()) ?? '';
-        const lvMatch = txt.match(/Lv\.(\d+)/);
-        const memberLv = lvMatch ? Number(lvMatch[1]) : 1;
+        const memberLv = Number((await card.getAttribute('data-level')) ?? 1);
         const btn = card.locator('button:not([disabled])').first();
         if (memberLv >= Math.max(12, leadLv - 4) && (await btn.isVisible())) {
           switchedCount += 1;
@@ -405,39 +408,34 @@ async function walkBrowserAdjacentAndInteract(
 async function getLeadHudStatus(
   page: Page,
 ): Promise<{ level: number; curHp: number; maxHp: number }> {
-  const txt = (await page.locator('.lw-badge-lead').textContent()) ?? '';
-  const lvMatch = txt.match(/Lv\.(\d+)/);
-  const hpMatch = txt.match(/\((\d+)\/(\d+)\)/);
+  const badge = page.locator('.lw-badge-lead').first();
   return {
-    level: lvMatch ? Number(lvMatch[1]) : 1,
-    curHp: hpMatch ? Number(hpMatch[1]) : 100,
-    maxHp: hpMatch ? Number(hpMatch[2]) : 100,
+    level: Number((await badge.getAttribute('data-level')) ?? 1),
+    curHp: Number((await badge.getAttribute('data-hp')) ?? 100),
+    maxHp: Number((await badge.getAttribute('data-max-hp')) ?? 100),
   };
 }
 
-async function makePartyElementLeadViaUi(page: Page, elementText: string): Promise<boolean> {
+async function makePartyElementLeadViaUi(page: Page, elementKey: string): Promise<boolean> {
   await page.getByTestId('btn-open-journal').click();
   await page.getByTestId('journal-tab-team').click();
   let partyRow = page
-    .locator('.lw-list-row', { hasText: elementText })
-    .filter({ hasNotText: 'Swap with Last Slot' })
+    .locator(`.lw-list-row[data-element="${elementKey}"][data-is-reserve="false"]`)
     .first();
   if ((await partyRow.count()) === 0) {
     const reserveRow = page
-      .locator('.lw-list-row', { hasText: elementText })
-      .filter({ hasText: 'Swap with Last Slot' })
+      .locator(`.lw-list-row[data-element="${elementKey}"][data-is-reserve="true"]`)
       .first();
     if ((await reserveRow.count()) > 0) {
-      await reserveRow.getByRole('button', { name: 'Swap with Last Slot' }).click();
+      await reserveRow.locator('button[data-action="swap-reserve"]').click();
       partyRow = page
-        .locator('.lw-list-row', { hasText: elementText })
-        .filter({ hasNotText: 'Swap with Last Slot' })
+        .locator(`.lw-list-row[data-element="${elementKey}"][data-is-reserve="false"]`)
         .first();
     }
   }
   let promoted = false;
   if ((await partyRow.count()) > 0) {
-    const makeLeadBtn = partyRow.getByRole('button', { name: 'Make Lead' });
+    const makeLeadBtn = partyRow.locator('button[data-action="make-lead"]');
     if (await makeLeadBtn.isVisible()) {
       await makeLeadBtn.click();
     }
@@ -507,6 +505,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     });
 
     await page.goto('/');
+    // Select standard Adventure difficulty & skip beginner onboarding strip for full baseline playthrough
+    await page.getByTestId('select-difficulty').selectOption('adventure');
+    await page.getByTestId('checkbox-skip-tutorial').check();
     await page.getByTestId('btn-new-game').click();
 
     // Choose Mosskit (Forest Leaf starter) via real dialogue clicks
@@ -519,14 +520,8 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     // Set Battle Animation Pace to Instant and Reduced Motion via real Settings UI controls
     await page.getByTestId('btn-open-journal').click();
     await page.getByTestId('journal-tab-settings').click();
-    const speedSelect = page
-      .locator('.lw-list-row', { hasText: 'Battle Animation Pace' })
-      .locator('select');
-    await speedSelect.selectOption('instant');
-    await page
-      .locator('.lw-list-row', { hasText: 'Reduced Motion' })
-      .locator('input[type="checkbox"]')
-      .check();
+    await page.getByTestId('settings-battle-speed').selectOption('instant');
+    await page.getByTestId('settings-reduced-motion').check();
     await page.getByTestId('btn-close-journal').click();
 
     // Open Mosslight chest (5,3) and enter Whisperwood Glen via (0,12)
@@ -550,7 +545,7 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
 
     // Open Reedwater chest (3,5), catch guaranteed Water partner & train Briarpaw to Lv.16, defeat Mirella (27,4)
     await walkBrowserAdjacentAndInteract(page, 3, 5, false, { fleeWild: true });
-    await trainBrowserNearCampfire(page, [7, 10], [8, 10], [5, 10], 16, 3, 'Water');
+    await trainBrowserNearCampfire(page, [7, 10], [8, 10], [5, 10], 16, 3, 'water');
     await walkBrowserAdjacentAndInteract(page, 27, 4, true, { fleeWild: true });
     expect((await readSnap(page)).regionId).toBe('reedwater_fen');
 
@@ -580,7 +575,7 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
 
     // Train Briarpaw to Lv.21 (evolves to Stage 3 Verdantag!) on canyon Stone wilds, then promote Water partner to Lv.21 (Lotusbell!) and defeat Kaelen (27,18)
     await trainBrowserNearCampfire(page, [21, 2], [22, 2], [15, 5], 21, 3);
-    const promotedWater = await makePartyElementLeadViaUi(page, '(Water |');
+    const promotedWater = await makePartyElementLeadViaUi(page, 'water');
     expect(promotedWater).toBe(true);
     await trainBrowserNearCampfire(page, [21, 2], [22, 2], [15, 5], 21, 3);
     await walkBrowserAdjacentAndInteract(page, 27, 18, true, {
@@ -610,7 +605,7 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     // Open Sanctuary Vault chest (27,3), train Lotusbell to Lv.23 (retaining Tidal Crest before Lv.24!), lead with Stage 3 Verdantag, and defeat Astraea (15,5)
     await walkBrowserAdjacentAndInteract(page, 27, 3, false, { fleeWild: true });
     await trainBrowserNearCampfire(page, [11, 17], [11, 18], [15, 16], 23, 3);
-    await makePartyElementLeadViaUi(page, '(Leaf |');
+    await makePartyElementLeadViaUi(page, 'leaf');
     await walkBrowserAdjacentAndInteract(page, 15, 5, true, {
       fleeWild: true,
       screenshotPath: path.join(SCREENSHOT_DIR, '17-starfall-final-trial.png'),

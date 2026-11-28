@@ -86,14 +86,14 @@ test.describe('LingoWild Browser E2E Verification', () => {
     }
 
     // Close gloss slip via UI button (works identically on mobile & desktop without keyboard!)
-    await page.getByTestId('gloss-popup').getByRole('button', { name: 'Đóng' }).click();
+    await page.getByTestId('btn-gloss-close').click();
     await expect(page.getByTestId('gloss-popup')).toBeHidden();
 
     // Tap a word outside the core lexicon ("Across") to verify offline Pocket Word Assist!
     await page.locator('.word-token-pocket', { hasText: 'Across' }).first().click();
     await expect(page.getByTestId('gloss-popup')).toBeVisible();
     await expect(page.getByTestId('gloss-popup')).toContainText('băng qua');
-    await page.getByTestId('gloss-popup').getByRole('button', { name: 'Đóng' }).click();
+    await page.getByTestId('btn-gloss-close').click();
     await expect(page.getByTestId('gloss-popup')).toBeHidden();
 
     // Advance Rowan's 3-line intro and pick Mosskit
@@ -257,10 +257,8 @@ test.describe('LingoWild Browser E2E Verification', () => {
         }
       }
 
-      const enemyHeader = (await page.locator('.lw-plate-enemy strong').textContent()) ?? '';
-      // Format: "Wild <SpeciesName> Lv.<N>"
-      const match = enemyHeader.match(/^Wild\s+([A-Za-z]+)\s+Lv\.(\d+)/);
-      capturedSpeciesName = match?.[1] ?? '';
+      capturedSpeciesName =
+        (await page.locator('.lw-plate-enemy').getAttribute('data-species-name')) ?? '';
 
       // Observe habits once on first battle
       if (attemptLoop === 0) {
@@ -282,8 +280,9 @@ test.describe('LingoWild Browser E2E Verification', () => {
       }
 
       if (await page.getByTestId('btn-battle-finish').isVisible()) {
-        const logText = (await page.locator('.lw-battle-log').textContent()) ?? '';
-        if (logText.includes('joined your')) {
+        const wasCaptured =
+          (await page.locator('.lw-battle-log').getAttribute('data-captured')) === 'true';
+        if (wasCaptured) {
           captureDone = true;
         }
         await page.getByTestId('btn-battle-finish').click();
@@ -475,13 +474,13 @@ test.describe('LingoWild Browser E2E Verification', () => {
     for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowLeft');
     for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowUp');
 
-    // Rapidly interact 8 times with chest (5,3): +40 Tokens must apply ONCE (230 + 40 = 270T)
+    // Rapidly interact 8 times with chest (5,3): +40 Tokens must apply ONCE (230 + 40 = 270)
     for (let i = 0; i < 8; i++) {
       await page.keyboard.press('Space');
     }
-    await expect(page.locator('.lw-hud-ribbon')).toContainText('270T');
+    await expect(page.locator('.lw-hud-ribbon')).toContainText('270');
 
-    // Attempt to import an invalid save file and verify the 270T valid save is NOT overwritten!
+    // Attempt to import an invalid save file and verify the 270 valid save is NOT overwritten!
     await page.keyboard.press('KeyJ');
     await page.getByTestId('journal-tab-settings').click();
     await page.getByTestId('input-import-save').setInputFiles({
@@ -491,19 +490,19 @@ test.describe('LingoWild Browser E2E Verification', () => {
     });
 
     // Remap Journal key from KeyJ to KeyK and verify KeyK works
-    await page.getByRole('button', { name: 'Journal: KeyJ' }).click();
+    await page.getByTestId('btn-rebind-journal').click();
     await page.keyboard.press('KeyK');
-    await expect(page.getByRole('button', { name: 'Journal: KeyK' })).toBeVisible();
+    await expect(page.getByTestId('btn-rebind-journal')).toContainText('KeyK');
     await page.keyboard.press('Escape');
     await page.keyboard.press('KeyK');
     await expect(page.getByTestId('journal-modal')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Reload and verify our valid 270T save survived the rejected import!
+    // Reload and verify our valid 270 save survived the rejected import!
     await page.reload();
     await expect(page.getByTestId('btn-continue-game')).toBeVisible();
     await page.getByTestId('btn-continue-game').click();
-    await expect(page.locator('.lw-hud-ribbon')).toContainText('270T');
+    await expect(page.locator('.lw-hud-ribbon')).toContainText('270');
     expect(pageErrors).toEqual([]);
   });
 

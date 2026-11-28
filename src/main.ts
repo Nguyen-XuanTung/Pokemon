@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
-import { GameController } from './game/controller.ts';
+import { APP_VERSION, GameController } from './game/controller.ts';
 import { WorldScene } from './scenes/WorldScene.ts';
 import { GameUiRenderer } from './ui/gameUi.ts';
 import './ui/styles.css';
 
 export interface LingoWildDiagnostics {
+  readonly version: string;
   readonly bootDurationMs: number;
   readonly getSnapshot: () => {
     readonly regionId: string;
@@ -19,6 +20,11 @@ export interface LingoWildDiagnostics {
     readonly gleamingCount: number;
     readonly rematchCount: number;
     readonly tracesCount: number;
+    readonly uiLanguage: string;
+    readonly contentLanguage: string;
+    readonly difficulty: string;
+    readonly guidanceMode: string;
+    readonly onboardingStep: string | null;
     readonly fps: number;
   };
 }
@@ -109,6 +115,7 @@ new GameUiRenderer(rootEl, overlayEl, controller);
 const bootDurationMs = Math.round(performance.now() - bootStart);
 
 window.__LINGOWILD_DIAGNOSTICS__ = {
+  version: APP_VERSION,
   bootDurationMs,
   getSnapshot: () => ({
     regionId: controller.state.regionId,
@@ -123,6 +130,11 @@ window.__LINGOWILD_DIAGNOSTICS__ = {
     gleamingCount: controller.state.gleamingSpecies.length,
     rematchCount: controller.state.rematchCleared.length,
     tracesCount: controller.state.discoveredTraces.length,
+    uiLanguage: controller.state.settings.uiLanguage ?? 'vi',
+    contentLanguage: controller.state.settings.contentLanguage ?? 'bilingual',
+    difficulty: controller.state.settings.difficulty ?? 'relaxed',
+    guidanceMode: controller.state.settings.guidanceMode ?? 'full',
+    onboardingStep: controller.activeOnboardingPrompt?.id ?? null,
     fps: worldScene.measuredFps,
   }),
 };
