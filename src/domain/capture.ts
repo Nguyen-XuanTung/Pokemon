@@ -18,14 +18,19 @@ export function computeCaptureProbability(params: {
   target: CreatureInstance;
   species: SpeciesDefinition;
   charmMultiplier: number;
+  difficultyMultiplier?: number;
+  guaranteedSuccess?: boolean;
 }): number {
-  const { target, species, charmMultiplier } = params;
+  if (params.guaranteedSuccess) {
+    return 1;
+  }
+  const { target, species, charmMultiplier, difficultyMultiplier = 1 } = params;
   const maxHp = Math.max(1, target.maxHp);
   const currentHp = Math.max(1, Math.min(maxHp, target.currentHp));
   const hpFactor = (3 * maxHp - 2 * currentHp) / (3 * maxHp);
   const statusBonus = getStatusCaptureBonus(target.status);
   const baseNormalized = species.catchRate / 255;
-  const raw = baseNormalized * hpFactor * charmMultiplier * statusBonus * 1.15;
+  const raw = baseNormalized * hpFactor * charmMultiplier * statusBonus * difficultyMultiplier * 1.15;
   return Math.max(0.06, Math.min(0.98, raw));
 }
 
@@ -33,8 +38,17 @@ export function resolveCaptureAttempt(params: {
   target: CreatureInstance;
   species: SpeciesDefinition;
   charmMultiplier: number;
+  difficultyMultiplier?: number;
+  guaranteedSuccess?: boolean;
   rng: SeededRng;
 }): CaptureAttemptResult {
+  if (params.guaranteedSuccess) {
+    return {
+      probability: 1,
+      shakes: 3,
+      captured: true,
+    };
+  }
   const probability = computeCaptureProbability(params);
   const roll = params.rng.nextFloat();
   if (roll < probability) {

@@ -1,41 +1,58 @@
 # Hướng dẫn chơi LingoWild
 
-## 1. Bắt đầu hành trình và chế độ hỗ trợ tiếng Anh
+## 1. Bắt đầu hành trình cho người mới
 
-Trên màn hình mở đầu, bạn có thể xem trước ba người bạn đồng hành khởi đầu, chọn chế độ hỗ trợ ngôn ngữ và chọn mức độ câu thoại từ A1 đến B2 trước khi bấm nút khởi hành:
+Ngay trên màn hình mở đầu, LingoWild mặc định sẵn cấu hình thân thiện nhất với người mới tại Việt Nam: giao diện Tiếng Việt, hội thoại Song ngữ Anh Việt, độ khó Thư giãn và dẫn đường Đầy đủ. Bạn có thể thay đổi bất kỳ tùy chọn nào ngay từ đầu hoặc trong thẻ `Cài đặt và Lưu` giữa hành trình mà không bị mất tiến trình hay sổ từ vựng:
 
-- Chế độ Ngữ cảnh: Hiển thị câu hội thoại tiếng Anh phù hợp với mức A1 đến B2 đã chọn và gạch chân nhẹ các từ khóa trọng tâm. Bạn có thể chạm vào bất kỳ từ gạch chân nào để xem nghĩa đúng ngữ cảnh câu đó, phiên âm, từ loại cùng câu ví dụ độc lập, hoặc chạm vào hầu hết các từ tiếng Anh thông dụng khác trong câu để xem nghĩa nhanh qua từ điển bỏ túi ngoại tuyến.
-- Chế độ Song ngữ đầy đủ: Hiển thị sẵn dòng dịch tiếng Việt ngay dưới câu tiếng Anh trong hội thoại và trận đấu, vẫn giữ quyền chạm tra từng từ.
-- Chế độ Ngập tràn: Chỉ hiển thị tiếng Anh tự nhiên và chỉ gạch chân những từ do chính bạn bấm lưu vào sổ.
+- Ngôn ngữ giao diện: Chọn Tiếng Việt hoặc Tiếng Anh độc lập với ngôn ngữ câu thoại.
+- Ngôn ngữ hội thoại và nội dung:
+  - Tiếng Việt hoàn toàn: Đọc toàn bộ cốt truyện, nhật ký trận đấu và mô tả bằng tiếng Việt để chơi thư giãn hoàn toàn.
+  - Song ngữ Anh Việt: Hiển thị câu tiếng Anh kèm bản dịch tiếng Việt ngay bên dưới, vẫn cho phép chạm tra từng từ.
+  - Tiếng Anh có trợ giúp tra cứu: Hiển thị câu tiếng Anh theo mức A1 đến B2 đã chọn, gạch chân nhẹ từ khóa và cho phép chạm tra nghĩa nhanh hoặc bấm hiện bản dịch khi cần.
+  - Đắm chìm trong tiếng Anh: Chỉ hiển thị tiếng Anh tự nhiên và chỉ đánh dấu những từ do chính bạn đã bấm lưu.
+- Độ khó chiến đấu:
+  - Thư giãn: Giảm sát thương nhận vào, tăng tỷ lệ thu phục, tự hồi nhẹ sau trận và bật sẵn gợi ý chiến thuật.
+  - Phiêu lưu: Cân bằng tiêu chuẩn giữa khám phá, luyện cấp và khắc chế nguyên tố.
+  - Thử thách: Đối thủ đánh chiến thuật và chọn chiêu khắc chế tốt hơn, không bơm máu kéo dài trận vô nghĩa.
+- Bỏ qua hướng dẫn mở đầu: Người chơi đã quen thể loại nhập vai có thể đánh dấu bỏ qua hướng dẫn ngay trên màn hình mở đầu hoặc bấm nút Bỏ qua hướng dẫn bất kỳ lúc nào mà không mất vật phẩm hay nhiệm vụ.
 
-Trong mọi hộp thoại, bạn có thể bấm nút nghe để trình duyệt đọc cả câu tiếng Anh hoặc đọc riêng từng từ, bấm nút lưu từ để theo dõi trong Sổ Thực Địa, hoặc xem bản dịch cả câu bất kỳ lúc nào. Trò chơi tuân thủ nguyên tắc đặt trải nghiệm nhập vai lên trước: không bao giờ khóa đường đi, chiêu thức hay thu phục sinh vật bằng câu đố từ vựng bắt buộc.
+## 2. Dẫn đường, bản đồ nhỏ và nút Tôi bị lạc
 
-## 2. Điều khiển trên máy tính và thiết bị cảm ứng
+Khi đang ở ngoài bản đồ, bạn luôn biết mình cần đi đâu nhờ hệ thống dẫn đường ba mức (`Đầy đủ`, `Tối giản`, `Tắt`):
 
-- Trên máy tính: Di chuyển bốn hướng bằng phím mũi tên hoặc `W`, `A`, `S`, `D`; tương tác với nhân vật, biển gỗ, dấu vết sinh cảnh và chuyển thoại bằng `Space` hoặc `Enter`; chọn nhanh bốn chiêu thức trong trận đấu bằng phím số `1`, `2`, `3`, `4`; mở nhanh Bản đồ vùng bằng phím `M` hoặc mở Sổ Thực Địa bằng phím `J`; đóng cửa sổ bằng `Escape`. Toàn bộ phím tắt cơ bản đều đổi được trong thẻ Cài đặt.
-- Trên điện thoại và máy tính bảng: Khung bản đồ tự động phủ kín màn hình cả chiều dọc lẫn chiều ngang mà không méo điểm ảnh. Cụm phím chữ thập bên trái hỗ trợ cả chạm từng bước lẫn nhấn giữ để đi bộ liên tục; hai nút hành động bên phải cùng thanh mục tiêu hai dòng phía trên giúp bạn chơi trọn vẹn bằng một hoặc hai ngón cái.
+- Thanh mục tiêu góc trên trái hiển thị mũi tên hướng đi ngắn nhất kèm số bước tới điểm đến tiếp theo.
+- Vệt chấm sáng vàng trên mặt đất vẽ sẵn đường đi tránh sông, cây cối và nhà cửa; nếu mục tiêu ở vùng khác, vệt sáng sẽ dẫn tới đúng cổng chuyển vùng đã mở khóa.
+- Bản đồ nhỏ góc màn hình hiển thị vị trí hiện tại, đường đi, các cổng nối vùng và đích đến; bấm vào bản đồ nhỏ để mở Bản đồ 5 vùng lớn.
+- Nhân vật có dấu chấm than vàng đang có nhiệm vụ mới; nhân vật có dấu hỏi xanh đang chờ bạn hoàn tất hoặc thách đấu nhiệm vụ hiện tại. Khi đứng cạnh nhân vật, biển chỉ dẫn hay lửa trại, nút gợi ý tương tác sẽ hiện ngay cạnh dưới màn hình.
+- Nút `Tôi bị lạc` ở góc trên phải mở bảng trợ giúp định hướng ngay lập tức, cho biết bạn đang ở đâu, việc cần làm tiếp theo, đường đi ngắn nhất và gợi ý chuẩn bị.
+- Trong thẻ `Nhiệm vụ` của Sổ Thực Địa, mỗi nhiệm vụ đều ghi rõ việc cần làm, cần tìm ai, thuộc khu vực nào, tiến độ hiện tại, điều kiện mở khóa (nếu có) và nút `Dẫn đường` để chuyển vệt sáng sang nhiệm vụ bạn muốn ưu tiên.
 
-## 3. Đồng hành đi theo sau, chiến đấu chiến thuật và thu phục
+## 3. Điều khiển trên máy tính và thiết bị cảm ứng
 
-1. Bạn đồng hành trên bản đồ và dấu vết sinh cảnh:
-   - Sinh vật đứng đầu đội hình sẽ bước theo sau bạn trên khắp năm vùng sinh thái (có thể bật hoặc tắt trong mục Cài đặt).
-   - Trên đường thám hiểm, hãy để ý các dấu chân hoặc lông vũ phát sáng trên mặt đất để ghi nhận manh mối sinh cảnh của những loài quý hiếm vào Sổ Bách Khoa, và có cơ hội hiếm gặp các cá thể mang sắc thái ánh kim tự nhiên.
-2. Sáu nguyên tố cân bằng và dự báo lượt đấu:
+- Trên máy tính: Di chuyển bốn hướng bằng phím mũi tên hoặc `W`, `A`, `S`, `D`; tương tác và chuyển thoại bằng `Space` hoặc `Enter` (nhân vật tự quay mặt sang đối tượng đứng ngay cạnh); chọn nhanh bốn chiêu thức trong trận đấu bằng phím số `1`, `2`, `3`, `4`; mở Bản đồ vùng bằng phím `M`; mở Sổ Thực Địa bằng phím `J`; đóng cửa sổ bằng `Escape`. Toàn bộ phím tắt cơ bản đều đổi được trong thẻ Cài đặt.
+- Trên điện thoại và máy tính bảng: Khung bản đồ tự phủ kín màn hình cả chiều dọc lẫn ngang không biến dạng điểm ảnh. Cụm phím chữ thập bên trái hỗ trợ bấm từng bước và nhấn giữ để bước liên tục; bản đồ nhỏ đặt gọn phía trên nút `Sổ tay` và `Chọn` ở góc dưới phải.
+
+## 4. Hướng dẫn nhập môn 10 bước, chiến đấu và quản lý chiêu thức
+
+1. Làm quen trong 5 đến 10 phút đầu:
+   - Hướng dẫn nhập môn đi tuần tự qua 10 bước ngắn gọn: chọn bạn đồng hành đầu tiên, thử di chuyển, trò chuyện với Trinh sát Mai, theo vệt sáng sang Thung Lũng Rừng Thầm, thử trận chiến nhẹ cấp 3, kết bạn thành công 100% ở lần bắt đầu tiên, hồi đầy máu miễn phí tại lửa trại, thử chạm tra một từ tiếng Anh (có nút bỏ qua bước riêng), mở Sổ Thực Địa và tự do thám hiểm.
+2. Trợ giúp chiến đấu và sáu nguyên tố:
    - Lá rừng khắc Suối nước và Đá núi; Suối nước khắc Lửa ấm và Đá núi; Lửa ấm khắc Lá rừng và Gió mây; Đá núi khắc Gió mây và Tia chớp; Gió mây khắc Lá rừng và Tia chớp; Tia chớp khắc Suối nước và Lửa ấm.
-   - Thanh dự báo đầu mỗi lượt cho biết bên nào ra đòn trước, cảnh báo khi đối thủ có lợi thế nguyên tố `1,5x` và gợi ý đồng đội khắc chế trong đội hình. Mỗi thẻ chiêu thức đều gắn nhãn hiệu quả rõ ràng, kèm nút chỉnh nhịp độ hoạt ảnh `1x`, `2x` hoặc tức thì.
-3. Kết bạn bằng chuông cộng hưởng:
-   - Trong trận đấu hoang dã, thẻ Túi đồ hiển thị trực tiếp tỷ lệ đồng điệu ước tính theo thời gian thực (`~%`). Hạ máu đối phương vừa phải, gây trạng thái ngủ êm hoặc chọn chuông bậc cao (`Moss Charm`, `Reed Charm`, `Amber Charm`, `Starlight Charm`) sẽ nâng cao rõ rệt khả năng kết bạn.
+   - Khi bật Trợ giúp chiến đấu, hệ thống gắn nhãn `Khuyên dùng` cho chiêu phù hợp nhất, giải thích ngắn gọn lý do khắc chế, báo cảnh báo máu thấp, gợi ý đồng đội khắc hệ trong đội hình và hiển thị tỷ lệ thu phục ước tính trực tiếp trên thẻ `Chuông và Túi`. Trước khi thách đấu Thủ lĩnh, hộp thoại cũng nhắc trước nếu cấp độ đội hình còn thấp hoặc cần hồi máu.
+   - Trợ giúp không bao giờ chơi hộ bạn. Nếu không may thua trận, toàn đội sẽ hồi đầy máu tại lửa trại gần nhất mà không bị trừ huy hiệu hay mất vật phẩm.
+3. Học chiêu mới và đổi chiêu trong Đội hình:
+   - Khi bạn đồng hành lên cấp và học chiêu mới, một thông báo nhỏ hiện ra giải thích tác dụng chiêu vừa học (và chiêu nào vừa được thay thế nếu đủ 4 ô). Bất kỳ lúc nào ngoài trận đấu, bạn có thể mở thẻ `Đội hình` trong Sổ Thực Địa và bấm `Quản lý chiêu` để xem toàn bộ chiêu đã mở khóa của dòng sinh vật đó và đổi vào 4 ô chiến đấu tùy ý.
 
-## 4. Lộ trình năm vùng sinh thái và nội dung sau cốt truyện
+## 5. Lộ trình năm vùng sinh thái và hậu cốt truyện
 
-1. Trại Đèn Rêu (`Mosslight Camp`): Ngôi làng kiểm lâm bên suối với nhà gỗ đoàn nghiên cứu, đài phun nước đá, quầy hàng tiếp tế và cầu gỗ. Gặp Trưởng đoàn Rowan để nhận `Mosskit`, `Kindlet` hoặc `Ripplefin`, mở rương nhà kính phía tây bắc và trò chuyện với Linh, Tomas.
-2. Thung Lũng Rừng Thầm (`Whisperwood Glen`): Khu rừng nhiều tầng tán lá với nắng xuyên kẽ cây và thân gỗ đổ rỗng. Khảo sát dấu vỏ cây phát sáng của `Shellglow`, đọc manh mối hốc cây giúp nghệ nhân Haru và vượt qua bài thử của Thủ lĩnh Sylvan để nhận thẻ qua đò.
-3. Đầm Sậy Nước Trong (`Reedwater Fen`): Vùng đầm sen mờ sương nối bằng những nhịp cầu ván gỗ. Lần theo dấu chân bên bờ đầm, thắp sáng trụ đèn luồng nước giúp Sora và vượt qua bài thử của Thủ lĩnh Mirella để nhận móc dây leo núi.
-4. Đèo Đất Nung (`Terracotta Ridge`): Vách đá đỏ xếp tầng đón nắng gió với thác nước đổ từ vách cao và phế tích lò gốm. Khảo sát bia Lò Gốm Cổ giúp Amara, nhặt rương vách núi và vượt qua bài thử của Thủ lĩnh Kaelen để nhận Ấn Cộng Hưởng.
-5. Thánh Địa Sao Rơi (`Starfall Sanctuary`) và hậu cốt truyện: Đài quan sát đá đen cổ kính trên đỉnh núi cao. Đọc ba trụ đá sao giúp Học giả Lyra, vượt qua bài khảo nghiệm của Trưởng lão Astraea và đánh thức Bệ Đá Cộng Hưởng Tinh Tú. Sau màn chúc mừng hoàn thành cốt truyện, bạn có thể tiếp tục săn tìm đủ 30 loài trong Sổ Bách Khoa (mỗi loài chưa gặp có bóng dáng bí ẩn và gợi ý vùng sống, thời điểm xuất hiện), mở khóa truyện ngắn thực địa của các loài tiêu biểu, thu phục linh lộc `Solacern` và quay lại thách đấu tái đấu bậc thầy với Sylvan, Mirella, Kaelen cùng Astraea ở cấp độ `24` đến `30`.
+1. Trại Đèn Rêu (`Mosslight Camp`): Gặp Kiểm lâm Rowan để nhận `Mosskit`, `Kindlet` hoặc `Ripplefin`, nói chuyện cùng Trinh sát Mai, mở rương nhà kính phía tây bắc và mua vật phẩm tại quầy tiếp tế của Tomas.
+2. Thung Lũng Rừng Thầm (`Whisperwood Glen`): Khảo sát dấu vỏ cây phát sáng của `Shellglow`, đọc manh mối hốc cây giúp Haru và vượt qua Thủ lĩnh Sylvan để nhận thẻ qua đò.
+3. Đầm Sậy Nước Trong (`Reedwater Fen`): Lần theo dấu chân bờ đầm, thắp sáng cột đèn kênh sương giúp Sora và vượt qua Thủ lĩnh Mirella để nhận móc dây leo núi.
+4. Đèo Đất Nung (`Terracotta Ridge`): Khảo sát bia Lò Gốm Cổ giúp Amara, nhặt rương vách núi và vượt qua Thủ lĩnh Kaelen để nhận Ấn Cộng Hưởng.
+5. Thánh Địa Sao Rơi (`Starfall Sanctuary`) và hậu cốt truyện: Đọc ba cột đá sao giúp Lyra, vượt qua Trưởng lão Astraea và đánh thức Đàn Hòa Âm Ánh Sao. Sau đoạn kết, bạn tiếp tục thu phục đủ 30 loài, kết bạn linh lộc `Solacern` và quay lại tái đấu bậc thầy cấp `24` đến `30` với cả bốn Thủ lĩnh.
 
-## 5. Sổ từ vựng bốn trạng thái, lửa trại và sao lưu an toàn
+## 6. Sổ từ vựng, lửa trại và sao lưu an toàn
 
-- Thẻ Từ vựng trong Sổ Thực Địa phân tách rõ bốn bộ lọc: từ đã bắt gặp trong hành trình, từ bạn chủ động lưu, từ đã ghi nhớ vững (`Mastered` bậc `3/3`) và từ đã đủ thời hạn gặp lại (`Due Now`).
-- Nghỉ bên lửa trại hồi đầy máu và lượt chiêu ngay lập tức. Nếu thích, bạn có thể mở mục luyện từ tự nguyện bên lửa trại để ôn vài thẻ ngắn với câu ví dụ mới.
-- Trò chơi tự động lưu an toàn, hỗ trợ chuyển đổi bản lưu từ phiên bản cũ và cho phép xuất hoặc nhập tệp `.json` trong thẻ Cài đặt mà không bao giờ làm hỏng bản lưu hợp lệ hiện có nếu chọn nhầm tệp lỗi.
+- Thẻ `Từ vựng` trong Sổ Thực Địa tách rõ 4 bộ lọc: Đã gặp, Đã lưu, Thành thạo (`3/3`) và Đến hạn ôn, kèm danh sách 24 Thư thực địa song ngữ.
+- Nghỉ bên lửa trại hồi đầy máu và lượt chiêu ngay lập tức. Mục luyện từ bên lửa trại là hoàn toàn tự nguyện và không bao giờ chặn cốt truyện.
+- Trò chơi tự động lưu cục bộ an toàn, hỗ trợ chuyển đổi bản lưu cũ, bảo vệ chống ghi đè khi mở nhiều thẻ trình duyệt và cho phép xuất hoặc nhập tệp `.json` trong thẻ `Cài đặt và Lưu`.

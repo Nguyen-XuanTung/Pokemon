@@ -99,13 +99,78 @@ export function healCreatureFully(
   }
 }
 
+export interface ReplacedMoveRecord {
+  readonly learnedMoveId: string;
+  readonly replacedMoveId: string;
+  readonly slotIndex: number;
+}
+
 export interface ExpGainResult {
   readonly expGained: number;
   readonly levelsGained: number;
   readonly newLevel: number;
   readonly learnedMoveIds: string[];
+  readonly replacedMoves?: ReplacedMoveRecord[];
   readonly evolvedFromSpeciesId?: string;
   readonly evolvedToSpeciesId?: string;
+}
+
+export function replaceCreatureMoveSlot(params: {
+  creature: CreatureInstance;
+  slotIndex: number;
+  newMoveId: string;
+  movesById: Readonly<Record<string, MoveDefinition>>;
+}): boolean {
+  const { creature, slotIndex, newMoveId, movesById } = params;
+  const moveDef = movesById[newMoveId];
+  if (!moveDef) return false;
+  if (slotIndex < 0 || slotIndex >= MAX_ACTIVE_MOVES) return false;
+  if (creature.moves.some((m) => m.moveId === newMoveId)) return false;
+
+  const newSlot: MoveSlot = {
+    moveId: moveDef.id,
+    pp: moveDef.maxPp,
+    maxPp: moveDef.maxPp,
+  };
+  if (slotIndex >= creature.moves.length) {
+    creature.moves.push(newSlot);
+  } else {
+    creature.moves[slotIndex] = newSlot;
+  }
+  return true;
+}
+
+export function getUnlockedSpeciesMoves(
+  creature: CreatureInstance,
+  allSpecies: ReadonlyArray<SpeciesDefinition>,
+  movesById: Readonly<Record<string, MoveDefinition>>,
+): MoveDefinition[] {
+  const lineIds = new Set<string>([creature.speciesId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const sp of allSpecies) {
+      if (sp.evolvesTo && lineIds.has(sp.evolvesTo.speciesId) && !lineIds.has(sp.id)) {
+        lineIds.add(sp.id);
+        changed = true;
+      }
+    }
+  }
+  const seen = new Set<string>();
+  const out: MoveDefinition[] = [];
+  for (const sp of allSpecies) {
+    if (!lineIds.has(sp.id)) continue;
+    for (const entry of sp.learnset) {
+      if (entry.level <= creature.level && !seen.has(entry.moveId)) {
+        const def = movesById[entry.moveId];
+        if (def) {
+          seen.add(entry.moveId);
+          out.push(def);
+        }
+      }
+    }
+  }
+  return out;
 }
 
 export function awardCreatureExperience(params: {
@@ -133,6 +198,7 @@ export function awardCreatureExperience(params: {
   creature.exp += Math.floor(expGain);
   let levelsGained = 0;
   const learnedMoveIds: string[] = [];
+  const replacedMoves: ReplacedMoveRecord[] = [];
   let evolvedFromSpeciesId: string | undefined;
   let evolvedToSpeciesId: string | undefined;
 
@@ -193,7 +259,15 @@ export function awardCreatureExperience(params: {
                 targetSlot = weakerIdx;
               }
             }
+            const oldMoveId = creature.moves[targetSlot]?.moveId;
             creature.moves[targetSlot] = newSlot;
+            if (oldMoveId) {
+              replacedMoves.push({
+                learnedMoveId: moveDef.id,
+                replacedMoveId: oldMoveId,
+                slotIndex: targetSlot,
+              });
+            }
           }
           learnedMoveIds.push(moveDef.id);
         }
@@ -206,6 +280,7 @@ export function awardCreatureExperience(params: {
     levelsGained,
     newLevel: creature.level,
     learnedMoveIds,
+    ...(replacedMoves.length > 0 ? { replacedMoves } : {}),
     evolvedFromSpeciesId,
     evolvedToSpeciesId,
   };

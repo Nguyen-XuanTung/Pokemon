@@ -15,7 +15,13 @@ import {
   type BattleSession,
   type PlayerBattleAction,
 } from '../domain/battle.ts';
-import { createCreatureInstance } from '../domain/creatures.ts';
+import { checkBossReadiness, type BossReadinessCheck } from '../domain/battleAssist.ts';
+import { createCreatureInstance, replaceCreatureMoveSlot } from '../domain/creatures.ts';
+import { getDifficultyProfile } from '../domain/difficulty.ts';
+import {
+  inferContentLanguageFromSupport,
+  syncSupportModeFromContent,
+} from '../domain/i18n.ts';
 import {
   buildCampfireReviewSet,
   buildContextualReencounterEcho,
@@ -26,6 +32,22 @@ import {
   toggleWordSaved,
   type CampfireReviewPrompt,
 } from '../domain/learning.ts';
+import {
+  buildLostHelperReport,
+  computeNavigationPlan,
+  type LostHelperReport,
+  type NavigationPlan,
+} from '../domain/navigation.ts';
+import {
+  ensureOnboardingState,
+  getActiveOnboardingPrompt,
+  restartOnboarding,
+  shouldGuaranteeFirstTutorialCapture,
+  skipCurrentOnboardingStep,
+  skipOnboarding,
+  syncOnboardingProgress,
+  type OnboardingStepPrompt,
+} from '../domain/onboarding.ts';
 import { startQuest, syncQuestsWithState, type QuestSyncNotification } from '../domain/quests.ts';
 import { SeededRng } from '../domain/rng.ts';
 import { SaveRepository, type SaveValidationRegistry } from '../domain/save.ts';
@@ -118,7 +140,16 @@ export type ActiveModal =
   | 'journal'
   | 'supply_post'
   | 'camp_review'
-  | 'ending_banner';
+  | 'ending_banner'
+  | 'lost_helper';
+
+export interface MoveLearnNotice {
+  readonly partyIndex: number;
+  readonly speciesId: string;
+  readonly moveId: string;
+  readonly replacedMoveId?: string;
+  readonly triggeredAtStep: number;
+}
 
 export type JournalTab =
   | 'quests'
@@ -163,6 +194,10 @@ export class GameController {
   public activeGlossSentenceEn: string = '';
   public activeGlossNoteVi: string = '';
   public activeEvolution: EvolutionCelebrationState | null = null;
+  public activeMoveLearnBanner: MoveLearnNotice | null = null;
+  public pendingBossWarning: BossReadinessCheck | null = null;
+  public navigationPlan!: NavigationPlan;
+  public activeOnboardingPrompt: OnboardingStepPrompt | null = null;
   public followerPos: { x: number; y: number; facing: Direction };
   public campPrompts: CampfireReviewPrompt[] = [];
   public campPromptIndex = 0;
@@ -191,10 +226,24 @@ export class GameController {
     }
     this.rng = new SeededRng(this.state.seedState);
     this.followerPos = this.computeDefaultFollowerPos();
+    this.refreshGuidanceAndNavigation();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
       sfxVolume: this.state.settings.sfxVolume,
       muted: this.state.settings.muted,
+    });
+  }
+
+  public refreshGuidanceAndNavigation(): void {
+    this.activeOnboardingPrompt = getActiveOnboardingPrompt(this.state);
+    this.navigationPlan = computeNavigationPlan({
+      state: this.state,
+      mapsById: MAPS_BY_ID,
+      npcs: NPCS,
+      npcsById: NPCS_BY_ID,
+      quests: QUESTS,
+      speciesById: SPECIES_BY_ID,
+      overrideTarget: this.activeOnboardingPrompt?.overrideTarget ?? null,
     });
   }
 
@@ -241,10 +290,16 @@ export class GameController {
     }
   }
 
-  public startNewGame(seed: number = Date.now() >>> 0): void {
+  public startNewGame(
+    seed: number = Date.now() >>> 0,
+    options?: { readonly skipTutorial?: boolean },
+  ): void {
     const prevSettings = structuredClone(this.state.settings);
     this.state = createInitialGameState(seed);
     this.state.settings = prevSettings;
+    if (options?.skipTutorial) {
+      skipOnboarding(this.state);
+    }
     this.rng.setSeedState(this.state.seedState);
     this.activeBattle = null;
     this.activeTrainerNpc = null;
@@ -253,9 +308,12 @@ export class GameController {
     this.activeGlossEntry = null;
     this.activePocketGloss = null;
     this.activeEvolution = null;
+    this.activeMoveLearnBanner = null;
+    this.pendingBossWarning = null;
     this.lastBattleVisual = null;
     this.followerPos = this.computeDefaultFollowerPos();
     this.activeModal = 'none';
+    this.refreshGuidanceAndNavigation();
     this.sound.unlock();
     this.syncRegionMusic();
     this.persistState();
@@ -274,6 +332,7 @@ export class GameController {
       }
     }
     this.activeModal = 'none';
+    this.refreshGuidanceAndNavigation();
     this.sound.unlock();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
@@ -315,19 +374,30 @@ export class GameController {
     });
 
     if (step.kind === 'blocked') {
+      this.refreshGuidanceAndNavigation();
       this.emitChange();
       return;
     }
 
     this.sound.playSfx('step');
+    if (this.state.starterChosen) {
+      ensureOnboardingState(this.state).stepsMovedSinceStarter += 1;
+    }
     if (
       this.activeEvolution &&
       this.state.stepCount - this.activeEvolution.triggeredAtStep >= 3
     ) {
       this.activeEvolution = null;
     }
+    if (
+      this.activeMoveLearnBanner &&
+      this.state.stepCount - this.activeMoveLearnBanner.triggeredAtStep >= 4
+    ) {
+      this.activeMoveLearnBanner = null;
+    }
 
     if (step.kind === 'portal_blocked') {
+      this.refreshGuidanceAndNavigation();
       if (step.portal.blockedDialogueId) {
         this.openDialogueById(step.portal.blockedDialogueId);
       } else {
@@ -342,6 +412,7 @@ export class GameController {
       const destMap = MAPS_BY_ID[this.state.regionId];
       this.pushToast(`Entered ${destMap.nameEn}`, `Đã tới ${destMap.nameVi}`);
       this.syncQuestsAndNotify();
+      this.refreshGuidanceAndNavigation();
       this.syncRegionMusic();
       this.persistState();
       this.emitChange();
@@ -351,11 +422,24 @@ export class GameController {
     this.followerPos = { x: prevX, y: prevY, facing: direction };
 
     if (step.kind === 'wild_encounter') {
-      this.startWildEncounter(step.speciesId, step.level, Boolean(step.isRareVariant));
+      const ob = ensureOnboardingState(this.state);
+      if (
+        !ob.skipped &&
+        !ob.firstCaptureGuaranteedUsed &&
+        this.state.stats.wildCaught === 0 &&
+        this.state.regionId === 'whisperwood'
+      ) {
+        const gentleSpecies = this.state.starterChosen === 'ripplefin' ? 'breezeling' : 'dewgrub';
+        this.startWildEncounter(gentleSpecies, 3, false);
+      } else {
+        this.startWildEncounter(step.speciesId, step.level, Boolean(step.isRareVariant));
+      }
+      this.refreshGuidanceAndNavigation();
       this.emitChange();
       return;
     }
 
+    this.refreshGuidanceAndNavigation();
     this.emitChange();
   }
 
@@ -370,15 +454,39 @@ export class GameController {
     }
     const map = MAPS_BY_ID[this.state.regionId];
     const npcsInRegion = NPCS.filter((n) => n.regionId === this.state.regionId);
-    const hit = inspectFacingTile({
+    let hit = inspectFacingTile({
       state: this.state,
       map,
       npcsInRegion,
     });
 
+    if (hit.kind === 'none' && this.navigationPlan.nearbyInteractable) {
+      this.state.playerPos.facing = this.navigationPlan.nearbyInteractable.direction;
+      hit = inspectFacingTile({
+        state: this.state,
+        map,
+        npcsInRegion,
+      });
+    }
+
     if (hit.kind === 'npc') {
       this.sound.playSfx('select');
+      if (this.state.starterChosen && hit.npc.id !== 'npc_rowan') {
+        this.state.flags.onboarding_talked_npc = true;
+      }
+      const isBossRematch = Boolean(
+        this.state.flags.main_story_completed && hit.npc.rematchBattle,
+      );
+      const needsBossClear = Boolean(
+        hit.npc.trainerBattle?.isBoss &&
+          !this.state.defeatedTrainers.includes(hit.npc.trainerBattle.id),
+      );
+      this.pendingBossWarning =
+        needsBossClear || isBossRematch
+          ? checkBossReadiness(this.state, hit.npc, isBossRematch)
+          : null;
       this.openDialogueById(hit.dialogueId);
+      this.refreshGuidanceAndNavigation();
       this.emitChange();
       return;
     }
@@ -386,6 +494,10 @@ export class GameController {
     if (hit.kind === 'prop') {
       const prop = hit.prop;
       this.sound.playSfx('select');
+      this.pendingBossWarning = null;
+      if (this.state.starterChosen && prop.kind === 'sign') {
+        this.state.flags.onboarding_talked_npc = true;
+      }
       if (prop.kind === 'chest') {
         if (this.state.openedProps.includes(prop.id)) {
           this.pushToast('Empty supply chest.', 'Chiếc rương này đã được mở.');
@@ -519,10 +631,12 @@ export class GameController {
     } else {
       const finishedNodeId = node.id;
       this.activeDialogue = null;
+      this.pendingBossWarning = null;
       if (finishedNodeId === 'finale_credits_summary' && !this.state.flags.seen_ending_banner) {
         this.state.flags.seen_ending_banner = true;
         this.activeModal = 'ending_banner';
       }
+      this.refreshGuidanceAndNavigation();
       this.persistState();
     }
     this.emitChange();
@@ -532,6 +646,7 @@ export class GameController {
     this.sound.playSfx('select');
     const prevDialogue = this.activeDialogue;
     this.activeDialogue = null;
+    this.pendingBossWarning = null;
     if (choice.action) {
       this.executeDialogueAction(choice.action);
     }
@@ -540,6 +655,7 @@ export class GameController {
     } else if (prevDialogue && !choice.action) {
       this.persistState();
     }
+    this.refreshGuidanceAndNavigation();
     this.emitChange();
   }
 
@@ -676,11 +792,23 @@ export class GameController {
         this.lastBattleAnim = 'heal';
       }
     } else if (action.kind === 'move') {
+      this.state.flags.onboarding_fought_once = true;
       this.lastBattleAnim = 'player_attack';
     } else {
       this.sound.playSfx('select');
       this.lastBattleAnim = 'none';
     }
+
+    const activeEnemy = this.activeBattle.enemyParty[this.activeBattle.activeEnemyIndex];
+    const guaranteedCapture =
+      usedCharm &&
+      this.activeBattle.kind === 'wild' &&
+      Boolean(activeEnemy) &&
+      shouldGuaranteeFirstTutorialCapture({
+        state: this.state,
+        enemyHpRatio: activeEnemy!.currentHp / Math.max(1, activeEnemy!.maxHp),
+        turnCount: this.activeBattle.turnCount,
+      });
 
     const turnLogs = stepBattleTurn(this.activeBattle, action, {
       speciesById: SPECIES_BY_ID,
@@ -688,7 +816,13 @@ export class GameController {
       itemsById: ITEMS_BY_ID,
       inventory: this.state.inventory,
       rng: this.rng,
+      difficulty: this.state.settings.difficulty,
+      guaranteedCapture,
     });
+
+    if (guaranteedCapture && turnLogs.some((l) => l.kind === 'capture' && l.captured)) {
+      ensureOnboardingState(this.state).firstCaptureGuaranteedUsed = true;
+    }
 
     for (const log of turnLogs) {
       recordSentenceExposure(this.state, log.messageEn, 'battle_log', LEXICON_INDEX);
@@ -787,6 +921,7 @@ export class GameController {
       this.state.flags.seen_ending_banner = true;
       this.activeModal = 'ending_banner';
     }
+    this.refreshGuidanceAndNavigation();
     this.persistState();
     this.emitChange();
   }
@@ -796,11 +931,32 @@ export class GameController {
     this.emitChange();
   }
 
+  public dismissMoveLearnBanner(): void {
+    this.activeMoveLearnBanner = null;
+    this.emitChange();
+  }
+
   private concludeBattleSession(): void {
     if (!this.activeBattle) return;
     const session = this.activeBattle;
+    const diffProfile = getDifficultyProfile(this.state.settings.difficulty);
 
     for (const expRes of session.expResults) {
+      if (expRes.learnedMoveIds.length > 0) {
+        const activeIdx = session.activePlayerIndex;
+        const activePartner = session.playerParty[activeIdx];
+        if (activePartner) {
+          const lastLearned = expRes.learnedMoveIds[expRes.learnedMoveIds.length - 1]!;
+          const repRec = expRes.replacedMoves?.find((r) => r.learnedMoveId === lastLearned);
+          this.activeMoveLearnBanner = {
+            partyIndex: activeIdx,
+            speciesId: activePartner.speciesId,
+            moveId: lastLearned,
+            replacedMoveId: repRec?.replacedMoveId,
+            triggeredAtStep: this.state.stepCount,
+          };
+        }
+      }
       if (expRes.evolvedToSpeciesId) {
         this.state.caughtSpecies.includes(expRes.evolvedToSpeciesId) ||
           this.state.caughtSpecies.push(expRes.evolvedToSpeciesId);
@@ -818,8 +974,21 @@ export class GameController {
       }
     }
 
+    const applyRelaxedPostBattleCare = () => {
+      if (diffProfile.postBattleHealRatio <= 0) return;
+      for (const member of this.state.party) {
+        if (member.currentHp > 0 && member.currentHp < member.maxHp) {
+          member.currentHp = Math.min(
+            member.maxHp,
+            member.currentHp + Math.max(4, Math.round(member.maxHp * diffProfile.postBattleHealRatio)),
+          );
+        }
+      }
+    };
+
     if (session.outcome === 'captured' && session.capturedCreature) {
       this.sound.playSfx('caught');
+      applyRelaxedPostBattleCare();
       const destination = registerCapturedWildkin(
         this.state,
         session.capturedCreature,
@@ -845,6 +1014,7 @@ export class GameController {
             : `${sp?.name ?? 'Bạn mới'} đã chuyển về Khu bảo tồn dự bị!`,
       });
       this.syncQuestsAndNotify();
+      this.refreshGuidanceAndNavigation();
       this.persistState();
       return;
     }
@@ -852,6 +1022,7 @@ export class GameController {
     if (session.outcome === 'player_victory') {
       this.state.stats.battlesWon += 1;
       this.state.tokens += session.rewardTokens;
+      applyRelaxedPostBattleCare();
       const activeSpec =
         this.activeBattleIsRematch && this.activeTrainerNpc?.rematchBattle
           ? this.activeTrainerNpc.rematchBattle
@@ -899,10 +1070,41 @@ export class GameController {
 
     if (session.outcome === 'player_defeat') {
       healPartyInState(this.state, MOVES_BY_ID);
-      const hub = MAPS_BY_ID.mosslight_hub;
-      this.state.regionId = 'mosslight_hub';
-      this.state.playerPos = { x: hub.spawnX, y: hub.spawnY, facing: 'up' };
-      this.followerPos = { x: hub.spawnX, y: hub.spawnY + 1, facing: 'up' };
+      const currentMap = MAPS_BY_ID[this.state.regionId];
+      const localCampfire = currentMap.props.find((p) => p.kind === 'campfire');
+      if (localCampfire) {
+        const npcsHere = NPCS.filter((n) => n.regionId === this.state.regionId);
+        const safeAdjacent = (
+          [
+            { x: localCampfire.x, y: localCampfire.y + 1 },
+            { x: localCampfire.x - 1, y: localCampfire.y },
+            { x: localCampfire.x + 1, y: localCampfire.y },
+            { x: localCampfire.x, y: localCampfire.y - 1 },
+          ] as const
+        ).find((pt) =>
+          isTileWalkable({
+            map: currentMap,
+            npcsInRegion: npcsHere,
+            state: this.state,
+            x: pt.x,
+            y: pt.y,
+          }),
+        );
+        if (safeAdjacent) {
+          this.state.playerPos = { x: safeAdjacent.x, y: safeAdjacent.y, facing: 'up' };
+          this.followerPos = this.computeDefaultFollowerPos();
+        }
+      } else {
+        const hub = MAPS_BY_ID.mosslight_hub;
+        this.state.regionId = 'mosslight_hub';
+        this.state.playerPos = { x: hub.spawnX, y: hub.spawnY, facing: 'up' };
+        this.followerPos = { x: hub.spawnX, y: hub.spawnY + 1, facing: 'up' };
+      }
+      this.pushToast(
+        'Party fully healed at the nearest campfire with zero penalty!',
+        'Đội hình đã hồi đầy máu tại lửa trại gần nhất và không bị phạt!',
+      );
+      this.refreshGuidanceAndNavigation();
       this.persistState();
     }
   }
@@ -915,6 +1117,7 @@ export class GameController {
     this.activeGlossContextTag = contextTag;
     this.activeGlossSentenceEn = sentenceEn;
     this.activeGlossNoteVi = '';
+    this.refreshGuidanceAndNavigation();
     this.emitChange();
   }
 
@@ -924,9 +1127,11 @@ export class GameController {
     sentenceEn: string = '',
   ): void {
     this.sound.playSfx('gloss');
+    this.state.stats.wordsGlossed += 1;
     this.activeGlossEntry = null;
     this.activePocketGloss = { surface, note, sentenceEn };
     this.activeGlossNoteVi = '';
+    this.refreshGuidanceAndNavigation();
     this.emitChange();
   }
 
@@ -986,9 +1191,75 @@ export class GameController {
   public openJournal(tab: JournalTab = 'quests'): void {
     if (this.activeModal === 'title' || this.activeBattle !== null) return;
     this.sound.playSfx('select');
+    this.state.flags.onboarding_opened_journal = true;
     this.journalTab = tab;
     this.activeModal = 'journal';
+    this.refreshGuidanceAndNavigation();
     this.emitChange();
+  }
+
+  public openLostHelper(): void {
+    if (this.activeModal === 'title' || this.activeBattle !== null) return;
+    this.sound.playSfx('select');
+    this.refreshGuidanceAndNavigation();
+    this.activeModal = 'lost_helper';
+    this.emitChange();
+  }
+
+  public getLostHelperReport(): LostHelperReport {
+    return buildLostHelperReport({
+      state: this.state,
+      navPlan: this.navigationPlan,
+      mapsById: MAPS_BY_ID,
+    });
+  }
+
+  public setTrackedQuest(questId: string | null): void {
+    this.state.trackedQuestId = questId;
+    if (questId && this.state.settings.guidanceMode === 'off') {
+      this.state.settings.guidanceMode = 'full';
+    }
+    this.refreshGuidanceAndNavigation();
+    this.persistState();
+    this.emitChange();
+  }
+
+  public skipOnboardingGuide(): void {
+    skipOnboarding(this.state);
+    this.refreshGuidanceAndNavigation();
+    this.persistState();
+    this.emitChange();
+  }
+
+  public skipOnboardingStep(): void {
+    skipCurrentOnboardingStep(this.state);
+    this.refreshGuidanceAndNavigation();
+    this.persistState();
+    this.emitChange();
+  }
+
+  public restartOnboardingGuide(): void {
+    restartOnboarding(this.state);
+    this.refreshGuidanceAndNavigation();
+    this.persistState();
+    this.emitChange();
+  }
+
+  public swapCreatureMove(partyIndex: number, slotIndex: number, newMoveId: string): boolean {
+    const member = this.state.party[partyIndex];
+    if (!member) return false;
+    const ok = replaceCreatureMoveSlot({
+      creature: member,
+      slotIndex,
+      newMoveId,
+      movesById: MOVES_BY_ID,
+    });
+    if (ok) {
+      this.sound.playSfx('select');
+      this.persistState();
+      this.emitChange();
+    }
+    return ok;
   }
 
   public closeModal(): void {
@@ -1076,13 +1347,22 @@ export class GameController {
   }
 
   public updateSettings(patch: Partial<GameSettings>): void {
-    this.state.settings = {
+    const nextSettings: GameSettings = {
       ...this.state.settings,
       ...patch,
       keyMap: patch.keyMap
         ? { ...this.state.settings.keyMap, ...patch.keyMap }
         : this.state.settings.keyMap,
     };
+    if (patch.contentLanguage && !patch.supportMode) {
+      nextSettings.supportMode = syncSupportModeFromContent(patch.contentLanguage);
+    } else if (patch.supportMode && !patch.contentLanguage) {
+      nextSettings.contentLanguage = inferContentLanguageFromSupport(patch.supportMode);
+    }
+    if (patch.difficulty && patch.battleAssist === undefined && this.activeModal === 'title') {
+      nextSettings.battleAssist = getDifficultyProfile(patch.difficulty).defaultBattleAssist;
+    }
+    this.state.settings = nextSettings;
     if (patch.cefrBand && this.activeDialogue) {
       const currentLine = this.activeDialogue.node.lines[this.activeDialogue.lineIndex];
       if (currentLine) {
@@ -1096,6 +1376,7 @@ export class GameController {
       sfxVolume: this.state.settings.sfxVolume,
       muted: this.state.settings.muted,
     });
+    this.refreshGuidanceAndNavigation();
     this.persistState();
     this.emitChange();
   }
@@ -1115,6 +1396,8 @@ export class GameController {
     this.activeBattle = null;
     this.activeDialogue = null;
     this.activeModal = 'none';
+    this.followerPos = this.computeDefaultFollowerPos();
+    this.refreshGuidanceAndNavigation();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
       sfxVolume: this.state.settings.sfxVolume,
@@ -1140,6 +1423,7 @@ export class GameController {
             this.followerPos = this.computeDefaultFollowerPos();
             this.sound.playSfx('caught');
             this.syncQuestsAndNotify();
+            this.refreshGuidanceAndNavigation();
             this.persistState();
           }
         }
@@ -1154,11 +1438,13 @@ export class GameController {
           }
         }
         this.syncQuestsAndNotify();
+        this.refreshGuidanceAndNavigation();
         this.persistState();
         break;
       }
       case 'complete_quest': {
         this.syncQuestsAndNotify();
+        this.refreshGuidanceAndNavigation();
         this.persistState();
         break;
       }
@@ -1166,6 +1452,7 @@ export class GameController {
         const wasMainComplete = Boolean(this.state.flags.main_story_completed);
         this.state.flags[action.flag] = true;
         this.syncQuestsAndNotify();
+        this.refreshGuidanceAndNavigation();
         if (action.flag === 'main_story_completed' && !wasMainComplete) {
           this.sound.playSfx('caught');
           this.pushToast(
@@ -1178,7 +1465,10 @@ export class GameController {
       }
       case 'heal_party': {
         healPartyInState(this.state, MOVES_BY_ID);
+        this.state.flags.onboarding_healed_campfire = true;
+        syncOnboardingProgress(this.state);
         this.sound.playSfx('heal');
+        this.refreshGuidanceAndNavigation();
         this.persistState();
         break;
       }

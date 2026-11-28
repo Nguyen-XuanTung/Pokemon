@@ -2,10 +2,14 @@ import { ITEMS_BY_ID } from '../data/items.ts';
 import { MOVES_BY_ID } from '../data/moves.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
 import type { StatStages } from '../domain/battle.ts';
+import { computeBattleAssistPlan } from '../domain/battleAssist.ts';
 import { computeCaptureProbability } from '../domain/capture.ts';
 import { expRequiredForLevel } from '../domain/creatures.ts';
+import { getDifficultyProfile } from '../domain/difficulty.ts';
 import { ELEMENT_LABELS, getTypeMultiplier } from '../domain/elements.ts';
-import type { BattleSpeedMode, CreatureInstance } from '../domain/types.ts';
+import { getUiStrings, pickText } from '../domain/i18n.ts';
+import { shouldGuaranteeFirstTutorialCapture } from '../domain/onboarding.ts';
+import type { BattleSpeedMode, CreatureInstance, UiLanguage } from '../domain/types.ts';
 import type { GameController } from '../game/controller.ts';
 import {
   createCreatureSpriteSpan,
@@ -21,12 +25,6 @@ const NEXT_SPEED: Readonly<Record<BattleSpeedMode, BattleSpeedMode>> = {
   normal: 'fast',
   fast: 'instant',
   instant: 'normal',
-};
-
-const SPEED_BADGE_TEXT: Readonly<Record<BattleSpeedMode, string>> = {
-  normal: 'Pace: 1x',
-  fast: 'Pace: 2x Fast',
-  instant: 'Pace: Instant',
 };
 
 function effectiveCombatSpeed(creature: CreatureInstance, stages: StatStages): number {
@@ -59,33 +57,51 @@ function buildCombatantPlate(
   creature: CreatureInstance,
   stages: StatStages,
   party: ReadonlyArray<CreatureInstance>,
-  name: string,
+  displayName: string,
+  speciesName: string,
   element: keyof typeof ELEMENT_LABELS,
   isEnemy: boolean,
+  battleKind: 'wild' | 'trainer',
 ): HTMLElement {
+  const uiLang: UiLanguage = controller.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const t = getUiStrings(uiLang);
   const plate = el('div', isEnemy ? 'lw-combatant-plate lw-plate-enemy' : 'lw-combatant-plate');
+  const bonded = isEnemy && controller.state.caughtSpecies.includes(creature.speciesId);
+
+  plate.dataset.element = element;
+  plate.dataset.speciesName = speciesName;
+  plate.dataset.status = creature.status ?? 'none';
+  plate.dataset.level = String(creature.level);
+  plate.dataset.hp = String(creature.currentHp);
+  plate.dataset.maxHp = String(creature.maxHp);
+  if (isEnemy) {
+    plate.dataset.battleKind = battleKind;
+    plate.dataset.bonded = String(bonded);
+  }
+
   const top = el('div', 'lw-hud-title');
-  top.appendChild(el('strong', '', `${name} Lv.${creature.level}`));
+  top.appendChild(el('strong', '', `${displayName} ${t.levelShort(creature.level)}`));
   const elMeta = ELEMENT_LABELS[element];
-  const badge = el('span', 'lw-badge lw-badge-element', elMeta.en);
+  const badge = el('span', 'lw-badge lw-badge-element', uiLang === 'en' ? elMeta.en : elMeta.vi);
   badge.style.background = elMeta.color;
   top.appendChild(badge);
   if (creature.isRareVariant) {
-    top.appendChild(el('span', 'lw-badge lw-badge-gleaming', 'Gleaming'));
+    top.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleGleamingBadge));
   }
   if (creature.status) {
-    top.appendChild(el('span', 'lw-badge lw-badge-status', creature.status.toUpperCase()));
+    top.appendChild(el('span', 'lw-badge lw-badge-status', t.statusLabels[creature.status]));
   }
-  if (isEnemy && controller.state.caughtSpecies.includes(creature.speciesId)) {
-    top.appendChild(el('span', 'lw-badge', 'Bonded'));
+  if (bonded) {
+    top.appendChild(el('span', 'lw-badge', t.battleBondedBadge));
   }
-  for (const [label, val] of [
-    ['ATK', stages.atk],
-    ['DEF', stages.def],
-    ['SPD', stages.spd],
+  for (const [labelVi, labelEn, val] of [
+    ['CÔNG', 'ATK', stages.atk],
+    ['THỦ', 'DEF', stages.def],
+    ['TỐC', 'SPD', stages.spd],
   ] as const) {
     if (val !== 0) {
-      top.appendChild(el('span', 'lw-badge', `${label}${val > 0 ? `+${val}` : val}`));
+      const lbl = uiLang === 'en' ? labelEn : labelVi;
+      top.appendChild(el('span', 'lw-badge', `${lbl}${val > 0 ? `+${val}` : val}`));
     }
   }
   plate.appendChild(top);
@@ -118,7 +134,7 @@ function buildCombatantPlate(
   }
 
   const foot = el('div', 'lw-plate-foot');
-  foot.appendChild(el('span', 'lw-hud-quest', `HP ${creature.currentHp}/${creature.maxHp}`));
+  foot.appendChild(el('span', 'lw-hud-quest', t.hpLabel(creature.currentHp, creature.maxHp)));
   foot.appendChild(buildPartyOrbs(party));
   plate.appendChild(foot);
   return plate;
@@ -130,6 +146,13 @@ export function buildBattleView(
   onSelectTab: (tab: BattleDeckTab) => void,
 ): HTMLElement {
   const battle = controller.activeBattle!;
+  const settings = controller.state.settings;
+  const uiLang: UiLanguage = settings.uiLanguage === 'en' ? 'en' : 'vi';
+  const contentLang = settings.contentLanguage ?? 'bilingual';
+  const showAssist = settings.battleAssist !== false;
+  const t = getUiStrings(uiLang);
+  const diffProfile = getDifficultyProfile(settings.difficulty);
+
   const wrapper = el('div', 'lw-battle-shell');
 
   const enemy = battle.enemyParty[battle.activeEnemyIndex]!;
@@ -145,8 +168,10 @@ export function buildBattleView(
       battle.playerStages,
       battle.playerParty,
       player.nickname ?? playerSpec.name,
+      playerSpec.name,
       playerSpec.element,
       false,
+      battle.kind,
     ),
   );
   topPlates.appendChild(
@@ -155,9 +180,13 @@ export function buildBattleView(
       enemy,
       battle.enemyStages,
       battle.enemyParty,
-      `${battle.kind === 'wild' ? 'Wild' : 'Foe'} ${enemySpec.name}`,
+      battle.kind === 'wild'
+        ? t.battleWildPrefix(enemySpec.name)
+        : t.battleFoePrefix(enemySpec.name),
+      enemySpec.name,
       enemySpec.element,
       true,
+      battle.kind,
     ),
   );
   wrapper.appendChild(topPlates);
@@ -168,30 +197,17 @@ export function buildBattleView(
   const playerSpd = effectiveCombatSpeed(player, battle.playerStages);
   const enemySpd = effectiveCombatSpeed(enemy, battle.enemyStages);
   const enemyThreatMult = getTypeMultiplier(enemySpec.element, playerSpec.element);
-  const hasBenchCounter =
-    enemyThreatMult > 1.1 &&
-    battle.playerParty.some((m, idx) => {
-      if (idx === battle.activePlayerIndex || m.currentHp <= 0) return false;
-      const sp = SPECIES_BY_ID[m.speciesId];
-      return Boolean(sp && getTypeMultiplier(sp.element, enemySpec.element) > 1.1);
-    });
+  const assistPlan = computeBattleAssistPlan({
+    session: battle,
+    state: controller.state,
+    speciesById: SPECIES_BY_ID,
+    movesById: MOVES_BY_ID,
+    itemsById: ITEMS_BY_ID,
+  });
 
-  let bestCharmPct = 0;
-  if (battle.kind === 'wild') {
-    for (const slot of controller.state.inventory) {
-      const def = ITEMS_BY_ID[slot.itemId];
-      if (slot.quantity > 0 && def?.category === 'charm') {
-        const pct = Math.round(
-          computeCaptureProbability({
-            target: enemy,
-            species: enemySpec,
-            charmMultiplier: def.captureMultiplier ?? 1,
-          }) * 100,
-        );
-        if (pct > bestCharmPct) bestCharmPct = pct;
-      }
-    }
-  }
+  const bestCharmPct = assistPlan.captureAdvice?.bestChancePct ?? 0;
+  const guaranteedFirstCatch = Boolean(assistPlan.captureAdvice?.guaranteed);
+  const hasBenchCounter = Boolean(assistPlan.switchSuggestion);
 
   const logHeader = el('div', 'lw-battle-header-row');
   const outlookWrap = el('div', 'lw-hud-title');
@@ -200,57 +216,108 @@ export function buildBattleView(
     el(
       'span',
       'lw-hud-quest',
-      `Turn ${battle.turnCount} | ${enemySpec.titleEn} (${ROLE_LABELS[enemySpec.combatRole].en})`,
+      t.battleTurnHeader(
+        battle.turnCount,
+        pickText(uiLang, enemySpec.titleEn, enemySpec.titleVi),
+        pickText(uiLang, ROLE_LABELS[enemySpec.combatRole].en, ROLE_LABELS[enemySpec.combatRole].vi),
+      ),
     ),
   );
   outlookWrap.appendChild(
     el(
       'span',
       'lw-badge',
-      playerSpd >= enemySpd ? 'Speed: You act first' : 'Speed: Foe acts first',
+      playerSpd >= enemySpd ? t.battleSpeedYouFirst : t.battleSpeedFoeFirst,
     ),
   );
   if (enemyThreatMult > 1.1) {
-    outlookWrap.appendChild(
-      el('span', 'lw-badge lw-badge-danger', 'Risk: Foe has 1.5x advantage'),
-    );
+    outlookWrap.appendChild(el('span', 'lw-badge lw-badge-danger', t.battleRiskBadge));
   }
   logHeader.appendChild(outlookWrap);
 
-  const currentSpeed = controller.state.settings.battleSpeed ?? 'normal';
-  const speedBtn = el(
-    'button',
-    'lw-btn lw-btn-sm',
-    SPEED_BADGE_TEXT[currentSpeed],
-  );
+  const currentSpeed = settings.battleSpeed ?? 'normal';
+  const speedBtn = el('button', 'lw-btn lw-btn-sm', t.battleSpeedLabels[currentSpeed]);
   speedBtn.setAttribute('data-testid', 'btn-battle-speed');
   speedBtn.addEventListener('click', () => {
     const next = NEXT_SPEED[controller.state.settings.battleSpeed ?? 'normal'];
     controller.updateSettings({ battleSpeed: next });
   });
   logHeader.appendChild(speedBtn);
+
   const narrativeCol = el('div', 'lw-battle-narrative-col');
   narrativeCol.appendChild(logHeader);
 
   const logBox = el('div', 'lw-battle-log');
+  logBox.dataset.captured = String(battle.outcome === 'captured');
   for (const entry of controller.battleLogs.slice(-3)) {
     const lineDiv = el('div', 'lw-battle-log-line');
-    lineDiv.appendChild(renderInteractiveEnglish(controller, entry.messageEn, 'battle_log'));
-    if (controller.state.settings.supportMode === 'bilingual') {
-      const sub = el('div', 'lw-battle-log-vi', entry.messageVi);
-      lineDiv.appendChild(sub);
+    if (contentLang === 'vi_only') {
+      lineDiv.appendChild(document.createTextNode(entry.messageVi));
+    } else {
+      lineDiv.appendChild(renderInteractiveEnglish(controller, entry.messageEn, 'battle_log'));
+      if (contentLang === 'bilingual') {
+        lineDiv.appendChild(el('div', 'lw-battle-log-vi', entry.messageVi));
+      }
     }
     logBox.appendChild(lineDiv);
   }
   narrativeCol.appendChild(logBox);
 
+  if (showAssist && battle.outcome === 'ongoing') {
+    let tipText = '';
+    if (assistPlan.lowHpWarning.active) {
+      tipText = t.battleLowHpAlert(
+        assistPlan.lowHpWarning.currentHp,
+        assistPlan.lowHpWarning.maxHp,
+      );
+    } else if (assistPlan.switchSuggestion) {
+      const s = assistPlan.switchSuggestion;
+      const elName = pickText(uiLang, ELEMENT_LABELS[s.element].en, ELEMENT_LABELS[s.element].vi);
+      tipText = t.battleSwitchTip(s.speciesName, elName);
+    } else if (
+      assistPlan.captureAdvice &&
+      !controller.state.caughtSpecies.includes(enemy.speciesId)
+    ) {
+      tipText = assistPlan.captureAdvice.shouldWeakenFirst
+        ? t.battleCaptureWeakenTip(assistPlan.captureAdvice.bestChancePct)
+        : t.battleCaptureReadyTip(
+            assistPlan.captureAdvice.bestChancePct,
+            assistPlan.captureAdvice.guaranteed,
+          );
+    } else {
+      const recAnn = assistPlan.moveAnnotations[assistPlan.recommendedMoveIndex];
+      const recSlot = player.moves[assistPlan.recommendedMoveIndex];
+      const recDef = recSlot ? MOVES_BY_ID[recSlot.moveId] : undefined;
+      if (recDef && recAnn && recDef.power > 0) {
+        const moveEl = pickText(
+          uiLang,
+          ELEMENT_LABELS[recDef.element].en,
+          ELEMENT_LABELS[recDef.element].vi,
+        );
+        const foeEl = pickText(
+          uiLang,
+          ELEMENT_LABELS[enemySpec.element].en,
+          ELEMENT_LABELS[enemySpec.element].vi,
+        );
+        tipText = t.battleElementExplain(moveEl, foeEl, recAnn.multiplier);
+      } else {
+        tipText = pickText(
+          uiLang,
+          assistPlan.recommendedReasonEn,
+          assistPlan.recommendedReasonVi,
+        );
+      }
+    }
+    const assistBox = el('div', 'lw-battle-assist-bar');
+    assistBox.setAttribute('data-testid', 'battle-assist-bar');
+    assistBox.appendChild(el('strong', '', `${t.battleAssistTitle} `));
+    assistBox.appendChild(document.createTextNode(tipText));
+    narrativeCol.appendChild(assistBox);
+  }
+
   if (battle.outcome !== 'ongoing') {
     deck.appendChild(narrativeCol);
-    const finishBtn = el(
-      'button',
-      'lw-btn lw-btn-primary',
-      'Continue Expedition / Tiếp tục hành trình (Space)',
-    );
+    const finishBtn = el('button', 'lw-btn lw-btn-primary', t.battleContinueBtn);
     finishBtn.setAttribute('data-testid', 'btn-battle-finish');
     finishBtn.addEventListener('click', () => controller.finishAndCloseBattle());
     deck.appendChild(finishBtn);
@@ -263,21 +330,17 @@ export function buildBattleView(
   const commandCol = el('div', 'lw-battle-command-col');
 
   const bagLabel =
-    battle.kind === 'wild' && bestCharmPct > 0
-      ? `Chimes & Bag (~${bestCharmPct}%)`
-      : battle.kind === 'wild'
-        ? 'Chimes & Bag'
-        : 'Bag';
-  const teamLabel = hasBenchCounter
-    ? `Team (${battle.playerParty.length}) [Switch Tip]`
-    : `Team (${battle.playerParty.length})`;
+    battle.kind === 'wild'
+      ? t.battleTabBagWild(guaranteedFirstCatch ? 100 : bestCharmPct)
+      : t.battleTabBagPlain;
+  const teamLabel = t.battleTabTeam(battle.playerParty.length, showAssist && hasBenchCounter);
 
   const nav = el('div', 'lw-choice-list lw-battle-tabs');
   for (const [tabKey, label] of [
-    ['moves', 'Moves'],
+    ['moves', t.battleTabMoves],
     ['bag', bagLabel],
     ['team', teamLabel],
-    ['tactics', 'Observe & Flee'],
+    ['tactics', t.battleTabTactics],
   ] as const) {
     const b = el(
       'button',
@@ -295,15 +358,24 @@ export function buildBattleView(
     player.moves.forEach((slot, idx) => {
       const mDef = MOVES_BY_ID[slot.moveId];
       if (!mDef) return;
+      const ann = assistPlan.moveAnnotations[idx];
       const elMeta = ELEMENT_LABELS[mDef.element];
-      const mult = mDef.power > 0 ? getTypeMultiplier(mDef.element, enemySpec.element) : 1;
-      const card = el('div', 'lw-move-card');
+      const elLabel = uiLang === 'en' ? elMeta.en : elMeta.vi;
+      const mult = ann?.multiplier ?? (mDef.power > 0 ? getTypeMultiplier(mDef.element, enemySpec.element) : 1);
+      const isRec = showAssist && Boolean(ann?.isRecommended);
+
+      const card = el('div', isRec ? 'lw-move-card lw-move-card-recommended' : 'lw-move-card');
       card.style.borderLeft = `4px solid ${elMeta.color}`;
+      card.dataset.category = mDef.power > 0 ? 'attack' : 'support';
+      card.dataset.effectiveness = mult > 1.05 ? 'super' : mult < 0.95 ? 'resisted' : 'normal';
+      card.dataset.recommended = String(isRec);
+
       const head = el('div', 'lw-hud-title');
+      const moveLabel = uiLang === 'en' ? mDef.name : (mDef.nameVi ?? mDef.name);
       const useMoveBtn = el(
         'button',
         'lw-btn lw-btn-primary',
-        `${mDef.name} (${slot.pp}/${slot.maxPp})`,
+        `${moveLabel} (${slot.pp}/${slot.maxPp})`,
       );
       useMoveBtn.setAttribute('data-testid', `btn-move-${idx}`);
       useMoveBtn.addEventListener('click', () =>
@@ -312,20 +384,27 @@ export function buildBattleView(
       const pill = el(
         'span',
         'lw-badge lw-badge-element',
-        mDef.power > 0 ? `${elMeta.en} ${mDef.power}` : `${elMeta.en} Support`,
+        mDef.power > 0 ? `${elLabel} ${mDef.power}` : `${elLabel} ${t.battleSupportTag}`,
       );
       pill.style.background = elMeta.color;
       head.append(useMoveBtn, pill);
       if (mult > 1.05) {
-        head.appendChild(el('span', 'lw-badge lw-badge-eff-good', '1.5x Effective'));
+        head.appendChild(el('span', 'lw-badge lw-badge-eff-good', t.battleEffectiveTag));
       } else if (mult < 0.95) {
-        head.appendChild(el('span', 'lw-badge', '0.67x Resisted'));
+        head.appendChild(el('span', 'lw-badge', t.battleResistedTag));
+      }
+      if (isRec) {
+        head.appendChild(el('span', 'lw-badge lw-badge-gleaming', t.battleRecommendedTag));
       }
       card.appendChild(head);
 
       const desc = el('div', 'lw-hud-quest');
-      desc.style.marginTop = '3px';
-      desc.appendChild(renderInteractiveEnglish(controller, mDef.descriptionEn, 'move_desc'));
+      desc.style.marginTop = '2px';
+      if (contentLang === 'vi_only' || (uiLang === 'vi' && contentLang === 'bilingual')) {
+        desc.textContent = mDef.descriptionVi;
+      } else {
+        desc.appendChild(renderInteractiveEnglish(controller, mDef.descriptionEn, 'move_desc'));
+      }
       card.appendChild(desc);
       grid.appendChild(card);
     });
@@ -337,28 +416,42 @@ export function buildBattleView(
       return s.quantity > 0 && def && def.category !== 'key' && def.category !== 'lantern';
     });
     if (usableItems.length === 0) {
-      list.appendChild(el('div', '', 'No battle items remaining in bag.'));
+      list.appendChild(el('div', '', t.battleNoItems));
     }
+    const guaranteed =
+      battle.kind === 'wild' &&
+      shouldGuaranteeFirstTutorialCapture({
+        state: controller.state,
+        enemyHpRatio: enemy.currentHp / Math.max(1, enemy.maxHp),
+        turnCount: battle.turnCount,
+      });
+
     for (const slot of usableItems) {
       const def = ITEMS_BY_ID[slot.itemId]!;
       const card = el('div', 'lw-move-card');
       let extra = '';
       if (def.category === 'charm' && battle.kind === 'wild') {
-        const pct = Math.round(
-          computeCaptureProbability({
-            target: enemy,
-            species: enemySpec,
-            charmMultiplier: def.captureMultiplier ?? 1,
-          }) * 100,
-        );
-        extra = ` | Bond ~${pct}%`;
+        if (guaranteed) {
+          extra = t.battleBondGuaranteed;
+        } else {
+          const pct = Math.round(
+            computeCaptureProbability({
+              target: enemy,
+              species: enemySpec,
+              charmMultiplier: def.captureMultiplier ?? 1,
+              difficultyMultiplier: diffProfile.captureBonusMultiplier,
+            }) * 100,
+          );
+          extra = t.battleBondEstimate(pct);
+        }
       }
       const row = el('div', 'lw-hud-title');
       row.appendChild(createItemSpriteSpan(def.id));
+      const itemName = pickText(uiLang, def.nameEn, def.nameVi);
       const btn = el(
         'button',
         def.category === 'charm' ? 'lw-btn lw-btn-moss' : 'lw-btn',
-        `${def.nameEn} x${slot.quantity}${extra}`,
+        `${itemName} x${slot.quantity}${extra}`,
       );
       btn.setAttribute('data-testid', `btn-battle-item-${def.id}`);
       btn.addEventListener('click', () =>
@@ -366,7 +459,7 @@ export function buildBattleView(
       );
       row.appendChild(btn);
       card.appendChild(row);
-      card.appendChild(el('div', 'lw-hud-quest', def.descriptionEn));
+      card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, def.descriptionEn, def.descriptionVi)));
       list.appendChild(card);
     }
     commandCol.appendChild(list);
@@ -376,6 +469,7 @@ export function buildBattleView(
       const sp = SPECIES_BY_ID[member.speciesId]!;
       const matchMult = getTypeMultiplier(sp.element, enemySpec.element);
       const card = el('div', 'lw-move-card');
+      card.dataset.level = String(member.level);
       const row = el('div', 'lw-hud-title');
       row.appendChild(
         createCreatureSpriteSpan(sp.dexNumber, { gleaming: Boolean(member.isRareVariant) }),
@@ -383,7 +477,7 @@ export function buildBattleView(
       const btn = el(
         'button',
         matchMult > 1.1 && idx !== battle.activePlayerIndex ? 'lw-btn lw-btn-moss' : 'lw-btn',
-        `${sp.name} Lv.${member.level} (${member.currentHp}/${member.maxHp})`,
+        `${sp.name} ${t.levelShort(member.level)} (${member.currentHp}/${member.maxHp})`,
       ) as HTMLButtonElement;
       btn.disabled = idx === battle.activePlayerIndex || member.currentHp <= 0;
       btn.addEventListener('click', () => {
@@ -392,7 +486,7 @@ export function buildBattleView(
       });
       row.appendChild(btn);
       if (matchMult > 1.1) {
-        row.appendChild(el('span', 'lw-badge lw-badge-eff-good', 'Counters Foe'));
+        row.appendChild(el('span', 'lw-badge lw-badge-eff-good', t.battleCountersFoe));
       }
       card.appendChild(row);
       list.appendChild(card);
@@ -400,13 +494,13 @@ export function buildBattleView(
     commandCol.appendChild(list);
   } else {
     const actions = el('div', 'lw-choice-list');
-    const obsBtn = el('button', 'lw-btn lw-btn-moss', 'Observe Habits (Field Note)');
+    const obsBtn = el('button', 'lw-btn lw-btn-moss', t.battleObserveBtn);
     obsBtn.setAttribute('data-testid', 'btn-battle-observe');
     obsBtn.addEventListener('click', () => controller.submitBattleAction({ kind: 'observe' }));
     actions.appendChild(obsBtn);
 
     if (battle.kind === 'wild') {
-      const fleeBtn = el('button', 'lw-btn', 'Step Back Safely (Flee)');
+      const fleeBtn = el('button', 'lw-btn', t.battleFleeBtn);
       fleeBtn.setAttribute('data-testid', 'btn-battle-flee');
       fleeBtn.addEventListener('click', () => controller.submitBattleAction({ kind: 'flee' }));
       actions.appendChild(fleeBtn);

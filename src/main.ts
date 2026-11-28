@@ -19,6 +19,11 @@ export interface LingoWildDiagnostics {
     readonly gleamingCount: number;
     readonly rematchCount: number;
     readonly tracesCount: number;
+    readonly uiLanguage: string;
+    readonly contentLanguage: string;
+    readonly difficulty: string;
+    readonly guidanceMode: string;
+    readonly onboardingStep: string | null;
     readonly fps: number;
   };
 }
@@ -123,6 +128,11 @@ window.__LINGOWILD_DIAGNOSTICS__ = {
     gleamingCount: controller.state.gleamingSpecies.length,
     rematchCount: controller.state.rematchCleared.length,
     tracesCount: controller.state.discoveredTraces.length,
+    uiLanguage: controller.state.settings.uiLanguage ?? 'vi',
+    contentLanguage: controller.state.settings.contentLanguage ?? 'bilingual',
+    difficulty: controller.state.settings.difficulty ?? 'relaxed',
+    guidanceMode: controller.state.settings.guidanceMode ?? 'full',
+    onboardingStep: controller.activeOnboardingPrompt?.id ?? null,
     fps: worldScene.measuredFps,
   }),
 };

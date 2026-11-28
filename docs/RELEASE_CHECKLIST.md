@@ -1,38 +1,31 @@
-# Danh mục kiểm tra bàn giao phát hành cuối LingoWild
+# Danh mục kiểm tra bàn giao LingoWild
 
-## 1. Khắc phục triệt để các phát hiện kiểm toán kỹ thuật
+## 1. Hoàn thiện trải nghiệm người mới và tiếng Việt đầy đủ
 
-- [x] Sửa lỗi chuỗi `Promise` trong đường dẫn dự phòng ngoại tuyến của `public/sw.js` bằng hàm `async/await` tường minh; chỉ quản lý bộ nhớ đệm `lingowild-cache-*` và trả lỗi `503` chuẩn cho tài nguyên con thất bại.
-- [x] Sinh phiên bản bộ nhớ đệm `CACHE_VERSION` bằng băm `SHA-256` trên đường dẫn sắp xếp xác định và nội dung byte thực tế của toàn bộ tệp đóng gói trong `scripts/inject-sw-manifest.ts`; bổ sung kiểm thử tự động nâng cấp trình phục vụ từ bản A sang bản B và kiểm tra điều hướng ngoại tuyến trên đường dẫn chưa lưu đệm.
-- [x] Nâng cấp cấu trúc tệp lưu lên phiên bản `2` kèm bộ chuyển đổi tương thích ngược từ bản 1.0 và 1.1 trong `src/domain/save.ts`, tự động dời nhân vật khỏi ô mới bị chặn sang ô đi bộ an toàn gần nhất.
-- [x] Chống mất tiến trình khi mở nhiều thẻ trình duyệt bằng kiểm tra dấu thời gian mới hơn trong `localStorage` và bảo toàn bản sao lưu dự phòng khi gặp lỗi đầy bộ nhớ `QuotaExceededError`.
-- [x] Tách bạch hoàn toàn điều kiện đủ hạn thời gian chờ (`isWordDueForReencounter`) khỏi điểm xếp hạng ưu tiên (`computeWordReencounterPriority`) trong `src/domain/learning.ts`; kiểm thử đầy đủ trường hợp nhiều từ đến hạn, từ có điểm dương nhưng chưa đến hạn và từ đã ghi nhớ bậc `3`.
-- [x] Mô tả chính xác phạm vi đo độ phủ V8 thực tế (`src/domain/` và `src/game/controller.ts`), không phóng đại thành độ phủ toàn bộ giao diện.
-- [x] Kiểm tra lỗ hổng phụ thuộc bằng `npm audit` đạt `0` lỗ hổng; không có mã chết, tệp trùng lặp hay khóa bí mật phía máy khách.
+- [x] Tách độc lập Ngôn ngữ giao diện (`Tiếng Việt`, `Tiếng Anh`), Ngôn ngữ hội thoại và nội dung (`Tiếng Việt hoàn toàn`, `Song ngữ Anh Việt`, `Tiếng Anh có trợ giúp tra cứu`, `Đắm chìm trong tiếng Anh`) và Độ khó chiến đấu (`Thư giãn`, `Phiêu lưu`, `Thử thách`), mặc định sẵn tiếng Việt + song ngữ + Thư giãn cho người mới và cho phép đổi trực tiếp giữa phiên không mất dữ liệu.
+- [x] Kiểm toán tự động toàn bộ màn hình mở đầu, thanh HUD, hộp thoại, trận đấu và 7 thẻ Sổ Thực Địa ở chế độ tiếng Việt xác nhận 0 nhãn giao diện tiếng Anh bị lọt.
+- [x] Triển khai hệ thống dẫn đường BFS ba mức (`Đầy đủ`, `Tối giản`, `Tắt`) tránh mọi vật cản, nối nhiều vùng qua cổng đã mở khóa, hiển thị mũi tên la bàn, vệt sáng mặt đất, bản đồ nhỏ, dấu `!` và `?` trên nhân vật, gợi ý tương tác gần, nút `Dẫn đường` theo nhiệm vụ và nút `Tôi bị lạc`. Không lộ rương bí mật và chỉ báo yêu cầu khi gặp cổng khóa.
+- [x] Chuẩn hóa cả 12 thẻ nhiệm vụ hiển thị đủ việc cần làm, cần tìm ai, khu vực, tiến độ, yêu cầu chưa đạt và gợi ý chuẩn bị.
+- [x] Xây dựng hướng dẫn nhập môn 10 bước tự nhiên (5 đến 10 phút), bảo đảm thu phục 100% ở lần bắt hướng dẫn đầu tiên, cho phép bỏ qua bước tra từ tiếng Anh hoặc bỏ qua toàn bộ hướng dẫn bất kỳ lúc nào mà không mất vật phẩm hay tiến trình.
+- [x] Triển khai 3 chế độ độ khó cân bằng không bơm máu vô nghĩa và Trợ giúp chiến đấu bật tắt linh hoạt (gợi ý chiêu khuyên dùng, giải thích khắc chế, cảnh báo máu thấp, gợi ý đổi đồng đội, tỷ lệ bắt trực tiếp, cảnh báo trước Thủ lĩnh, thông báo học chiêu và Quản lý chiêu trong thẻ Đội hình, hồi sức miễn phí tại lửa trại khi thua).
 
-## 2. Đại tu nghệ thuật thế giới, sinh vật, sân đấu và hậu cốt truyện
+## 2. An toàn kỹ thuật, di trú bản lưu và vận hành ngoại tuyến
 
-- [x] Tích hợp các bộ tài nguyên pixel mở đã xác minh giấy phép và ghi công đầy đủ trong `assets-src/` và `CREDITS.md` (`Kenney` CC0, `Sharm` CC-BY, `ArMM1998` CC0, `Luis Zuno` CC0/CC-BY, `Admurin` CC-BY, `Pyromantic` CC0/CC-BY).
-- [x] Đại tu cả 5 khu vực `32x24` có bản sắc rõ rệt và va chạm chính xác: làng `Mosslight Camp` có nhà gỗ lớn, đài phun nước động, quầy chợ, ghế dài, chậu hoa; `Whisperwood Glen` nhiều tầng cây, vệt nắng, bóng đổ, đá rêu cổ và thân gỗ rỗng; `Reedwater Fen` có đường ván gỗ, cầu nối đảo sen, sương trôi và không có nhân vật đứng sai trên mặt nước; `Terracotta Ridge` có vách đá đất nung xếp tầng có gờ cát và thác nước `3x3`; `Starfall Sanctuary` có nền đá đen cổ ngữ, cổng vòm `4x4` và tượng hộ vệ.
-- [x] Bổ sung bạn đồng hành đi theo sau người chơi trên bản đồ (`companions.png`), biến thể ánh kim hiếm tự nhiên, 4 dấu vết sinh cảnh phát sáng, thông báo ăn mừng tiến hóa, sổ bách khoa hiển thị bóng dáng bí ẩn kèm gợi ý vùng sống và thời điểm xuất hiện, cùng truyện ngắn thực địa sau khi kết bạn.
-- [x] Nâng cấp 5 sân đấu pixel theo vùng (`battle-bg.png`), thanh dự báo chiến thuật đầu lượt, gợi ý đổi đồng đội khắc chế, hiển thị trực tiếp tỷ lệ thu phục ước tính và mở khóa 4 trận tái đấu bậc thầy cấp `24-30` sau khi hoàn thành cốt truyện chính.
+- [x] Sửa đường dẫn dự phòng ngoại tuyến trong `public/sw.js` dùng `async/await` tường minh, chỉ quản lý bộ nhớ đệm `lingowild-cache-*`, trả mã `503` chuẩn cho tài nguyên con thất bại và kiểm thử nâng cấp thực tế từ bản A sang bản B.
+- [x] Di trú tương thích ngược an toàn cho các bản lưu phiên bản `1` và `2`, bảo vệ chống ghi đè đa thẻ trình duyệt (`hasMultiTabConflict`) và giữ nguyên bản sao lưu dự phòng khi bộ nhớ đầy.
+- [x] Tách bạch điều kiện đủ hạn thời gian chờ (`isWordDueForReencounter`) khỏi điểm ưu tiên (`computeWordReencounterPriority`) trong `src/domain/learning.ts`.
+- [x] Không thêm gói phụ thuộc mới, không tạo thành phần hay CSS trùng lặp, `npm audit --audit-level=low` đạt `0` lỗ hổng và `npm run lint` đạt `0` lỗi.
 
-## 3. Tiếp thu tiếng Anh tự nhiên, giao diện sổ thực địa và di động
+## 3. Bằng chứng kiểm thử, hình ảnh, video và tích hợp liên tục
 
-- [x] Mở rộng lên 367 mục từ lõi (bổ sung nhóm từ và cụm từ giao tiếp đời thường, 25 mục có nhiều câu ví dụ độc lập) kết hợp từ điển bỏ túi ngoại tuyến hơn 430 mục đạt độ phủ tra từ hội thoại `90,5%`.
-- [x] Tách rõ 4 trạng thái trong Sổ Từ Vựng (`Encountered`, `Saved`, `Mastered`, `Due Now`), giữ nguyên nguyên tắc hoàn thành toàn bộ trò chơi không cần làm bất kỳ bài ôn từ nào.
-- [x] Nâng cấp màn hình mở đầu có thẻ xem trước 3 bạn đồng hành khởi đầu, hỗ trợ nhấn giữ cụm phím chữ thập trên di động để bước liên tục và hiển thị trọn vẹn khung mục tiêu hai dòng không cắt chữ.
+- [x] Vượt qua `npm run validate:data`, `npm run typecheck`, `npm run lint`, `npm run test:coverage` (`35/35` bài kiểm thử, gồm phá đảo 3 starter độ khó Phiêu lưu và 9 bài kiểm thử trải nghiệm người mới), `npm run build` và `npm run test:e2e` (`11/11` bài hoạt động trên desktop và mobile).
+- [x] Cập nhật và kiểm tra trực quan đủ 22 ảnh chụp màn hình trong `docs/screenshots/` cùng video hướng dẫn người mới dài `88,6` giây tại `docs/videos/lingowild-gameplay.webm`.
+- [x] Công bố rõ phạm vi đo độ phủ V8 (`src/domain/` và `src/game/controller.ts`) và phân biệt rõ kiểm thử tự động với kiểm thử trên người chơi thật bên ngoài.
+- [x] Đẩy mã lên nhánh `develop/lingowild`, cập nhật pull request #1 (không tự gộp vào `main`) và xác nhận quy trình GitHub Actions chạy xanh trên commit cuối cùng.
 
-## 4. Bằng chứng kiểm thử, hình ảnh, video thực tế và GitHub Actions
+## 4. Quy trình xuất bản lên GitHub Pages sau khi chủ dự án nghiệm thu
 
-- [x] Vượt qua toàn bộ `npm run validate:data`, `npm run typecheck`, `npm run lint`, `npm run test:coverage` (`26/26` bài kiểm thử, gồm phá đảo tự nhiên cả 3 starter), `npm run build` và `npm run test:e2e`.
-- [x] Chụp mới và rà soát trực quan đầy đủ bộ ảnh chụp cả 5 vùng, nhiều sân đấu pixel, giao diện sổ thực địa và di động dọc ngang trong `docs/screenshots/`.
-- [x] Quay video gameplay thực tế dài từ 1 đến 3 phút lưu tại `docs/videos/lingowild-gameplay.webm`.
-- [x] Đẩy mã lên nhánh `develop/lingowild` (không tự gộp vào `main`) và xác nhận trực tiếp quy trình GitHub Actions chạy xanh trên commit cuối cùng.
-
-## 5. Quy trình xuất bản lên GitHub Pages khi chủ dự án nghiệm thu
-
-1. Mở mục `Settings` rồi chọn `Pages` trên kho GitHub `Nguyen-XuanTung/Pokemon`, tại mục `Build and deployment` đặt `Source` thành `GitHub Actions`.
-2. Rà soát và bấm `Merge pull request` đối với pull request từ nhánh `develop/lingowild` sang nhánh `main`.
-3. Chờ quy trình `.github/workflows/ci-and-deploy.yml` chạy hoàn tất hai bước `verify-and-build` và `deploy-pages` trên nhánh `main` để xuất bản gói `./dist` lên `https://nguyen-xuantung.github.io/Pokemon/`.
-4. Mở trang đã xuất bản để xác nhận tải trang, âm thanh khi tương tác, lưu tiến trình cục bộ và tải lại ngoại tuyến trên đường dẫn `/Pokemon/` hoạt động ổn định.
+1. Mở mục `Settings` rồi chọn `Pages` trên kho GitHub `Nguyen-XuanTung/Pokemon`, đặt `Source` trong `Build and deployment` thành `GitHub Actions`.
+2. Kiểm tra pull request #1 từ `develop/lingowild` sang `main`, xác nhận bước `verify-and-build` xanh và bấm `Merge pull request`.
+3. Chờ quy trình `.github/workflows/ci-and-deploy.yml` tự động xuất bản gói `./dist` lên `https://nguyen-xuantung.github.io/Pokemon/`.
+4. Mở trang đã xuất bản trên máy tính và điện thoại để kiểm tra trải nghiệm người mới tiếng Việt và khả năng tải lại ngoại tuyến trên đường dẫn `/Pokemon/`.

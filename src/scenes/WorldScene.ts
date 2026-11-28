@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { MAPS_BY_ID } from '../data/maps.ts';
 import { NPCS } from '../data/npcs.ts';
+import { QUESTS } from '../data/quests.ts';
 import { SPECIES_BY_ID } from '../data/species.ts';
+import { getNpcQuestMarker } from '../domain/navigation.ts';
 import type {
   BattleSpeedMode,
   Direction,
@@ -72,10 +74,13 @@ export class WorldScene extends Phaser.Scene {
   private renderedRegion: RegionId | null = null;
   private groundLayer!: Phaser.GameObjects.Container;
   private shadowLayer!: Phaser.GameObjects.Container;
+  private navLayer!: Phaser.GameObjects.Container;
   private objectLayer!: Phaser.GameObjects.Container;
   private canopyLayer!: Phaser.GameObjects.Container;
   private ambientLayer!: Phaser.GameObjects.Container;
+  private markerLayer!: Phaser.GameObjects.Container;
   private lightGlowLayer!: Phaser.GameObjects.Container;
+  private lastNavSignature = '';
   private battleContainer!: Phaser.GameObjects.Container;
   private battleUnderfill!: Phaser.GameObjects.Rectangle;
   private battleBgSprite!: Phaser.GameObjects.Sprite;
@@ -183,6 +188,7 @@ export class WorldScene extends Phaser.Scene {
     this.registerStructureFrames();
     this.groundLayer = this.add.container(0, 0).setDepth(1);
     this.shadowLayer = this.add.container(0, 0).setDepth(3);
+    this.navLayer = this.add.container(0, 0).setDepth(4);
     this.objectLayer = this.add.container(0, 0).setDepth(5);
     this.companionShadow = this.add.ellipse(8, 14, 10, 4, 0x0e1410, 0.28).setDepth(8);
     this.companionGleamRing = this.add
@@ -199,6 +205,7 @@ export class WorldScene extends Phaser.Scene {
     this.playerSprite = this.add.sprite(0, 0, 'characters', 1).setOrigin(0, 0).setDepth(10);
     this.canopyLayer = this.add.container(0, 0).setDepth(15);
     this.ambientLayer = this.add.container(0, 0).setDepth(18);
+    this.markerLayer = this.add.container(0, 0).setDepth(20);
 
     this.timeOverlay = this.add
       .rectangle(0, 0, 2048, 2048, 0x000000, 0)
@@ -1025,9 +1032,89 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private rebuildNavigationOverlay(): void {
+    const state = this.controller.state;
+    const guidance = state.settings.guidanceMode ?? 'full';
+    const nav = this.controller.navigationPlan;
+    const inBattle = Boolean(this.controller.activeBattle);
+    const dest = nav.destinationInCurrentRegion;
+    const nearby = nav.nearbyInteractable;
+    const sig = `${inBattle}|${guidance}|${state.regionId}|${state.playerPos.x},${state.playerPos.y}|${dest?.x ?? -1},${dest?.y ?? -1}|${nav.waypoints.length}|${nearby?.id ?? ''}|${Object.keys(state.quests).length}|${state.defeatedTrainers.length}|${Boolean(state.flags.has_starter)}`;
+    if (sig === this.lastNavSignature) {
+      return;
+    }
+    this.lastNavSignature = sig;
+    this.navLayer.removeAll(true);
+    this.markerLayer.removeAll(true);
+
+    if (inBattle || guidance === 'off') {
+      return;
+    }
+
+    // Subtle ground guidance trail & destination beacon in Full mode
+    if (guidance === 'full' && nav.active) {
+      for (let i = 0; i < nav.waypoints.length; i++) {
+        const pt = nav.waypoints[i]!;
+        const px = pt.x * 16 + 8;
+        const py = pt.y * 16 + 10;
+        const alpha = Math.max(0.28, 0.68 - i * 0.015);
+        const dot = this.add
+          .circle(px, py, i === 0 ? 2.8 : 2.1, 0xffe478, alpha)
+          .setStrokeStyle(1, 0x4f3616, alpha * 0.9);
+        this.navLayer.add(dot);
+      }
+      if (dest) {
+        const ring = this.add
+          .circle(dest.x * 16 + 8, dest.y * 16 + 10, 7, 0xffdf6b, 0.2)
+          .setStrokeStyle(1.4, 0xfff5b5, 0.9);
+        this.navLayer.add(ring);
+      }
+    }
+
+    // NPC quest indicators (! for new quest, ? for active objective / turn-in)
+    const npcsHere = NPCS.filter((n) => n.regionId === state.regionId);
+    for (const npc of npcsHere) {
+      const marker = getNpcQuestMarker({
+        npc,
+        state,
+        quests: QUESTS,
+        speciesById: SPECIES_BY_ID,
+      });
+      if (marker === 'none') continue;
+      const mx = npc.x * 16 + 8;
+      const my = npc.y * 16 - 5;
+      const bgColor = marker === 'new_quest' ? 0xf5c842 : 0x3b8c52;
+      const textColor = marker === 'new_quest' ? '#2c1f0a' : '#fffaf0';
+      const badge = this.add
+        .circle(mx, my, 5.2, bgColor, 0.96)
+        .setStrokeStyle(1, 0x261d14, 0.95);
+      const glyph = this.add
+        .text(mx, my, marker === 'new_quest' ? '!' : '?', {
+          fontFamily: 'Segoe UI, Tahoma, sans-serif',
+          fontSize: '9px',
+          fontStyle: 'bold',
+          color: textColor,
+        })
+        .setOrigin(0.5, 0.5);
+      this.markerLayer.add([badge, glyph]);
+    }
+
+    // Subtle nearby interaction bubble above adjacent NPC or prop
+    if (nearby) {
+      const bx = nearby.x * 16 + 8;
+      const by = nearby.y * 16 - 6;
+      const bubble = this.add
+        .circle(bx, by, 4.5, 0xfff8e1, 0.95)
+        .setStrokeStyle(1, 0x5e442c, 0.95);
+      const dot = this.add.circle(bx, by, 1.5, 0xba5b38, 1);
+      this.markerLayer.add([bubble, dot]);
+    }
+  }
+
   private syncFromController(): void {
     const state = this.controller.state;
     if (this.renderedRegion !== state.regionId) {
+      this.lastNavSignature = '';
       this.rebuildRegionMap(state.regionId, true);
     }
 
@@ -1074,6 +1161,7 @@ export class WorldScene extends Phaser.Scene {
       });
     }
     this.refreshCompanionFollower(stepped && this.lastStepRendered >= 0);
+    this.rebuildNavigationOverlay();
     this.lastStepRendered = state.stepCount;
 
     const tint = TIME_TINT[state.timeOfDay];

@@ -140,7 +140,7 @@ function startDistStaticServer(): Promise<{ server: http.Server; baseUrl: string
   });
 }
 
-async function dismissDialogueSmoothly(page: Page, pauseMs: number = 950): Promise<void> {
+async function dismissDialogueSmoothly(page: Page, pauseMs: number = 1200): Promise<void> {
   let safety = 0;
   while (safety < 16) {
     safety += 1;
@@ -160,10 +160,10 @@ async function dismissDialogueSmoothly(page: Page, pauseMs: number = 950): Promi
   }
 }
 
-async function playShowcaseBattle(page: Page, tryBond: boolean): Promise<boolean> {
+async function playBeginnerBattle(page: Page, tryBond: boolean): Promise<boolean> {
   const beforeCaught = (await readSnap(page)).caughtCount;
   let turn = 0;
-  while (turn < 20) {
+  while (turn < 18) {
     turn += 1;
     const snap = await readSnap(page);
     if (!snap.hasActiveBattle) {
@@ -172,17 +172,17 @@ async function playShowcaseBattle(page: Page, tryBond: boolean): Promise<boolean
 
     const finishBtn = page.getByTestId('btn-battle-finish');
     if (await finishBtn.isVisible()) {
-      await page.waitForTimeout(1100);
+      await page.waitForTimeout(1600);
       await finishBtn.click();
-      await dismissDialogueSmoothly(page, 800);
+      await dismissDialogueSmoothly(page, 1000);
       return (await readSnap(page)).caughtCount > beforeCaught;
     }
 
-    await page.waitForTimeout(950);
+    await page.waitForTimeout(1400);
 
     if (!tryBond) {
       await page.getByTestId('battle-tab-tactics').click();
-      await page.waitForTimeout(450);
+      await page.waitForTimeout(600);
       const fleeBtn = page.getByTestId('btn-battle-flee');
       if (await fleeBtn.isVisible()) {
         await fleeBtn.click();
@@ -190,18 +190,20 @@ async function playShowcaseBattle(page: Page, tryBond: boolean): Promise<boolean
       }
     }
 
+    // Turn 1: use the Battle Assist recommended move so viewers see the suggestion badge & damage
     if (turn === 1) {
-      await page.getByTestId('battle-tab-tactics').click();
-      await page.waitForTimeout(700);
-      const observeBtn = page.getByTestId('btn-battle-observe');
-      if (await observeBtn.isVisible()) {
-        await observeBtn.click();
+      const recBtn = page.locator('.lw-move-card[data-recommended="true"] button').first();
+      if (await recBtn.isVisible()) {
+        await recBtn.click();
         continue;
       }
+      await page.getByTestId('btn-move-0').click();
+      continue;
     }
 
+    // Turn 2+: open Chimes & Bag showing guaranteed 100% beginner capture and throw Moss Charm
     await page.getByTestId('battle-tab-bag').click();
-    await page.waitForTimeout(750);
+    await page.waitForTimeout(1300);
     const charmBtn = page.getByTestId('btn-battle-item-moss_charm');
     if (await charmBtn.isVisible()) {
       await charmBtn.click();
@@ -209,7 +211,7 @@ async function playShowcaseBattle(page: Page, tryBond: boolean): Promise<boolean
     }
 
     await page.getByTestId('battle-tab-moves').click();
-    await page.waitForTimeout(550);
+    await page.waitForTimeout(650);
     await page.getByTestId('btn-move-0').click();
   }
   return false;
@@ -219,7 +221,7 @@ async function walkHumanPacedTo(
   page: Page,
   targetX: number,
   targetY: number,
-  stepDelayMs: number = 210,
+  stepDelayMs: number = 220,
   tryBondWild: boolean = false,
 ): Promise<boolean> {
   const startRegion = (await readSnap(page)).regionId;
@@ -229,13 +231,13 @@ async function walkHumanPacedTo(
     guard += 1;
     const snap = await readSnap(page);
     if (snap.hasActiveBattle) {
-      if (await playShowcaseBattle(page, tryBondWild && !bondedAny)) {
+      if (await playBeginnerBattle(page, tryBondWild && !bondedAny)) {
         bondedAny = true;
       }
       continue;
     }
     if (snap.hasActiveDialogue) {
-      await dismissDialogueSmoothly(page, 850);
+      await dismissDialogueSmoothly(page, 1000);
       continue;
     }
     if (snap.regionId !== startRegion) return bondedAny;
@@ -264,7 +266,7 @@ async function walkAdjacentAndInspect(
   page: Page,
   objX: number,
   objY: number,
-  stepDelayMs: number = 210,
+  stepDelayMs: number = 220,
 ): Promise<void> {
   const snap = await readSnap(page);
   const candidates: Array<{ sx: number; sy: number; face: Direction; len: number }> = [];
@@ -287,10 +289,10 @@ async function walkAdjacentAndInspect(
   const cur = await readSnap(page);
   if (cur.playerPos.facing !== best.face) {
     await page.keyboard.press(DIR_KEY[best.face]);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(240);
   }
   await page.keyboard.press('Space');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(600);
 }
 
 async function main(): Promise<void> {
@@ -312,112 +314,124 @@ async function main(): Promise<void> {
     const page = await context.newPage();
     const videoHandle = page.video();
 
-    // 1. Title screen showcase (0s - 6s)
+    // 1. Vietnamese Title Screen defaults: Vietnamese UI + Bilingual content + Relaxed difficulty
     await page.goto(baseUrl);
     await page.getByTestId('btn-new-game').waitFor({ state: 'visible' });
-    await page.waitForTimeout(2400);
+    await page.waitForTimeout(3800);
     await page.getByTestId('btn-new-game').click();
 
-    // 2. Rowan intro + contextual lexicon gloss + pocket word assist + Mosskit starter (6s - 22s)
+    // 2. Onboarding Step 1: Rowan bilingual intro + optional English word gloss + pick Mosskit
     await page.getByTestId('dialogue-box').waitFor({ state: 'visible' });
-    await page.waitForTimeout(1600);
+    await page.waitForTimeout(2200);
     const valleyToken = page.locator('.word-token', { hasText: 'valley' }).first();
     if (await valleyToken.isVisible()) {
       await valleyToken.click();
       await page.getByTestId('gloss-popup').waitFor({ state: 'visible' });
-      await page.waitForTimeout(2200);
-      const saveWordBtn = page.getByTestId('btn-gloss-save');
-      if (await saveWordBtn.isVisible()) {
-        await saveWordBtn.click();
-        await page.waitForTimeout(900);
-      }
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(2800);
+      await page.getByTestId('btn-gloss-save').click();
+      await page.waitForTimeout(1000);
+      await page.getByTestId('btn-gloss-close').click();
+      await page.waitForTimeout(600);
     }
 
     await page.getByTestId('btn-dialogue-next').click();
-    await page.waitForTimeout(1400);
-
-    const plainToken = page.locator('.word-token:not(.is-glossary)').first();
-    if (await plainToken.isVisible()) {
-      await plainToken.click();
-      await page.waitForTimeout(1800);
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(450);
-    }
-
+    await page.waitForTimeout(2000);
     await page.getByTestId('btn-dialogue-next').click();
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2000);
     await page.getByTestId('dialogue-choice-0').click();
-    await dismissDialogueSmoothly(page, 1300);
-
-    // 3. Mosslight Camp village tour with Companion Follower trotting behind (22s - 46s)
-    await page.waitForTimeout(900);
-    await walkAdjacentAndInspect(page, 11, 13, 220);
-    await dismissDialogueSmoothly(page, 1300);
-
-    // Open Greenhouse chest (5,3)
-    await walkAdjacentAndInspect(page, 5, 3, 190);
-    await dismissDialogueSmoothly(page, 1100);
-
-    // Visit Supply Post market stall (21,8)
-    await walkAdjacentAndInspect(page, 21, 8, 190);
-    await page.getByTestId('supply-post-modal').waitFor({ state: 'visible' });
-    await page.waitForTimeout(1600);
-    await page.getByTestId('btn-buy-moss_charm').click();
-    await page.waitForTimeout(800);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(500);
-
-    // Visit South Brook Overlook (19,16) where saved word re-encounters naturally
-    await walkAdjacentAndInspect(page, 19, 16, 190);
-    await dismissDialogueSmoothly(page, 1500);
-
-    // 4. Enter Whisperwood Glen (0,12) -> inspect Habitat Trace -> Wild Capture Battle (46s - 82s)
-    await walkHumanPacedTo(page, 0, 12, 185, false);
-    await page.waitForTimeout(1600);
-
-    // Inspect Luminous Bark Habitat Trace (18,18)
-    await walkAdjacentAndInspect(page, 18, 18, 195);
     await dismissDialogueSmoothly(page, 1600);
 
-    // Walk into Whisperwood tall grass near (26,7)/(27,8) and bond a wild creature!
-    let bonded = await walkHumanPacedTo(page, 26, 7, 210, true);
+    // 3. Onboarding Steps 2-3: Golden ground trail, minimap, compass arrow, talk to Scout Mai (16,15)
+    await page.waitForTimeout(1800);
+    await walkAdjacentAndInspect(page, 16, 15, 250);
+    await dismissDialogueSmoothly(page, 1800);
+
+    // Inspect Basin Trail Signpost (11,13) and Greenhouse chest (5,3)
+    await walkAdjacentAndInspect(page, 11, 13, 230);
+    await dismissDialogueSmoothly(page, 1500);
+    await walkAdjacentAndInspect(page, 5, 3, 220);
+    await dismissDialogueSmoothly(page, 1200);
+
+    // 4. Onboarding Step 4: Follow trail west into Whisperwood Glen (0,12)
+    await walkHumanPacedTo(page, 0, 12, 220, false);
+    await page.waitForTimeout(2000);
+
+    // 5. Onboarding Steps 5-6: Gentle Lv.3 wild encounter -> Battle Assist recommendation -> 100% first capture!
+    let bonded = await walkHumanPacedTo(page, 26, 7, 230, true);
     for (let step = 0; step < 18 && !bonded; step++) {
       const destX = step % 2 === 0 ? 27 : 26;
       const destY = step % 2 === 0 ? 8 : 7;
-      bonded = await walkHumanPacedTo(page, destX, destY, 220, true);
+      bonded = await walkHumanPacedTo(page, destX, destY, 230, true);
     }
-
-    // Rest at Glen Clearing Campfire (24,9) and briefly preview Optional Word Practice
-    await walkAdjacentAndInspect(page, 24, 9, 200);
-    const campPracticeChoice = page.getByTestId('dialogue-choice-0');
-    if (await campPracticeChoice.isVisible()) {
-      await page.waitForTimeout(1100);
-      await campPracticeChoice.click();
-      await page.getByTestId('camp-review-modal').waitFor({ state: 'visible' });
-      await page.waitForTimeout(2600);
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(500);
-    } else {
-      await dismissDialogueSmoothly(page, 900);
-    }
-
-    // 5. Full Field Journal tour: Map, Mystery-Silhouette Compendium, Team, Quests, Lexicon (82s - 102s)
-    await page.keyboard.press('KeyJ');
-    await page.getByTestId('journal-modal').waitFor({ state: 'visible' });
-    for (const tabId of [
-      'journal-tab-map',
-      'journal-tab-compendium',
-      'journal-tab-team',
-      'journal-tab-quests',
-      'journal-tab-lexicon',
-    ]) {
-      await page.getByTestId(tabId).click();
-      await page.waitForTimeout(2600);
-    }
-    await page.getByTestId('btn-close-journal').click();
     await page.waitForTimeout(1400);
+
+    // 6. Onboarding Step 7: Heal at Glen Clearing Campfire (24,9) and preview optional Campfire Word Practice
+    await walkAdjacentAndInspect(page, 24, 9, 220);
+    const campChoice = page.getByTestId('dialogue-choice-0');
+    if (await campChoice.isVisible()) {
+      await page.waitForTimeout(1400);
+      await campChoice.click();
+      await page.getByTestId('camp-review-modal').waitFor({ state: 'visible' });
+      await page.waitForTimeout(3000);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(600);
+    } else {
+      await dismissDialogueSmoothly(page, 1200);
+    }
+
+    // 7. Onboarding Step 8: Skip optional word gloss OR tap word cleanly
+    const skipStepBtn = page.getByTestId('btn-skip-onboarding-step');
+    if (await skipStepBtn.isVisible()) {
+      await page.waitForTimeout(1500);
+      await skipStepBtn.click();
+      await page.waitForTimeout(1000);
+    }
+
+    // 8. Onboarding Step 9: Open Field Journal -> structured Quests + Dẫn đường -> Map -> Team + Move Manager -> Settings live toggle
+    await page.getByTestId('btn-open-journal').click();
+    await page.getByTestId('journal-modal').waitFor({ state: 'visible' });
+    await page.waitForTimeout(2800);
+
+    const trackBtn = page.getByTestId('btn-track-quest-q04_first_bond');
+    if (await trackBtn.isVisible()) {
+      await trackBtn.click();
+      await page.waitForTimeout(1400);
+      await page.getByTestId('btn-open-journal').click();
+      await page.getByTestId('journal-modal').waitFor({ state: 'visible' });
+      await page.waitForTimeout(900);
+    }
+
+    await page.getByTestId('journal-tab-map').click();
+    await page.waitForTimeout(2400);
+
+    await page.getByTestId('journal-tab-team').click();
+    await page.waitForTimeout(1600);
+    await page.getByTestId('btn-manage-moves-0').click();
+    await page.waitForTimeout(2600);
+
+    await page.getByTestId('journal-tab-compendium').click();
+    await page.waitForTimeout(2200);
+
+    await page.getByTestId('journal-tab-lexicon').click();
+    await page.waitForTimeout(2200);
+
+    // Live toggle Vietnamese <-> English UI and difficulty in Settings without losing progress
+    await page.getByTestId('journal-tab-settings').click();
+    await page.waitForTimeout(2200);
+    await page.getByTestId('settings-ui-language').selectOption('en');
+    await page.waitForTimeout(1800);
+    await page.getByTestId('settings-ui-language').selectOption('vi');
+    await page.waitForTimeout(1400);
+
+    await page.getByTestId('btn-close-journal').click();
+    await page.waitForTimeout(1200);
+
+    // 9. Open "Tôi bị lạc" contextual helper modal to show instant orientation
+    await page.getByTestId('btn-im-lost').click();
+    await page.getByTestId('lost-helper-modal').waitFor({ state: 'visible' });
+    await page.waitForTimeout(3200);
+    await page.getByTestId('btn-close-lost-helper').click();
+    await page.waitForTimeout(1800);
 
     const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
     await context.close();
@@ -432,7 +446,7 @@ async function main(): Promise<void> {
 
     const sizeKb = (fs.statSync(TARGET_VIDEO).size / 1024).toFixed(1);
     console.log(
-      `Recorded real gameplay video (${elapsedSec}s, ${sizeKb} KB) -> ${TARGET_VIDEO}`,
+      `Recorded beginner walkthrough video (${elapsedSec}s, ${sizeKb} KB) -> ${TARGET_VIDEO}`,
     );
   } finally {
     server.close();

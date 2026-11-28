@@ -9,14 +9,31 @@ import type {
   GameState,
   ItemDefinition,
   MoveDefinition,
+  OnboardingState,
   RegionId,
   SpeciesDefinition,
 } from './types.ts';
 
+export function createInitialOnboardingState(): OnboardingState {
+  return {
+    currentStep: 'choose_starter',
+    completedSteps: [],
+    skipped: false,
+    completed: false,
+    stepsMovedSinceStarter: 0,
+    firstCaptureGuaranteedUsed: false,
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
+    uiLanguage: 'vi',
+    contentLanguage: 'bilingual',
+    difficulty: 'relaxed',
+    guidanceMode: 'full',
+    battleAssist: true,
     cefrBand: 'A2',
-    supportMode: 'contextual',
+    supportMode: 'bilingual',
     bgmVolume: 0.45,
     sfxVolume: 0.65,
     muted: false,
@@ -79,6 +96,8 @@ export function createInitialGameState(seed: number = 0x5eed2026): GameState {
         rewardClaimed: false,
       },
     },
+    trackedQuestId: 'q01_first_partner',
+    onboarding: createInitialOnboardingState(),
     lexicon: {},
     stats: {
       battlesWon: 0,

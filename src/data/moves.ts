@@ -4,6 +4,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'trail_tackle',
     name: 'Trail Tackle',
+    nameVi: 'Húc Lối Mòn',
     element: 'neutral',
     category: 'physical',
     power: 38,
@@ -16,6 +17,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'quick_dash',
     name: 'Quick Dash',
+    nameVi: 'Lao Chớp Nhoáng',
     element: 'neutral',
     category: 'physical',
     power: 40,
@@ -28,6 +30,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'keen_focus',
     name: 'Keen Focus',
+    nameVi: 'Tập Trung Cao Độ',
     element: 'neutral',
     category: 'support',
     power: 0,
@@ -41,6 +44,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'shelter_stance',
     name: 'Shelter Stance',
+    nameVi: 'Thế Thủ Vững Vàng',
     element: 'neutral',
     category: 'support',
     power: 0,
@@ -54,6 +58,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'echo_roar',
     name: 'Echo Call',
+    nameVi: 'Tiếng Gọi Vang Rừng',
     element: 'neutral',
     category: 'support',
     power: 0,
@@ -67,6 +72,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'morning_rest',
     name: 'Sunlit Rest',
+    nameVi: 'Nghỉ Nắng Sớm',
     element: 'neutral',
     category: 'support',
     power: 0,
@@ -80,6 +86,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'vine_snap',
     name: 'Vine Snap',
+    nameVi: 'Quất Dây Leo',
     element: 'leaf',
     category: 'physical',
     power: 45,
@@ -92,6 +99,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'sap_drain',
     name: 'Sap Drain',
+    nameVi: 'Hút Nhựa Sống',
     element: 'leaf',
     category: 'special',
     power: 46,
@@ -105,6 +113,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'spore_drift',
     name: 'Spore Drift',
+    nameVi: 'Bụi Bào Tử',
     element: 'leaf',
     category: 'support',
     power: 0,
@@ -118,6 +127,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'lullaby_pollen',
     name: 'Slumber Pollen',
+    nameVi: 'Phấn Ru Ngủ',
     element: 'leaf',
     category: 'support',
     power: 0,
@@ -131,6 +141,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'razor_frond',
     name: 'Razor Frond',
+    nameVi: 'Lá Dương Xỉ Sắc',
     element: 'leaf',
     category: 'physical',
     power: 62,
@@ -143,6 +154,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'canopy_surge',
     name: 'Canopy Surge',
+    nameVi: 'Sóng Tán Cổ Thụ',
     element: 'leaf',
     category: 'special',
     power: 84,
@@ -155,6 +167,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'bark_shield',
     name: 'Bark Shield',
+    nameVi: 'Khiên Vỏ Sồi',
     element: 'leaf',
     category: 'support',
     power: 0,
@@ -168,6 +181,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'brook_splash',
     name: 'Brook Jet',
+    nameVi: 'Tia Nước Suối',
     element: 'water',
     category: 'special',
     power: 44,
@@ -180,6 +194,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'mist_veil',
     name: 'Mist Veil',
+    nameVi: 'Màn Sương Ẩm',
     element: 'water',
     category: 'support',
     power: 0,
@@ -193,6 +208,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'river_dive',
     name: 'Current Dive',
+    nameVi: 'Lướt Dòng Xoáy',
     element: 'water',
     category: 'physical',
     power: 60,
@@ -205,6 +221,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'soothing_rain',
     name: 'Dew Renewal',
+    nameVi: 'Mưa Dịu Hồi Sức',
     element: 'water',
     category: 'support',
     power: 0,
@@ -218,6 +235,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'marsh_bubble',
     name: 'Fen Bubble',
+    nameVi: 'Bọt Nước Đầm Sậy',
     element: 'water',
     category: 'special',
     power: 55,
@@ -231,6 +249,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'tidal_crest',
     name: 'Tidal Crest',
+    nameVi: 'Đỉnh Sóng Thủy Triều',
     element: 'water',
     category: 'special',
     power: 86,
@@ -243,6 +262,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'ember_nip',
     name: 'Ember Spark',
+    nameVi: 'Tia Than Hồng',
     element: 'ember',
     category: 'special',
     power: 44,
@@ -256,6 +276,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'warm_pounce',
     name: 'Flame Pounce',
+    nameVi: 'Vồ Vòng Lửa',
     element: 'ember',
     category: 'physical',
     power: 58,
@@ -269,6 +290,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'willow_wisp',
     name: 'Cinder Wisp',
+    nameVi: 'Đốm Lửa Lơ Lửng',
     element: 'ember',
     category: 'support',
     power: 0,
@@ -282,6 +304,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'hearth_glow',
     name: 'Hearth Glow',
+    nameVi: 'Bếp Lửa Nội Lực',
     element: 'ember',
     category: 'support',
     power: 0,
@@ -295,6 +318,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'kiln_burst',
     name: 'Kiln Burst',
+    nameVi: 'Luồng Nhiệt Lò Gốm',
     element: 'ember',
     category: 'special',
     power: 72,
@@ -308,6 +332,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'sunflare_arc',
     name: 'Sunflare Arc',
+    nameVi: 'Vòng Cung Thái Dương',
     element: 'ember',
     category: 'special',
     power: 88,
@@ -320,6 +345,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'pebble_toss',
     name: 'Pebble Volley',
+    nameVi: 'Loạt Sỏi Cuội',
     element: 'stone',
     category: 'physical',
     power: 45,
@@ -332,6 +358,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'clay_roll',
     name: 'Terracotta Roll',
+    nameVi: 'Lăn Mai Đất Nung',
     element: 'stone',
     category: 'physical',
     power: 60,
@@ -344,6 +371,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'canyon_wall',
     name: 'Ridge Bastion',
+    nameVi: 'Thành Đá Vách Núi',
     element: 'stone',
     category: 'support',
     power: 0,
@@ -357,6 +385,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'amber_lance',
     name: 'Crystal Spire',
+    nameVi: 'Mũi Tinh Thể',
     element: 'stone',
     category: 'special',
     power: 70,
@@ -369,6 +398,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'quake_stomp',
     name: 'Basin Tremor',
+    nameVi: 'Rung Chấn Hẻm Núi',
     element: 'stone',
     category: 'physical',
     power: 85,
@@ -381,6 +411,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'gust_sweep',
     name: 'Gust Sweep',
+    nameVi: 'Cánh Gió Quét Ngang',
     element: 'gale',
     category: 'special',
     power: 44,
@@ -393,6 +424,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'wing_glide',
     name: 'Feather Glide',
+    nameVi: 'Lướt Cánh Ra Đòn',
     element: 'gale',
     category: 'physical',
     power: 56,
@@ -405,6 +437,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'tailwind_grace',
     name: 'Tailwind Rhythm',
+    nameVi: 'Thuận Gió Lướt Nhanh',
     element: 'gale',
     category: 'support',
     power: 0,
@@ -418,6 +451,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'ridge_cyclone',
     name: 'Ridge Cyclone',
+    nameVi: 'Lốc Xoáy Đỉnh Đèo',
     element: 'gale',
     category: 'special',
     power: 70,
@@ -430,6 +464,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'skyward_tempest',
     name: 'Skyward Tempest',
+    nameVi: 'Cuồng Phong Đỉnh Trời',
     element: 'gale',
     category: 'special',
     power: 86,
@@ -442,6 +477,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'static_nuzzle',
     name: 'Spark Pulse',
+    nameVi: 'Xung Tia Chớp',
     element: 'spark',
     category: 'special',
     power: 44,
@@ -455,6 +491,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'thunder_wavelet',
     name: 'Tingle Net',
+    nameVi: 'Lưới Tĩnh Điện',
     element: 'spark',
     category: 'support',
     power: 0,
@@ -468,6 +505,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'volt_bound',
     name: 'Volt Bound',
+    nameVi: 'Cú Bật Tia Chớp',
     element: 'spark',
     category: 'physical',
     power: 60,
@@ -480,6 +518,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'lantern_beam',
     name: 'Lantern Beam',
+    nameVi: 'Chùm Sáng Đèn Đầm',
     element: 'spark',
     category: 'special',
     power: 72,
@@ -493,6 +532,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'starfall_bolt',
     name: 'Starfall Bolt',
+    nameVi: 'Lôi Quang Sao Rơi',
     element: 'spark',
     category: 'special',
     power: 88,
@@ -505,6 +545,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'harmony_chime',
     name: 'Harmony Chime',
+    nameVi: 'Chuông Hòa Điệu',
     element: 'spark',
     category: 'special',
     power: 78,
@@ -518,6 +559,7 @@ export const MOVES: ReadonlyArray<MoveDefinition> = [
   {
     id: 'dusk_lull',
     name: 'Twilight Hum',
+    nameVi: 'Khúc Ru Hoàng Hôn',
     element: 'gale',
     category: 'support',
     power: 0,

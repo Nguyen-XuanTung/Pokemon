@@ -212,8 +212,9 @@ function runCompleteUnassistedPlaythrough(
     new SaveRepository(storage, GAME_SAVE_VALIDATION_REGISTRY),
   );
 
-  // Start New Game via real UI controller entrypoint ONLY
-  controller.startNewGame(seed);
+  // Start New Game via real UI controller entrypoint ONLY (validate standard Adventure baseline)
+  controller.startNewGame(seed, { skipTutorial: true });
+  controller.updateSettings({ difficulty: 'adventure' });
   expect(controller.activeDialogue?.node.id).toBe('rowan_intro_choose_starter');
 
   // Advance Rowan intro lines and pick starter choice

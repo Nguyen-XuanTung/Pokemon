@@ -1,4 +1,5 @@
 import { MAX_ACTIVE_MOVES, MAX_CREATURE_LEVEL, MAX_PARTY_SIZE } from './creatures.ts';
+import { inferContentLanguageFromSupport, syncSupportModeFromContent } from './i18n.ts';
 import type { GameState } from './types.ts';
 
 export const SAVE_SCHEMA_VERSION = 2;
@@ -61,6 +62,22 @@ const VALID_REGIONS = new Set([
 ]);
 
 const VALID_CEFR = new Set(['A1', 'A2', 'B1', 'B2']);
+const VALID_UI_LANG = new Set(['vi', 'en']);
+const VALID_CONTENT_LANG = new Set(['vi_only', 'bilingual', 'en_assist', 'en_immersion']);
+const VALID_DIFFICULTY = new Set(['relaxed', 'adventure', 'challenge']);
+const VALID_GUIDANCE = new Set(['full', 'minimal', 'off']);
+const VALID_ONBOARDING_STEPS = new Set([
+  'choose_starter',
+  'move_around',
+  'talk_npc',
+  'track_quest',
+  'first_battle',
+  'first_capture',
+  'campfire_heal',
+  'optional_gloss',
+  'open_journal',
+  'free_explore',
+]);
 const VALID_SUPPORT = new Set(['immersion', 'contextual', 'bilingual']);
 const VALID_BATTLE_SPEED = new Set(['normal', 'fast', 'instant']);
 const VALID_TEXT_SCALE = new Set(['normal', 'large']);
@@ -315,6 +332,29 @@ export function validateGameStateShape(
     if (typeof qVal.rewardClaimed !== 'boolean') return false;
   }
 
+  if (
+    candidate.trackedQuestId !== undefined &&
+    candidate.trackedQuestId !== null &&
+    (typeof candidate.trackedQuestId !== 'string' ||
+      candidate.trackedQuestId.length === 0 ||
+      candidate.trackedQuestId.length > 64 ||
+      (registry && !registry.validQuestIds.has(candidate.trackedQuestId)))
+  ) {
+    return false;
+  }
+
+  if (candidate.onboarding !== undefined) {
+    if (!isPlainObject(candidate.onboarding)) return false;
+    const ob = candidate.onboarding;
+    if (typeof ob.currentStep !== 'string' || !VALID_ONBOARDING_STEPS.has(ob.currentStep)) {
+      return false;
+    }
+    if (!validateStringList(ob.completedSteps, 20, VALID_ONBOARDING_STEPS)) return false;
+    if (typeof ob.skipped !== 'boolean' || typeof ob.completed !== 'boolean') return false;
+    if (!isIntInRange(ob.stepsMovedSinceStarter, 0, MAX_STEP_COUNT)) return false;
+    if (typeof ob.firstCaptureGuaranteedUsed !== 'boolean') return false;
+  }
+
   if (!isPlainObject(candidate.lexicon)) return false;
   for (const [wKey, wVal] of Object.entries(candidate.lexicon)) {
     if (registry && !registry.validWordIds.has(wKey)) return false;
@@ -365,6 +405,33 @@ export function validateGameStateShape(
 
   if (!isPlainObject(candidate.settings)) return false;
   const s = candidate.settings;
+  if (
+    s.uiLanguage !== undefined &&
+    (typeof s.uiLanguage !== 'string' || !VALID_UI_LANG.has(s.uiLanguage))
+  ) {
+    return false;
+  }
+  if (
+    s.contentLanguage !== undefined &&
+    (typeof s.contentLanguage !== 'string' || !VALID_CONTENT_LANG.has(s.contentLanguage))
+  ) {
+    return false;
+  }
+  if (
+    s.difficulty !== undefined &&
+    (typeof s.difficulty !== 'string' || !VALID_DIFFICULTY.has(s.difficulty))
+  ) {
+    return false;
+  }
+  if (
+    s.guidanceMode !== undefined &&
+    (typeof s.guidanceMode !== 'string' || !VALID_GUIDANCE.has(s.guidanceMode))
+  ) {
+    return false;
+  }
+  if (s.battleAssist !== undefined && typeof s.battleAssist !== 'boolean') {
+    return false;
+  }
   if (typeof s.cefrBand !== 'string' || !VALID_CEFR.has(s.cefrBand)) return false;
   if (typeof s.supportMode !== 'string' || !VALID_SUPPORT.has(s.supportMode)) return false;
   if (
@@ -519,12 +586,33 @@ export function migrateAndNormalizeSaveState(
   }
 
   cloned.schemaVersion = SAVE_SCHEMA_VERSION;
+  cloned.settings.uiLanguage = cloned.settings.uiLanguage ?? 'vi';
+  cloned.settings.contentLanguage =
+    cloned.settings.contentLanguage ?? inferContentLanguageFromSupport(cloned.settings.supportMode);
+  cloned.settings.supportMode = syncSupportModeFromContent(cloned.settings.contentLanguage);
+  cloned.settings.difficulty = cloned.settings.difficulty ?? 'adventure';
+  cloned.settings.guidanceMode = cloned.settings.guidanceMode ?? 'full';
+  cloned.settings.battleAssist = cloned.settings.battleAssist ?? true;
   cloned.settings.battleSpeed = cloned.settings.battleSpeed ?? 'normal';
   cloned.settings.showFollower = cloned.settings.showFollower ?? true;
   cloned.gleamingSpecies = cloned.gleamingSpecies ?? [];
   cloned.rematchCleared = cloned.rematchCleared ?? [];
   cloned.discoveredTraces = cloned.discoveredTraces ?? [];
   cloned.readLoreIds = cloned.readLoreIds ?? [];
+  if (cloned.trackedQuestId === undefined) {
+    cloned.trackedQuestId = null;
+  }
+  if (!cloned.onboarding) {
+    const alreadyStarted = Boolean(cloned.starterChosen);
+    cloned.onboarding = {
+      currentStep: alreadyStarted ? 'free_explore' : 'choose_starter',
+      completedSteps: alreadyStarted ? ['choose_starter'] : [],
+      skipped: alreadyStarted,
+      completed: alreadyStarted,
+      stepsMovedSinceStarter: alreadyStarted ? 6 : 0,
+      firstCaptureGuaranteedUsed: cloned.stats.wildCaught > 0,
+    };
+  }
 
   if (relocatePlayerToSafeTile(cloned, registry)) {
     migrated = true;
