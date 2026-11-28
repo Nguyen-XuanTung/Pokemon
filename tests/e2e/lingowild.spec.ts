@@ -7,7 +7,16 @@ import type { Direction } from '../../src/domain/types.ts';
 const SCREENSHOT_DIR = path.join(process.cwd(), 'docs', 'screenshots');
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
+async function waitUntilTileSettled(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => !window.__LINGOWILD_DIAGNOSTICS__?.getMovementTelemetry().isMoving,
+    undefined,
+    { timeout: 1200 },
+  );
+}
+
 async function stepDirection(page: Page, dir: Direction, isMobile: boolean): Promise<void> {
+  await waitUntilTileSettled(page);
   if (isMobile) {
     await page.getByTestId(`touch-${dir}`).click();
   } else {
@@ -19,6 +28,7 @@ async function stepDirection(page: Page, dir: Direction, isMobile: boolean): Pro
     };
     await page.keyboard.press(keyMap[dir]);
   }
+  await waitUntilTileSettled(page);
 }
 
 async function triggerInteract(page: Page, isMobile: boolean): Promise<void> {
@@ -134,8 +144,9 @@ test.describe('LingoWild Browser E2E Verification', () => {
         (await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos.x)) ??
         15;
       await page.getByTestId('touch-left').dispatchEvent('pointerdown', { pointerId: 1 });
-      await page.waitForTimeout(340);
+      await page.waitForTimeout(420);
       await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 })));
+      await waitUntilTileSettled(page);
       const xAfterHold =
         (await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().playerPos.x)) ??
         15;
@@ -470,9 +481,9 @@ test.describe('LingoWild Browser E2E Verification', () => {
     await page.getByTestId('btn-dialogue-next').click();
 
     // Walk from (15,13) to Greenhouse chest (5,3): up to (15,12), left to (5,12), up to (5,4) facing (5,3)
-    await page.keyboard.press('ArrowUp');
-    for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowLeft');
-    for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowUp');
+    await stepDirection(page, 'up', false);
+    for (let i = 0; i < 10; i++) await stepDirection(page, 'left', false);
+    for (let i = 0; i < 8; i++) await stepDirection(page, 'up', false);
 
     // Rapidly interact 8 times with chest (5,3): +40 Tokens must apply ONCE (230 + 40 = 270)
     for (let i = 0; i < 8; i++) {

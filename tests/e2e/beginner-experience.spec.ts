@@ -36,6 +36,14 @@ const FORBIDDEN_ENGLISH_UI_STRINGS = [
   'Checksum mismatch',
 ];
 
+async function waitUntilTileSettled(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => !window.__LINGOWILD_DIAGNOSTICS__?.getMovementTelemetry().isMoving,
+    undefined,
+    { timeout: 1200 },
+  );
+}
+
 async function followOnScreenCompassUntil(
   page: Page,
   predicate: () => Promise<boolean>,
@@ -49,7 +57,9 @@ async function followOnScreenCompassUntil(
     if (arrived === 'true') return await predicate();
     const dir = await compass.getAttribute('data-dir');
     if (!dir || !DIR_TO_KEY[dir]) return await predicate();
+    await waitUntilTileSettled(page);
     await page.keyboard.press(DIR_TO_KEY[dir]);
+    await waitUntilTileSettled(page);
   }
   return await predicate();
 }
@@ -71,7 +81,7 @@ test.describe('Beginner Experience: Guidance-Driven Vietnamese A1 Verification',
     });
 
     await page.goto('/');
-    await expect(page.getByTestId('app-version-badge')).toContainText('v1.2.0');
+    await expect(page.getByTestId('app-version-badge')).toContainText('v1.3.0');
     await expect(page.getByTestId('btn-new-game')).toContainText('Bắt đầu hành trình mới');
     await expect(page.getByTestId('select-ui-language')).toHaveValue('vi');
     await expect(page.getByTestId('select-content-language')).toHaveValue('bilingual');
@@ -141,7 +151,9 @@ test.describe('Beginner Experience: Guidance-Driven Vietnamese A1 Verification',
       () => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().hasActiveBattle ?? false,
     );
     for (let s = 0; s < 30 && !inBattle; s++) {
+      await waitUntilTileSettled(page);
       await page.keyboard.press(s % 2 === 0 ? 'ArrowUp' : 'ArrowDown');
+      await waitUntilTileSettled(page);
       inBattle = await page.evaluate(
         () => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot().hasActiveBattle ?? false,
       );
@@ -271,7 +283,7 @@ test.describe('Beginner Experience: Guidance-Driven Vietnamese A1 Verification',
     // Verify in-app Credits & License modal AND web-bundled LICENSE.txt + CREDITS.md HTTP 200!
     await page.getByTestId('btn-open-credits').click();
     await expect(page.getByTestId('credits-modal')).toBeVisible();
-    await expect(page.getByTestId('credits-modal')).toContainText('v1.2.0');
+    await expect(page.getByTestId('credits-modal')).toContainText('v1.3.0');
     await expect(page.getByTestId('credits-modal')).toContainText('Kenney Vleugels');
     await expect(page.getByTestId('credits-modal')).toContainText('Lanea Zimmerman');
     const licRes = await page.request.get('./LICENSE.txt');
@@ -331,10 +343,11 @@ test.describe('Beginner Experience: Guidance-Driven Vietnamese A1 Verification',
       }
     }
 
-    // Live-switch UI language, all 4 content modes, all 3 difficulties, and all 3 guidance modes without losing progress
+    // Live-switch UI language, all 4 English content modes, all 3 difficulties, and all 3 guidance modes without losing progress
     const snapBefore = await page.evaluate(() => window.__LINGOWILD_DIAGNOSTICS__?.getSnapshot());
     await page.getByTestId('settings-ui-language').selectOption('en');
     await expect(page.getByTestId('journal-modal')).toContainText('Field Journal');
+    await page.getByTestId('settings-learning-language').selectOption('en');
     await page.getByTestId('settings-content-language').selectOption('en_assist');
     await page.getByTestId('settings-content-language').selectOption('en_immersion');
     await page.getByTestId('settings-content-language').selectOption('bilingual');

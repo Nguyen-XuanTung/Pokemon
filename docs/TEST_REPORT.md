@@ -1,4 +1,4 @@
-# Báo cáo kiểm thử, độ phủ và đánh giá trải nghiệm LingoWild (v1.2.0)
+# Báo cáo kiểm thử, độ phủ và đo chuyển động LingoWild (v1.3.0)
 
 ## 1. Môi trường kiểm thử
 
@@ -8,74 +8,74 @@
 - Khung kiểm thử đơn vị, tích hợp và đo độ phủ: Vitest `5.1.2` kèm `@vitest/coverage-v8@5.1.2`.
 - Khung kiểm thử trình duyệt đầu cuối và ghi hình: Playwright `1.65.1` trên Chromium với cấu hình máy tính để bàn (`1280x720`) và điện thoại Pixel 7 ở cả chiều dọc (`412x915`) lẫn chiều ngang (`915x412`).
 
-## 2. Kết quả tổng hợp các cổng kiểm định (v1.2.0)
+## 2. Đo thực tế chuyển động trước và sau nâng cấp
+
+Phương pháp đo: chạy trực tiếp bản đóng gói thực tế trên Chromium `1280x720`, lấy mẫu theo `requestAnimationFrame` tọa độ ô lưới, tọa độ hiển thị nội suy và đếm số lần xóa/dựng lại nút con trực tiếp của `#ui-overlay` qua `MutationObserver`.
+
+| Hạng mục đo | Baseline v1.2.0 (commit `234509a`) | Bản v1.3.0 (`test-results/v130-movement-benchmark.json`) | Nhận xét thực tế |
+| --- | --- | --- | --- |
+| Giữ phím bàn phím `ArrowLeft` liên tục | Di chuyển `1` ô trong `1200 ms` | Di chuyển liên tục `30` ô suốt chuỗi đi bộ, đảo chiều và chạy | Đã loại bỏ hoàn toàn sự phụ thuộc vào sự kiện lặp phím hệ điều hành |
+| Nhịp bước đi bộ (`165 ms` mục tiêu) | Không hỗ trợ giữ bàn phím liên tục; giữ cảm ứng `136,9 ms` (`118` đến `150 ms`) với tween `92 ms` gây dừng khựng `~45 ms` mỗi ô | Trung bình `164,9 ms/ô` (`min 149 ms`, `max 168 ms` trên 18 bước liên tiếp) | Khớp chính xác mốc `165 ms`, không còn khoảng dừng giữa các ô |
+| Nhịp bước chạy khi giữ `Shift` (`110 ms` mục tiêu) | Chưa có chế độ chạy | Trung bình `110,1 ms/ô` (`min 97 ms`, `max 120 ms` trên 10 bước liên tiếp) | Nhanh hơn rõ rệt so với đi bộ và giữ nguyên tần suất gặp sinh vật theo số ô |
+| Số lần xóa gốc DOM `#ui-overlay` khi di chuyển | `36` lần trong 9 bước | `0` lần trong 30 bước | Cập nhật tăng dần HUD và đệm địa hình bản đồ nhỏ loại bỏ hoàn toàn DOM thrashing |
+| Số khung hình nội suy vị trí mượt | Tween liên tục bị hủy và khởi tạo lại | `261` khung hình nội suy liên tục | Chuyển động nhân vật, bóng, đồng hành và camera trơn tru |
+| Đồng bộ tốc độ khung hình `30 / 60 / 120 Hz` | Không kiểm định | Kiểm chứng bằng `tests/unit/movement-and-click.test.ts` (đạt cùng quãng đường trong 1 giây, sai lệch tối đa 1 ô, biên độ dừng đúng ô nguyên và giới hạn delta `50 ms`) | Không tăng tốc đột biến sau khi trình duyệt bị treo hoặc đổi tab |
+
+## 3. Kết quả tổng hợp các cổng kiểm định (v1.3.0)
 
 | Hạng mục kiểm định | Lệnh thực thi | Kết quả thực tế |
 | --- | --- | --- |
 | Kiểm tra lỗ hổng phụ thuộc | `npm audit --audit-level=low` | Đạt: `0` lỗ hổng bảo mật trên toàn bộ cây phụ thuộc |
-| Sinh 8 bảng ảnh pixel xác định | `npm run generate:assets` | Đạt: xuất `tileset.png`, `structures.png`, `battle-bg.png`, `characters.png`, `creatures.png`, `companions.png`, `items.png`, `vfx.png` |
-| Kiểm định toàn vẹn dữ liệu và đường đi | `npm run validate:data` | Đạt: 30 loài, 42 chiêu, 13 vật phẩm, 5 bản đồ `32x24` liên thông, 16 NPC (4 thủ lĩnh, 4 tái đấu), 12 nhiệm vụ, 367 mục từ lõi (25 mục đa ví dụ, A1: 65, A2: 97, B1: 120, B2: 85), 192 hội thoại (độ phủ tra từ `90,5%`) |
-| Kiểm tra quy tắc mã nguồn và tài liệu | `npm run lint` | Đạt: 0 lỗi văn phong trên 9 tệp Markdown và 56 tệp TypeScript, 0 tệp trùng lặp, 0 khóa bí mật hay điểm cuối theo dõi |
-| Kiểm tra kiểu tĩnh nghiêm ngặt | `npm run typecheck` | Đạt: 0 lỗi trên toàn bộ mã nguồn, kịch bản và kiểm thử |
-| Kiểm thử đơn vị, tích hợp và 6 lượt phá đảo 3 starter | `npm run test:coverage` | Đạt: `6/6` tệp (`36/36` bài kiểm thử), gồm 3 lượt phá đảo tự nhiên độ khó Phiêu lưu và 3 lượt phá đảo độ khó Thư giãn (ngưỡng cấp thấp hơn: 8, 12, 17, 21) cho cả `Mosskit`, `Kindlet` và `Ripplefin`, cùng 9 nhóm kiểm thử trải nghiệm người mới |
-| Đóng gói sản phẩm, sao chép giấy phép và băm bộ nhớ đệm | `npm run build` | Đạt: `index.html` (`0,48 kB` gzip), `index.css` (`4,37 kB` gzip), gói ứng dụng (`184,36 kB` gzip), gói Phaser tách riêng (`318,37 kB` gzip), sao chép `LICENSE.txt` và `CREDITS.md` vào `dist/` và chèn 16 đường dẫn sắp xếp xác định vào `dist/sw.js` |
-| Kiểm thử trình duyệt đầu cuối máy tính và di động | `npm run test:e2e` | Đạt: `12/12` bài kiểm thử hoạt động (8 bài chỉ chạy trên desktop được bỏ qua trên mobile), gồm kịch bản đọc và đi theo mũi tên la bàn trên màn hình, kiểm chứng một khuyến nghị chiến đấu duy nhất mỗi lượt, di trú bản lưu production `v1.1`, truy cập `LICENSE.txt` và `CREDITS.md`, kiểm toán 0 nhãn tiếng Anh lọt, bỏ qua và xem lại hướng dẫn, phá đảo cốt truyện và nâng cấp SW bản A sang B |
+| Kiểm định danh mục HSK 2.0 và chính tả Pinyin | `node --experimental-strip-types scripts/verify-hsk-data.ts` | Đạt: `150` HSK 1, `150` HSK 2, `298 + 2` đa âm HSK 3 (đủ `600` mục HSK 1-3), `73` bổ trợ HSK 4, `314` từ ngữ cảnh không gán HSK (`985` tổng), `55` tên riêng tách biệt, 0 lỗi thanh điệu Pinyin |
+| Kiểm định toàn vẹn dữ liệu và đường đi | `npm run validate:data` | Đạt: 30 loài, 42 chiêu, 13 vật phẩm, 5 bản đồ `32x24` liên thông, 16 NPC, 12 nhiệm vụ, 367 từ lõi tiếng Anh (độ phủ tra từ `90,5%`), `985` từ điển tiếng Trung (`640` từ riêng biệt xuất hiện trong thoại/mô tả: `HSK1 95`, `HSK2 87`, `HSK3 124`, bổ trợ `HSK4 45`, ngữ cảnh `289`), 192 đoạn thoại đầy đủ Anh/Trung/Việt (`98` đoạn có biến thể HSK, độ phủ tra từ tiếng Trung `84,7%`) |
+| Kiểm tra quy tắc mã nguồn và tài liệu | `npm run lint` | Đạt: `0` lỗi văn phong trên toàn bộ tệp Markdown và tệp TypeScript, `0` tệp trùng lặp, `0` khóa bí mật hay điểm cuối theo dõi |
+| Kiểm tra kiểu tĩnh nghiêm ngặt | `npm run typecheck` | Đạt: `0` lỗi trên toàn bộ `src/`, `scripts/`, `tests/` |
+| Kiểm thử đơn vị và tích hợp kèm độ phủ V8 | `npm run test:coverage` | Đạt: `9/9` tệp (`50/50` bài kiểm thử), gồm 8 bài kiểm thử di chuyển mượt & tự tìm đường, 5 bài kiểm thử bộ xử lý tiếng Trung & di trú `v1.2.0`, 1 hành trình chơi trọn vẹn bằng tiếng Trung và 6 lượt phá đảo tự nhiên cho cả 3 sinh vật khởi đầu |
+| Đóng gói sản phẩm và băm bộ nhớ đệm | `npm run build` | Đạt: `index.html` (`0,49 kB` gzip), `index.css` (`4,67 kB` gzip), gói ứng dụng (`323,69 kB` gzip, gồm toàn bộ dữ liệu tiếng Trung ngoại tuyến), gói Phaser (`318,37 kB` gzip), sao chép `LICENSE.txt` và `CREDITS.md` vào `dist/` và chèn 16 đường dẫn sắp xếp xác định vào `dist/sw.js` |
+| Kiểm thử trình duyệt đầu cuối máy tính và di động | `npm run test:e2e` | Đạt: `17/17` bài kiểm thử hoạt động (`11` bài chỉ chạy trên máy tính được bỏ qua trên di động) trên Chromium máy tính (`1280x720`) và điện thoại Pixel 7 dọc ngang (`412x915`, `915x412`), bao gồm toàn bộ 4 nhóm kiểm thử mới của `v1.3.0`, bộ kiểm thử người mới `v1.2.0`, nâng cấp service worker và phá đảo cốt truyện |
 
-## 3. Báo cáo độ phủ mã nguồn theo đúng phạm vi được đo
+## 4. Báo cáo độ phủ mã nguồn theo đúng phạm vi được đo
 
-Cấu hình `vitest.config.ts` đo độ phủ V8 trực tiếp trên `src/domain/**/*.ts` và `src/game/**/*.ts` (loại trừ tệp định nghĩa kiểu thuần `src/domain/types.ts`). Các tầng giao diện DOM (`src/ui/`), cảnh dựng hình Phaser (`src/scenes/`), âm thanh Web Audio (`src/audio/`) và bảng dữ liệu tĩnh (`src/data/`) không thuộc phép đo V8 này mà được kiểm chứng bằng `npm run validate:data` và bộ kiểm thử trình duyệt Playwright đầu cuối.
+Cấu hình `vitest.config.ts` đo độ phủ V8 trực tiếp trên `src/domain/**/*.ts` và `src/game/**/*.ts` (loại trừ tệp định nghĩa kiểu thuần `src/domain/types.ts`). Các tầng giao diện DOM (`src/ui/`), cảnh dựng hình Phaser (`src/scenes/`), âm thanh (`src/audio/`) và bảng dữ liệu tĩnh (`src/data/`) được kiểm chứng bởi `npm run validate:data`, `scripts/verify-hsk-data.ts` và bộ kiểm thử trình duyệt Playwright đầu cuối.
 
-Số liệu thực tế trên phạm vi được đo (`src/domain/` và `src/game/controller.ts`):
+Số liệu thực tế trên phạm vi được đo (`src/domain/` và `src/game/`):
 
-- Tổng phạm vi được đo: `76,44%` câu lệnh, `78,91%` dòng mã, `71,64%` nhánh điều kiện, `60,04%` hàm.
-- Ghi chú trung thực về `src/domain/i18n.ts`: Tệp danh mục bản địa hóa chứa các hàm định dạng nhãn cho giao diện DOM nên chỉ thực thi một phần trong Vitest (`13,66%` câu lệnh, `4,06%` hàm), trong khi toàn bộ nhãn giao diện thực tế đều được chạy và kiểm toán trực tiếp trên trình duyệt thật qua `tests/e2e/beginner-experience.spec.ts`.
-- Độ phủ các mô-đun nghiệp vụ lõi trong `src/domain/` (tổng tầng `src/domain/`: `78,84%` câu lệnh, `81,81%` dòng mã):
-  - `src/domain/capture.ts`: `100%` câu lệnh, `100%` nhánh, `100%` hàm, `100%` dòng mã.
-  - `src/domain/difficulty.ts`: `100%` câu lệnh, `100%` nhánh, `100%` hàm, `100%` dòng mã.
-  - `src/domain/elements.ts`: `100%` câu lệnh, `100%` nhánh, `100%` hàm, `100%` dòng mã.
+- Tổng phạm vi được đo: `77,51%` câu lệnh, `79,54%` dòng mã, `71,27%` nhánh điều kiện, `65,33%` hàm (tăng so với `76,44%` câu lệnh và `78,91%` dòng mã ở `v1.2.0`).
+- Tầng nghiệp vụ lõi (`src/domain/`: `80,21%` câu lệnh, `82,80%` dòng mã):
+  - `src/domain/capture.ts`, `src/domain/difficulty.ts`, `src/domain/elements.ts`: `100%` câu lệnh, nhánh, hàm, dòng mã.
   - `src/domain/creatures.ts`: `93,54%` câu lệnh, `97,39%` dòng mã, `100%` hàm.
-  - `src/domain/battle.ts`: `91,80%` câu lệnh, `93,35%` dòng mã, `84,21%` nhánh, `100%` hàm.
+  - `src/domain/battle.ts`: `92,23%` câu lệnh, `93,72%` dòng mã, `100%` hàm.
   - `src/domain/quests.ts`: `93,18%` câu lệnh, `93,18%` dòng mã, `100%` hàm.
+  - `src/domain/chinese.ts` (mới): `91,90%` câu lệnh, `92,80%` dòng mã, `97,22%` hàm.
   - `src/domain/learning.ts`: `88,47%` câu lệnh, `90,97%` dòng mã.
   - `src/domain/state.ts`: `86,31%` câu lệnh, `89,88%` dòng mã.
-  - `src/domain/navigation.ts`: `87,21%` câu lệnh, `87,81%` dòng mã, `93,54%` hàm.
+  - `src/domain/navigation.ts`: `86,41%` câu lệnh, `86,63%` dòng mã, `94,44%` hàm.
   - `src/domain/battleAssist.ts`: `86,00%` câu lệnh, `86,61%` dòng mã, `100%` hàm.
-  - `src/domain/save.ts`: `74,00%` câu lệnh, `84,66%` dòng mã, `94,44%` hàm.
-  - `src/domain/world.ts`: `80,14%` câu lệnh, `82,11%` dòng mã, `93,75%` hàm.
+  - `src/domain/save.ts`: `74,21%` câu lệnh, `83,85%` dòng mã, `94,73%` hàm.
+  - `src/domain/world.ts`: `80,88%` câu lệnh, `82,92%` dòng mã, `93,75%` hàm.
   - `src/domain/rng.ts`: `71,42%` câu lệnh, `73,91%` dòng mã, `100%` hàm.
   - `src/domain/onboarding.ts`: `70,73%` câu lệnh, `70,88%` dòng mã, `80,00%` hàm.
-- Bộ điều phối trò chơi (`src/game/controller.ts`): `68,83%` câu lệnh, `70,11%` dòng mã, `66,66%` hàm, `64,18%` nhánh điều kiện.
+  - `src/domain/i18n.ts`: `13,36%` câu lệnh trong Vitest vì chứa nhãn định dạng dành riêng cho giao diện DOM (được kiểm toán trực tiếp trên trình duyệt thật qua Playwright).
+- Tầng điều phối trò chơi (`src/game/`: `71,58%` câu lệnh, `72,75%` dòng mã):
+  - `src/game/movement.ts` (mới): `78,75%` câu lệnh, `78,85%` dòng mã, `93,10%` hàm.
+  - `src/game/controller.ts`: `68,87%` câu lệnh, `70,34%` dòng mã, `68,80%` hàm.
 
-## 4. Các lỗi thật phát hiện và khắc phục trong vòng hoàn thiện v1.2.0
+## 5. Các lỗi thật phát hiện và khắc phục trong vòng phát triển v1.3.0
 
-1. Lệch mục tiêu giữa mũi tên và văn bản thanh HUD trong khi nhập môn (`src/domain/navigation.ts`, `src/game/controller.ts`, `src/ui/gameUi.ts`): Phiên bản `7106a70` chỉ ghi đè tọa độ đích mà vẫn hiển thị văn bản nhiệm vụ chính trên thanh HUD và `Tôi bị lạc`. Đã bổ sung trường mục tiêu thống nhất (`activeGoalActionVi/En`, `goalSource`, `arrivedAtTarget`, `unreachableReasonVi/En`) để HUD, mũi tên, số bước, đường sáng, bản đồ nhỏ và `Tôi bị lạc` luôn khớp 100%.
-2. Hai khuyến nghị mâu thuẫn nhau trong trận thu phục đầu tiên (`src/domain/onboarding.ts`, `src/domain/battleAssist.ts`, `src/ui/battleView.ts`): Vì `BattleSession` khởi đầu ở `turnCount = 1`, điều kiện bắt 100% bật quá sớm ngay lượt 1 trong khi chiêu tấn công vẫn có nhãn `Khuyên dùng`. Đã tách thành một `PrimaryBattleAction` duy nhất mỗi lượt (`heal`, `capture`, `switch` hoặc `move`), sửa điều kiện bảo đảm sang `enemyHpRatio <= 0.85 || turnCount >= 2` để Lượt 1 chỉ làm nổi bật duy nhất 1 chiêu làm yếu, Lượt 2 chỉ làm nổi bật duy nhất thẻ `Chuông và Túi` và `Chuông Rêu (Bảo đảm 100%)`, kèm cảnh báo `Dễ đánh ngất` khi đánh sinh vật chưa thu phục.
-3. Kẹt bước 2 nhập môn khi người mới đi thẳng theo vệt sáng tới Trinh sát Mai (`src/domain/onboarding.ts`): Được phát hiện trực tiếp bởi kịch bản E2E tự đọc mũi tên trên màn hình vì từ điểm xuất phát tới Mai chỉ đúng 2 bước trong khi điều kiện cũ đòi 3 bước. Đã sửa xuống 2 bước và tự qua bước khi đã tương tác với nhân vật.
-4. Lỗi tương phản nút xanh rêu `.lw-btn-moss` khi di chuột qua (`src/ui/styles.css`): Được phát hiện khi soi trực tiếp ảnh `23-beginner-capture-recommend.png`, do `.lw-btn:hover:not(:disabled)` đè màu nền kem nhạt lên chữ trắng. Đã bổ sung `.lw-btn-moss:hover:not(:disabled)` giữ nền xanh đậm tương phản cao.
-5. Phân phối thông tin giấy phép và ghi công trong gói web (`scripts/inject-sw-manifest.ts`, `src/ui/journalView.ts`, `src/ui/gameUi.ts`): Đã sao chép `LICENSE.txt` và `CREDITS.md` vào `dist/`, đưa vào danh mục lưu đệm ngoại tuyến và bổ sung cửa sổ `Giấy phép và Ghi công` truy cập trực tiếp từ màn hình mở đầu và thẻ Cài đặt.
-6. Cân bằng độ khó Thư giãn cho cả 3 sinh vật khởi đầu (`tests/integration/three-starters-natural-playthrough.test.ts`, `src/game/controller.ts`): Đã tự động chơi thử trọn vẹn từ đầu tới kết thúc cho `Mosskit`, `Kindlet` và `Ripplefin` trên chế độ Thư giãn với ngưỡng luyện cấp thấp hơn hẳn (cấp 8, 12, 17, 21) và bổ sung lưới an toàn tặng thêm 2 Chuông Rêu dự phòng khi người mới hết chuông và còn dưới 45 huy hiệu.
+1. Lỗi lệch công thức đặt `cam.scrollX` / `cam.scrollY` khi phóng to trong `src/scenes/WorldScene.ts`: Khi thay thế `startFollow` bằng làm mượt camera thủ công, phép trừ ban đầu dùng `halfW` (`displayWidth / 2`) thay vì `cam.width * 0.5` theo hệ tọa độ tâm của Phaser 3, khiến camera bị ép lệch về biên phải và biên dưới bản đồ (che 3 cột bên trái khi nhấn vào cổng tây `(0, 12)` và đẩy mục tiêu lên dưới thanh HUD trên di động ngang). Đã sửa về `camCenterX - cam.width * 0.5` và `camCenterY - cam.height * 0.5`, vượt qua hoàn hảo cả bài kiểm thử cổng tây máy tính lẫn chạm bản đồ xoay ngang Pixel 7.
+2. Lỗi kiểm định dữ liệu tiếng Trung (`scripts/verify-hsk-data.ts`): Phát hiện và sửa ngay 3 câu ví dụ thiếu từ đầu mục (`生病`, `疼`, `洗澡`), 12 dòng thiếu cột cấp độ trong `zh-lexicon-extra.ts`, 9 từ bị gắn nhầm nhãn `HSK4` sang không gán nhãn HSK, 5 mục trùng lặp và bổ sung cụm chào hỏi thông dụng (`你好`, `您好`, `早上好`, `晚上好`) cùng nhóm từ thiên nhiên đời thường để nâng độ phủ chạm tra từ tiếng Trung từ `70,5%` lên `84,7%`.
+3. Xung đột giữa bộ kiểm thử chạm bước đơn `v1.2.0` và cơ chế nội suy bước `165 ms`: Cập nhật trợ giúp chờ hoàn tất bước (`waitUntilTileSettled`) trong `tests/e2e/beginner-experience.spec.ts` và `tests/e2e/lingowild.spec.ts` để phản ánh đúng nhịp đi mượt thực tế mà không bỏ qua bất kỳ bước kiểm tra nào.
 
-## 5. Phân biệt rõ kiểm thử tự động và phản hồi của người chơi thật
+## 6. Danh mục video gameplay và ảnh chụp màn hình mới của v1.3.0
 
-- Đã xác minh bằng kiểm thử tự động và kiểm tra trực quan: Toàn bộ kịch bản tự đọc và bước theo chỉ dẫn trên màn hình (không dựa tọa độ cứng), tính thống nhất của dẫn đường và Trợ giúp chiến đấu, bản địa hóa tiếng Việt 0 nhãn lọt, 6 lượt phá đảo tự nhiên cho cả 3 sinh vật khởi đầu ở 2 độ khó, di trú bản lưu production `v1.1`, truy cập tệp giấy phép từ gói web, kiểm tra trực quan 23 ảnh chụp màn hình và video quay thực tế `87,5` giây.
-- Chưa thể thay thế bằng kiểm thử tự động (giới hạn trung thực): Chưa tiến hành thử nghiệm định lượng độc lập với nhóm người chơi mới hoàn toàn bên ngoài. Cảm nhận thực tế về nhịp đọc thoại, tốc độ làm quen giao diện di động và mức độ tự nhiên của phần mở đầu vẫn cần phản hồi từ người chơi thật sau khi phát hành.
+4 video quay trực tiếp bằng Playwright trên bản đóng gói chính thức (`960x540`, định dạng WebM):
+- `docs/videos/v130-click-to-move.webm` (`19,5` giây, `4,7 MB`): Tự tìm đường quanh vật cản, từ chối ô nước, tương tác biển chỉ đường, gặp Trinh sát Mai và qua cổng tây sang Thung Lũng Rừng Thầm.
+- `docs/videos/v130-smooth-movement.webm` (`13,1` giây, `3,1 MB`): Giữ phím đi bộ liên tục, đổi hướng tức thì không khựng, giữ `Shift` chạy mượt và dừng đúng ô khi thả phím.
+- `docs/videos/v130-chinese-hsk2.webm` (`17,2` giây, `3,3 MB`): Hội thoại `HSK 2`, bật tắt Pinyin, phiếu tra nghĩa 10 trường `欢迎`, thẻ tên riêng `苔灯营地`, nghe phát âm, lưu sổ từ và ôn tập tiếng Trung bên lửa trại.
+- `docs/videos/v130-language-switch.webm` (`17,8` giây, `3,6 MB`): Chuyển đổi trực tiếp giữa tiếng Trung và tiếng Anh trong Cài đặt mà không mất đội hình, huy hiệu hay dữ liệu của cả hai sổ từ vựng.
 
-## 6. Danh mục 23 ảnh chụp màn hình và video hướng dẫn người mới
-
-Video quay trực tiếp trên bản đóng gói chính thức (`87,5` giây, `17,2 MB`, `960x540`):
-- `docs/videos/lingowild-gameplay.webm`: Hành trình mở đầu của người mới bằng tiếng Việt từ màn hình mở đầu `v1.2.0`, chọn `Mosskit`, chạm tra và lưu từ, theo đường sáng gặp Trinh sát Mai, sang Rừng Thầm chiến đấu qua Lượt 1 (chỉ gợi ý đánh) tới Lượt 2 (chỉ gợi ý bắt 100%), hồi máu tại lửa trại, mở Sổ Thực Địa, Quản lý chiêu, đổi ngôn ngữ trực tiếp và dùng `Tôi bị lạc` cùng bảng xem nhanh 8 bước.
-
-Bộ 23 ảnh chụp thực tế trong `docs/screenshots/`:
-- `01-title-screen.png`: Màn hình mở đầu tiếng Việt `v1.2.0`, 4 nhóm thiết lập độc lập và nút `Giấy phép và Ghi công`.
-- `02-contextual-gloss.png`: Hội thoại song ngữ Kiểm lâm Rowan kèm phiếu tra nghĩa từ và nút nghe phát âm.
-- `03-mosslight-camp.png`, `04-whisperwood-overworld.png`, `12-reedwater-fen.png`, `13-terracotta-ridge.png`, `16-starfall-sanctuary.png`: Toàn bộ 5 vùng sinh thái pixel.
-- `05-wild-battle.png`, `15-terracotta-boss-battle.png`, `17-starfall-final-trial.png`: Các sân đấu pixel theo vùng và trận đấu Thủ lĩnh.
-- `06-field-journal-map.png`, `07-field-journal-compendium.png`, `14-field-journal-lexicon.png`: Bản đồ vùng, Bách khoa 30 loài và Sổ Từ Vựng bằng tiếng Việt.
-- `08-campfire-review.png`: Ôn từ tự nguyện bên Đài Lửa Ánh Sao.
-- `09-mobile-portrait.png`, `10-mobile-landscape.png`, `22-mobile-beginner-hud.png`: Giao diện điện thoại dọc và ngang kèm bản đồ nhỏ góc dưới phải, vệt sáng dẫn đường và phím cảm ứng.
-- `11-starfall-ending.png`: Màn hình hoàn tất cốt truyện bằng tiếng Việt.
-- `18-beginner-camp-guidance.png`: Trại Đèn Rêu với thanh HUD, mũi tên, vệt sáng và khung nhập môn thống nhất cùng dẫn tới Trinh sát Mai.
-- `19-beginner-battle-assist.png`: Lượt 1 trận làm quen chỉ làm nổi bật duy nhất một chiêu khuyên dùng.
-- `23-beginner-capture-recommend.png`: Lượt 2 trận làm quen chuyển sang làm nổi bật duy nhất thẻ `Chuông và Túi` cùng nút `Chuông Rêu x9 | Bảo đảm 100%`.
-- `20-beginner-quests-wayfinding.png`: Thẻ Nhiệm vụ cấu trúc 5 trường và nút `Dẫn đường`.
-- `21-lost-helper-modal.png`: Cửa sổ `Trợ giúp định hướng` kèm `Xem nhanh 8 bước cho người mới` và `Bật lại gợi ý từng bước`.
+4 ảnh chụp màn hình mới bổ sung vào bộ 27 ảnh trong `docs/screenshots/`:
+- `24-v130-click-to-move-path.png`: Đường tự tìm đường màu xanh lam cùng vòng đích tách biệt với đường dẫn nhiệm vụ màu vàng.
+- `25-v130-chinese-hsk2-dialogue.png`: Hộp thoại tiếng Trung `HSK 2` với Pinyin căn chỉnh gọn phía trên chữ Hán, nghĩa tiếng Việt và nút bật tắt nhanh.
+- `26-v130-chinese-gloss-popup.png`: Phiếu tra nghĩa tiếng Trung đầy đủ ngữ cảnh cho từ `欢迎` (`HSK2`).
+- `27-v130-multilingual-settings.png`: Màn hình Cài đặt đa ngôn ngữ, vị trí Pinyin, tự tìm đường và tốc độ di chuyển.
