@@ -129,18 +129,18 @@ function trainInGrassNaturally(params: {
   };
 
   const targetRegion = controller.state.regionId;
+  const returnFromHubIfNeeded = (): void => {
+    if (controller.state.regionId !== 'mosslight_hub' || targetRegion === 'mosslight_hub') return;
+    if (targetRegion === 'whisperwood') walkNaturallyToTile(controller, 0, 12);
+    else if (targetRegion === 'reedwater_fen') walkNaturallyToTile(controller, 31, 12);
+    else if (targetRegion === 'terracotta_ridge') walkNaturallyToTile(controller, 15, 23);
+    else if (targetRegion === 'starfall_sanctuary') walkNaturallyToTile(controller, 15, 0);
+  };
+
   let loops = 0;
   while (loops < 480) {
     loops += 1;
-    // If a wild battle ever fainted our Lv.5 starter back to Mosslight Camp, walk back into targetRegion naturally
-    if (controller.state.regionId === 'mosslight_hub' && targetRegion === 'whisperwood') {
-      walkNaturallyToTile(controller, 0, 12);
-    } else if (
-      controller.state.regionId === 'mosslight_hub' &&
-      targetRegion === 'starfall_sanctuary'
-    ) {
-      walkNaturallyToTile(controller, 15, 0);
-    }
+    returnFromHubIfNeeded();
     if (bossElementToCounter) {
       ensureCounterInActiveParty(controller, bossElementToCounter);
     }
@@ -197,6 +197,7 @@ function trainInGrassNaturally(params: {
     });
   }
 
+  returnFromHubIfNeeded();
   restAtCampfireNaturally(controller, campfire[0], campfire[1]);
 }
 

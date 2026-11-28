@@ -558,17 +558,18 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     expect((await readSnap(page)).regionId).toBe('mosslight_hub');
     await walkBrowserAdjacentAndInteract(page, 21, 8, true);
     await expect(page.getByTestId('supply-post-modal')).toBeVisible();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       await page.getByTestId('btn-buy-nectar_flask').click();
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       await page.getByTestId('btn-buy-clear_herb').click();
     }
     await page.keyboard.press('Escape');
     await walkBrowserTo(page, 15, 23);
     expect((await readSnap(page)).regionId).toBe('terracotta_ridge');
 
-    // Promote caught Water partner to Lead via real Journal Team UI, train to Lv.21 (Lotusbell / Tidecrest!), defeat Kaelen (27,18)
+    // Train Briarpaw to Lv.21 (evolves to Stage 3 Verdantag!) on canyon Stone wilds, then promote Water partner to Lv.21 (Lotusbell!) and defeat Kaelen (27,18)
+    await trainBrowserNearCampfire(page, [21, 2], [22, 2], [15, 5], 21, 3);
     const promotedWater = await makePartyElementLeadViaUi(page, '(Water |');
     expect(promotedWater).toBe(true);
     await trainBrowserNearCampfire(page, [21, 2], [22, 2], [15, 5], 21, 3);
@@ -592,10 +593,10 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '08-campfire-review.png') });
     await page.keyboard.press('Escape');
 
-    // Open Sanctuary Vault chest (27,3), train Water lead to Lv.23, put Briarpaw in front against Astraea's Water opener, and defeat Astraea (15,5)
+    // Open Sanctuary Vault chest (27,3), train Lotusbell to Lv.23 (retaining Tidal Crest before Lv.24!), lead with Stage 3 Verdantag, and defeat Astraea (15,5)
     await walkBrowserAdjacentAndInteract(page, 27, 3, false, { fleeWild: true });
     await trainBrowserNearCampfire(page, [11, 17], [11, 18], [15, 16], 23, 3);
-    await makePartyElementLeadViaUi(page, 'Briarpaw');
+    await makePartyElementLeadViaUi(page, '(Leaf |');
     await walkBrowserAdjacentAndInteract(page, 15, 5, true, {
       fleeWild: true,
       screenshotPath: path.join(SCREENSHOT_DIR, '17-starfall-final-trial.png'),
