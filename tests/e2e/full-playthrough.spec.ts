@@ -114,7 +114,9 @@ async function resolveBrowserBattle(
     if (opts.screenshotPath && !tookScreenshot) {
       tookScreenshot = true;
       await expect(page.getByTestId('battle-deck')).toBeVisible();
-      await page.screenshot({ path: opts.screenshotPath });
+      if (!process.env.CI) {
+        await page.screenshot({ path: opts.screenshotPath });
+      }
     }
 
     const domState = await page.evaluate(() => {
@@ -514,13 +516,17 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await page.getByTestId('btn-dialogue-next').click();
     await page.getByTestId('btn-dialogue-next').click();
 
-    // Set Battle Animation Pace to Instant via real Settings UI dropdown
+    // Set Battle Animation Pace to Instant and Reduced Motion via real Settings UI controls
     await page.getByTestId('btn-open-journal').click();
     await page.getByTestId('journal-tab-settings').click();
     const speedSelect = page
       .locator('.lw-list-row', { hasText: 'Battle Animation Pace' })
       .locator('select');
     await speedSelect.selectOption('instant');
+    await page
+      .locator('.lw-list-row', { hasText: 'Reduced Motion' })
+      .locator('input[type="checkbox"]')
+      .check();
     await page.getByTestId('btn-close-journal').click();
 
     // Open Mosslight chest (5,3) and enter Whisperwood Glen via (0,12)
@@ -538,7 +544,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     // Enter Reedwater Fen via Whisperwood north shortcut (16,0)
     await walkBrowserTo(page, 16, 0, { fleeWild: true });
     expect((await readSnap(page)).regionId).toBe('reedwater_fen');
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '12-reedwater-fen.png') });
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '12-reedwater-fen.png') });
+    }
 
     // Open Reedwater chest (3,5), catch guaranteed Water partner & train Briarpaw to Lv.16, defeat Mirella (27,4)
     await walkBrowserAdjacentAndInteract(page, 3, 5, false, { fleeWild: true });
@@ -549,7 +557,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     // Enter Terracotta Ridge via (31,18), open chests (3,20) & (29,10)
     await walkBrowserTo(page, 31, 18, { fleeWild: true });
     expect((await readSnap(page)).regionId).toBe('terracotta_ridge');
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '13-terracotta-ridge.png') });
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '13-terracotta-ridge.png') });
+    }
     await walkBrowserAdjacentAndInteract(page, 3, 20, false, { fleeWild: true });
     await walkBrowserAdjacentAndInteract(page, 29, 10, false, { fleeWild: true });
 
@@ -582,7 +592,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     // Ascend High Summit Pass (31,6) into Starfall Sanctuary
     await walkBrowserTo(page, 31, 6, { fleeWild: true });
     expect((await readSnap(page)).regionId).toBe('starfall_sanctuary');
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '16-starfall-sanctuary.png') });
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '16-starfall-sanctuary.png') });
+    }
 
     // Capture Campfire Review screenshot at Starlight Brazier (15,16) then close without answering!
     await walkBrowserTo(page, 15, 17, { fleeWild: true });
@@ -590,7 +602,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await page.keyboard.press('Space');
     await page.getByTestId('dialogue-choice-0').click();
     await expect(page.getByTestId('camp-review-modal')).toBeVisible();
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '08-campfire-review.png') });
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '08-campfire-review.png') });
+    }
     await page.keyboard.press('Escape');
 
     // Open Sanctuary Vault chest (27,3), train Lotusbell to Lv.23 (retaining Tidal Crest before Lv.24!), lead with Stage 3 Verdantag, and defeat Astraea (15,5)
@@ -615,7 +629,9 @@ test.describe('Unassisted Full Browser Playthrough (New Game to Ending)', () => 
     await page.getByTestId('btn-dialogue-next').click();
 
     await expect(page.getByTestId('ending-banner-modal')).toBeVisible();
-    await page.screenshot({ path: path.join(SCREENSHOT_DIR, '11-starfall-ending.png') });
+    if (!process.env.CI) {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, '11-starfall-ending.png') });
+    }
 
     const finalSnap = await readSnap(page);
     expect(finalSnap.mainStoryCompleted).toBe(true);

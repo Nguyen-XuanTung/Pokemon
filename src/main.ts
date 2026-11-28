@@ -51,8 +51,29 @@ controller.startPlaytimeClock();
 
 const worldScene = new WorldScene(controller);
 
+function selectOptimalPhaserRenderer(): number {
+  if (typeof navigator !== 'undefined' && /HeadlessChrome/i.test(navigator.userAgent)) {
+    return Phaser.CANVAS;
+  }
+  try {
+    const probe = document.createElement('canvas');
+    const gl = probe.getContext('webgl') ?? probe.getContext('experimental-webgl');
+    if (!gl || !(gl instanceof WebGLRenderingContext)) {
+      return Phaser.CANVAS;
+    }
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : '';
+    if (/swiftshader|llvmpipe|software|basic render/i.test(renderer)) {
+      return Phaser.CANVAS;
+    }
+  } catch {
+    return Phaser.CANVAS;
+  }
+  return Phaser.AUTO;
+}
+
 const phaserGame = new Phaser.Game({
-  type: Phaser.AUTO,
+  type: selectOptimalPhaserRenderer(),
   parent: viewportEl,
   width: Math.max(320, viewportEl.clientWidth || window.innerWidth),
   height: Math.max(240, viewportEl.clientHeight || window.innerHeight),
