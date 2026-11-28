@@ -36,6 +36,41 @@ export class SoundEngine {
   private currentTrack: BgmTrackId | null = null;
   private bgmTimer: number | null = null;
   private noteIndex = 0;
+  private cachedVoices: SpeechSynthesisVoice[] = [];
+  private voicesBound = false;
+
+  private loadSpeechVoices(): SpeechSynthesisVoice[] {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return [];
+    const synth = window.speechSynthesis;
+    if (!this.voicesBound) {
+      this.voicesBound = true;
+      try {
+        synth.addEventListener?.('voiceschanged', () => {
+          this.cachedVoices = synth.getVoices();
+        });
+      } catch {
+        // Ignore older browsers without addEventListener on speechSynthesis
+      }
+    }
+    const fresh = synth.getVoices();
+    if (fresh.length > 0) {
+      this.cachedVoices = fresh;
+    }
+    return this.cachedVoices;
+  }
+
+  private pickMandarinVoice(voices: ReadonlyArray<SpeechSynthesisVoice>): SpeechSynthesisVoice | null {
+    const normalized = voices.map((v) => ({ v, lang: (v.lang || '').toLowerCase().replace(/_/g, '-') }));
+    // Strictly prefer Simplified Mandarin (zh-cn / zh-hans / cmn) and NEVER fall back to English voices!
+    const exactCn = normalized.find(
+      ({ lang }) => lang === 'zh-cn' || lang === 'zh-hans' || lang === 'zh-hans-cn' || lang.startsWith('cmn'),
+    );
+    if (exactCn) return exactCn.v;
+    const anyZh = normalized.find(
+      ({ lang }) => lang === 'zh' || lang.startsWith('zh-sg') || lang.startsWith('zh-tw') || lang.startsWith('zh-'),
+    );
+    return anyZh ? anyZh.v : null;
+  }
 
   public configure(params: { bgmVolume: number; sfxVolume: number; muted: boolean }): void {
     this.bgmVolume = Math.max(0, Math.min(1, params.bgmVolume));
@@ -182,6 +217,108 @@ export class SoundEngine {
       return {
         spokenByVoice: false,
         fallbackMessageVi: 'Trình duyệt tạm khóa giọng đọc, hãy chạm từng từ để xem phiên âm.',
+      };
+    }
+  }
+
+  public speakChineseWord(
+    hanzi: string,
+    pinyin: string,
+    uiLang: 'vi' | 'en' = 'vi',
+  ): { readonly spokenByVoice: boolean; readonly fallbackMessageVi: string; readonly fallbackMessageEn: string } {
+    void uiLang;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi: `Thiết bị chưa hỗ trợ giọng đọc tiếng Trung. Hãy đọc theo phiên âm: ${pinyin}.`,
+        fallbackMessageEn: `Speech synthesis is unavailable on this device. Read with Pinyin: ${pinyin}.`,
+      };
+    }
+    try {
+      const synth = window.speechSynthesis;
+      const voices = this.loadSpeechVoices();
+      const zhVoice = this.pickMandarinVoice(voices);
+      if (voices.length > 0 && !zhVoice) {
+        // Never mispronounce Chinese using an English voice!
+        return {
+          spokenByVoice: false,
+          fallbackMessageVi: `Trình duyệt chưa có giọng đọc tiếng Trung (zh-CN). Hãy đọc theo Pinyin: ${pinyin}.`,
+          fallbackMessageEn: `No Chinese (zh-CN) voice is installed in this browser. Read with Pinyin: ${pinyin}.`,
+        };
+      }
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(hanzi);
+      utterance.lang = zhVoice?.lang ?? 'zh-CN';
+      if (zhVoice) {
+        utterance.voice = zhVoice;
+      }
+      utterance.rate = 0.88;
+      synth.speak(utterance);
+      return {
+        spokenByVoice: true,
+        fallbackMessageVi:
+          voices.length === 0
+            ? `Đang gửi yêu cầu phát âm tiếng Trung (${pinyin}).`
+            : `Đang phát âm tiếng Trung: ${hanzi} (${pinyin})`,
+        fallbackMessageEn:
+          voices.length === 0
+            ? `Requesting Mandarin pronunciation (${pinyin}).`
+            : `Speaking Mandarin: ${hanzi} (${pinyin})`,
+      };
+    } catch {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi: `Không mở được giọng đọc tiếng Trung. Pinyin chuẩn: ${pinyin}.`,
+        fallbackMessageEn: `Could not start Mandarin audio. Standard Pinyin: ${pinyin}.`,
+      };
+    }
+  }
+
+  public speakChineseSentence(
+    sentenceZh: string,
+    uiLang: 'vi' | 'en' = 'vi',
+  ): { readonly spokenByVoice: boolean; readonly fallbackMessageVi: string; readonly fallbackMessageEn: string } {
+    void uiLang;
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi:
+          'Thiết bị chưa hỗ trợ đọc tiếng Trung. Hãy bật Pinyin hoặc chạm từng từ để xem phiên âm.',
+        fallbackMessageEn:
+          'Mandarin speech is unavailable on this device. Enable Pinyin or tap any word to inspect pronunciation.',
+      };
+    }
+    try {
+      const synth = window.speechSynthesis;
+      const voices = this.loadSpeechVoices();
+      const zhVoice = this.pickMandarinVoice(voices);
+      if (voices.length > 0 && !zhVoice) {
+        return {
+          spokenByVoice: false,
+          fallbackMessageVi:
+            'Trình duyệt hiện chưa cài giọng tiếng Trung (zh-CN). Pinyin vẫn hiển thị đầy đủ để bạn tự đọc.',
+          fallbackMessageEn:
+            'No Chinese (zh-CN) voice is installed on this browser. Pinyin stays visible for guided reading.',
+        };
+      }
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(sentenceZh);
+      utterance.lang = zhVoice?.lang ?? 'zh-CN';
+      if (zhVoice) {
+        utterance.voice = zhVoice;
+      }
+      utterance.rate = 0.9;
+      synth.speak(utterance);
+      return {
+        spokenByVoice: true,
+        fallbackMessageVi: 'Đang đọc câu tiếng Trung phổ thông...',
+        fallbackMessageEn: 'Speaking Mandarin sentence...',
+      };
+    } catch {
+      return {
+        spokenByVoice: false,
+        fallbackMessageVi: 'Trình duyệt tạm khóa giọng đọc tiếng Trung, hãy xem Pinyin bên trên.',
+        fallbackMessageEn: 'Browser blocked Mandarin audio; use the Pinyin reading guide.',
       };
     }
   }

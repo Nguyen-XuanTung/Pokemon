@@ -8,6 +8,9 @@ import { NPCS, NPCS_BY_ID } from '../data/npcs.ts';
 import type { PocketWordNote } from '../data/pocket-dict.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../data/species.ts';
+import { resolveChineseDialogueLine, ZH_DIALOGUES_BY_ID } from '../data/zh-dialogues.ts';
+import { ZH_LEXICON_INDEX } from '../data/zh-lexicon.ts';
+import { ITEMS_ZH, NPCS_ZH, SPECIES_ZH } from '../data/zh-world-content.ts';
 import {
   createBattleSession,
   stepBattleTurn,
@@ -16,6 +19,15 @@ import {
   type PlayerBattleAction,
 } from '../domain/battle.ts';
 import { checkBossReadiness, type BossReadinessCheck } from '../domain/battleAssist.ts';
+import {
+  buildChineseCampfireReviewSet,
+  buildChineseContextualReencounterEcho,
+  recordChineseCampfireRecall,
+  recordChineseSentenceExposure,
+  recordChineseWordLookup,
+  toggleChineseWordSaved,
+  type ChineseCampfireReviewPrompt,
+} from '../domain/chinese.ts';
 import { createCreatureInstance, replaceCreatureMoveSlot } from '../domain/creatures.ts';
 import { getDifficultyProfile } from '../domain/difficulty.ts';
 import {
@@ -64,6 +76,8 @@ import {
   useFieldItem,
 } from '../domain/state.ts';
 import type {
+  ChineseLexiconEntry,
+  ChineseProperNoun,
   DialogueAction,
   DialogueChoice,
   DialogueNode,
@@ -81,6 +95,14 @@ import {
   nextTimeOfDay,
   offsetByDirection,
 } from '../domain/world.ts';
+import {
+  getNpcsInRegion,
+  MovementCoordinator,
+  type MovementHost,
+  type MovementStepResult,
+  type MovementVisualSnapshot,
+} from './movement.ts';
+import type { ClickMovePlan } from '../domain/navigation.ts';
 
 const OPPOSITE_DIR: Readonly<Record<Direction, Direction>> = {
   up: 'down',
@@ -96,6 +118,7 @@ export const GAME_SAVE_VALIDATION_REGISTRY: SaveValidationRegistry = {
   validItemIds: new Set(Object.keys(ITEMS_BY_ID)),
   validQuestIds: new Set(QUESTS.map((q) => q.id)),
   validWordIds: new Set(Object.keys(LEXICON_INDEX.byId)),
+  validZhWordIds: new Set(Object.keys(ZH_LEXICON_INDEX.byId)),
   mapBounds: Object.fromEntries(MAPS.map((m) => [m.id, { width: m.width, height: m.height }])),
   regionSpawns: Object.fromEntries(
     MAPS.map((m) => [m.id, { x: m.spawnX, y: m.spawnY }]),
@@ -113,9 +136,14 @@ export interface ActiveDialogueState {
   lineIndex: number;
   resolvedEn: string;
   resolvedVi: string;
+  resolvedZh: string;
+  speakerZh: string;
+  choicesZh?: ReadonlyArray<string>;
   echoEn?: string;
   echoVi?: string;
+  echoZh?: string;
   revealViOverride: boolean;
+  revealPinyinOverride?: boolean;
   speechNoteVi: string;
 }
 
@@ -134,7 +162,7 @@ export interface ToastBanner {
   readonly messageVi: string;
 }
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export type ActiveModal =
   | 'none'
@@ -176,11 +204,12 @@ export interface EvolutionCelebrationState {
   readonly triggeredAtStep: number;
 }
 
-export class GameController {
+export class GameController implements MovementHost {
   public state: GameState;
   public readonly rng: SeededRng;
   public readonly saveRepo: SaveRepository;
   public readonly sound: SoundEngine;
+  public readonly movement: MovementCoordinator;
 
   public activeModal: ActiveModal = 'title';
   public journalTab: JournalTab = 'quests';
@@ -193,6 +222,10 @@ export class GameController {
   public lastBattleVisual: BattleVisualCue | null = null;
   public activeGlossEntry: LexiconEntry | null = null;
   public activePocketGloss: PocketGlossState | null = null;
+  public activeZhGlossEntry: ChineseLexiconEntry | null = null;
+  public activeZhProperGloss: ChineseProperNoun | null = null;
+  public activeZhGlossPinyin: string = '';
+  public activeZhGlossSentenceZh: string = '';
   public activeGlossContextTag: string = '';
   public activeGlossSentenceEn: string = '';
   public activeGlossNoteVi: string = '';
@@ -203,6 +236,7 @@ export class GameController {
   public activeOnboardingPrompt: OnboardingStepPrompt | null = null;
   public followerPos: { x: number; y: number; facing: Direction };
   public campPrompts: CampfireReviewPrompt[] = [];
+  public zhCampPrompts: ChineseCampfireReviewPrompt[] = [];
   public campPromptIndex = 0;
   public toasts: ToastBanner[] = [];
   public statusNotice: string = '';
@@ -230,12 +264,84 @@ export class GameController {
     }
     this.rng = new SeededRng(this.state.seedState);
     this.followerPos = this.computeDefaultFollowerPos();
+    this.movement = new MovementCoordinator(this);
     this.refreshGuidanceAndNavigation();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,
       sfxVolume: this.state.settings.sfxVolume,
       muted: this.state.settings.muted,
     });
+  }
+
+  public isOverworldLocked(): boolean {
+    return (
+      this.activeModal !== 'none' ||
+      this.activeDialogue !== null ||
+      this.activeBattle !== null
+    );
+  }
+
+  public pressMoveInput(sourceId: string, direction: Direction): boolean {
+    this.sound.unlock();
+    return this.movement.pressDirection(sourceId, direction);
+  }
+
+  public releaseMoveInput(sourceId: string): void {
+    this.movement.releaseDirection(sourceId);
+  }
+
+  public setSprintInput(active: boolean): void {
+    this.movement.setSprintModifier(active);
+  }
+
+  public cancelMovementInputs(
+    reason: 'modal' | 'dialogue' | 'battle' | 'region' | 'blur' | 'manual' | 'reset',
+  ): void {
+    this.movement.clearAllInputs(reason);
+  }
+
+  public requestClickToMove(tileX: number, tileY: number): ClickMovePlan {
+    this.sound.unlock();
+    return this.movement.requestClickToMove(tileX, tileY);
+  }
+
+  public tickMovement(deltaMs: number): MovementVisualSnapshot {
+    return this.movement.tick(deltaMs);
+  }
+
+  public emitMovementVisualOnly(): void {
+    // Visual position updates are pulled directly by WorldScene.update without rebuilding DOM
+  }
+
+  public notifyBlockedPortal(
+    portalBlockedDialogueId: string | undefined,
+    fallbackEn: string,
+    fallbackVi: string,
+  ): void {
+    this.refreshGuidanceAndNavigation();
+    if (portalBlockedDialogueId) {
+      this.openDialogueById(portalBlockedDialogueId);
+    } else {
+      this.pushToast(fallbackEn, fallbackVi);
+    }
+    this.emitChange();
+  }
+
+  public pushMovementNotice(messageEn: string, messageVi: string): void {
+    this.pushToast(messageEn, messageVi);
+    this.emitChange();
+  }
+
+  public interactAtGridTarget(targetX: number, targetY: number): void {
+    if (this.isOverworldLocked()) return;
+    const dx = targetX - this.state.playerPos.x;
+    const dy = targetY - this.state.playerPos.y;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return;
+    if (dx === 1) this.state.playerPos.facing = 'right';
+    else if (dx === -1) this.state.playerPos.facing = 'left';
+    else if (dy === 1) this.state.playerPos.facing = 'down';
+    else if (dy === -1) this.state.playerPos.facing = 'up';
+    this.interactFacing();
   }
 
   public refreshGuidanceAndNavigation(): void {
@@ -354,6 +460,7 @@ export class GameController {
     this.pendingBossWarning = null;
     this.lastBattleVisual = null;
     this.followerPos = this.computeDefaultFollowerPos();
+    this.movement.clearAllInputs('reset');
     this.activeModal = 'none';
     this.refreshGuidanceAndNavigation();
     this.sound.unlock();
@@ -373,6 +480,7 @@ export class GameController {
         this.pushToast('Save Restored', loaded.warning);
       }
     }
+    this.movement.clearAllInputs('reset');
     this.activeModal = 'none';
     this.refreshGuidanceAndNavigation();
     this.sound.unlock();
@@ -393,19 +501,29 @@ export class GameController {
     }
   }
 
-  public movePlayer(direction: Direction): void {
-    if (
-      this.activeModal !== 'none' ||
-      this.activeDialogue !== null ||
-      this.activeBattle !== null
-    ) {
-      return;
-    }
-    this.sound.unlock();
+  public executeGridStep(direction: Direction): MovementStepResult {
     const prevX = this.state.playerPos.x;
     const prevY = this.state.playerPos.y;
+    const prevFollowerX = this.followerPos.x;
+    const prevFollowerY = this.followerPos.y;
+
+    if (this.isOverworldLocked()) {
+      return {
+        kind: 'locked',
+        fromX: prevX,
+        fromY: prevY,
+        toX: prevX,
+        toY: prevY,
+        followerFromX: prevFollowerX,
+        followerFromY: prevFollowerY,
+        followerToX: prevFollowerX,
+        followerToY: prevFollowerY,
+      };
+    }
+
+    this.sound.unlock();
     const map = MAPS_BY_ID[this.state.regionId];
-    const npcsInRegion = NPCS.filter((n) => n.regionId === this.state.regionId);
+    const npcsInRegion = getNpcsInRegion(this.state.regionId);
     const step = attemptPlayerStep({
       state: this.state,
       map,
@@ -418,7 +536,17 @@ export class GameController {
     if (step.kind === 'blocked') {
       this.refreshGuidanceAndNavigation();
       this.emitChange();
-      return;
+      return {
+        kind: 'blocked',
+        fromX: prevX,
+        fromY: prevY,
+        toX: prevX,
+        toY: prevY,
+        followerFromX: prevFollowerX,
+        followerFromY: prevFollowerY,
+        followerToX: prevFollowerX,
+        followerToY: prevFollowerY,
+      };
     }
 
     this.sound.playSfx('step');
@@ -446,7 +574,17 @@ export class GameController {
         this.pushToast(step.portal.labelEn, step.portal.labelVi);
       }
       this.emitChange();
-      return;
+      return {
+        kind: 'portal_blocked',
+        fromX: prevX,
+        fromY: prevY,
+        toX: prevX,
+        toY: prevY,
+        followerFromX: prevFollowerX,
+        followerFromY: prevFollowerY,
+        followerToX: prevFollowerX,
+        followerToY: prevFollowerY,
+      };
     }
 
     if (step.kind === 'portal_entered') {
@@ -458,7 +596,17 @@ export class GameController {
       this.syncRegionMusic();
       this.persistState();
       this.emitChange();
-      return;
+      return {
+        kind: 'portal_entered',
+        fromX: this.state.playerPos.x,
+        fromY: this.state.playerPos.y,
+        toX: this.state.playerPos.x,
+        toY: this.state.playerPos.y,
+        followerFromX: this.followerPos.x,
+        followerFromY: this.followerPos.y,
+        followerToX: this.followerPos.x,
+        followerToY: this.followerPos.y,
+      };
     }
 
     this.followerPos = { x: prevX, y: prevY, facing: direction };
@@ -478,11 +626,38 @@ export class GameController {
       }
       this.refreshGuidanceAndNavigation();
       this.emitChange();
-      return;
+      return {
+        kind: 'wild_encounter',
+        fromX: prevX,
+        fromY: prevY,
+        toX: this.state.playerPos.x,
+        toY: this.state.playerPos.y,
+        followerFromX: prevFollowerX,
+        followerFromY: prevFollowerY,
+        followerToX: this.followerPos.x,
+        followerToY: this.followerPos.y,
+      };
     }
 
     this.refreshGuidanceAndNavigation();
     this.emitChange();
+    return {
+      kind: 'moved',
+      fromX: prevX,
+      fromY: prevY,
+      toX: this.state.playerPos.x,
+      toY: this.state.playerPos.y,
+      followerFromX: prevFollowerX,
+      followerFromY: prevFollowerY,
+      followerToX: this.followerPos.x,
+      followerToY: this.followerPos.y,
+    };
+  }
+
+  public movePlayer(direction: Direction): void {
+    this.movement.clearAutoPath();
+    this.executeGridStep(direction);
+    this.movement.syncExternalPosition();
   }
 
   public interactFacing(): void {
@@ -614,25 +789,52 @@ export class GameController {
       this.activeDialogue = null;
       return;
     }
+    const learningLang = this.state.settings.learningLanguage ?? 'en';
+    const hskLevel = this.state.settings.hskLevel ?? 'HSK2';
     const resolved = resolveDialogueLineForLevel(line, this.state.settings.cefrBand);
-    const echo = line.includeReencounterEcho
-      ? buildContextualReencounterEcho(this.state, this.state.regionId, LEXICON_INDEX)
-      : null;
+    const resolvedZhLine = resolveChineseDialogueLine(node.id, lineIndex, hskLevel, line);
+    const speakerZh = ZH_DIALOGUES_BY_ID[node.id]?.speakerZh ?? node.speaker;
+
+    const echoEnObj =
+      line.includeReencounterEcho && learningLang !== 'zh'
+        ? buildContextualReencounterEcho(this.state, this.state.regionId, LEXICON_INDEX)
+        : null;
+    const echoZhObj =
+      line.includeReencounterEcho && learningLang === 'zh'
+        ? buildChineseContextualReencounterEcho(this.state, this.state.regionId, ZH_LEXICON_INDEX)
+        : null;
 
     this.activeDialogue = {
       node,
       lineIndex,
       resolvedEn: resolved.en,
       resolvedVi: resolved.vi,
-      echoEn: echo?.en,
-      echoVi: echo?.vi,
+      resolvedZh: resolvedZhLine.zh,
+      speakerZh,
+      choicesZh: resolvedZhLine.choicesZh,
+      echoEn: echoEnObj?.en,
+      echoVi: echoZhObj?.vi ?? echoEnObj?.vi,
+      echoZh: echoZhObj?.zh,
       revealViOverride: false,
+      revealPinyinOverride: undefined,
       speechNoteVi: '',
     };
 
-    recordSentenceExposure(this.state, resolved.en, node.contextTag, LEXICON_INDEX);
-    if (echo) {
-      recordSentenceExposure(this.state, echo.en, `${node.contextTag}_echo`, LEXICON_INDEX);
+    if (learningLang === 'zh') {
+      recordChineseSentenceExposure(this.state, resolvedZhLine.zh, node.contextTag, ZH_LEXICON_INDEX);
+      if (echoZhObj) {
+        recordChineseSentenceExposure(
+          this.state,
+          echoZhObj.zh,
+          `${node.contextTag}_echo`,
+          ZH_LEXICON_INDEX,
+        );
+      }
+    } else if (learningLang === 'en') {
+      recordSentenceExposure(this.state, resolved.en, node.contextTag, LEXICON_INDEX);
+      if (echoEnObj) {
+        recordSentenceExposure(this.state, echoEnObj.en, `${node.contextTag}_echo`, LEXICON_INDEX);
+      }
     }
     if (line.action) {
       this.executeDialogueAction(line.action);
@@ -642,6 +844,7 @@ export class GameController {
   public openDialogueById(dialogueId: string): void {
     const node = DIALOGUES_BY_ID[dialogueId];
     if (!node) return;
+    this.movement.clearAllInputs('dialogue');
     if (
       (dialogueId.startsWith('lore_') ||
         dialogueId.startsWith('logbook_') ||
@@ -707,8 +910,26 @@ export class GameController {
     this.emitChange();
   }
 
+  public toggleDialoguePinyinAssist(): void {
+    if (!this.activeDialogue) return;
+    const baseShow = this.state.settings.showPinyin !== false;
+    const cur = this.activeDialogue.revealPinyinOverride ?? baseShow;
+    this.activeDialogue.revealPinyinOverride = !cur;
+    this.emitChange();
+  }
+
   public speakActiveDialogueSentence(): void {
     if (!this.activeDialogue) return;
+    const uiLang = this.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+    if (this.state.settings.learningLanguage === 'zh') {
+      const fullZh = this.activeDialogue.echoZh
+        ? `${this.activeDialogue.resolvedZh} ${this.activeDialogue.echoZh}`
+        : this.activeDialogue.resolvedZh;
+      const res = this.sound.speakChineseSentence(fullZh, uiLang);
+      this.activeDialogue.speechNoteVi = uiLang === 'en' ? res.fallbackMessageEn : res.fallbackMessageVi;
+      this.emitChange();
+      return;
+    }
     const fullText = this.activeDialogue.echoEn
       ? `${this.activeDialogue.resolvedEn} ${this.activeDialogue.echoEn}`
       : this.activeDialogue.resolvedEn;
@@ -729,6 +950,7 @@ export class GameController {
   ): void {
     const spec = SPECIES_BY_ID[speciesId];
     if (!spec || this.state.party.length === 0) return;
+    this.movement.clearAllInputs('battle');
     markSpeciesDiscovered(this.state, spec.id);
     const wildEnemy = createCreatureInstance({
       uid: `foe_${spec.id}_${this.state.stepCount}`,
@@ -742,11 +964,14 @@ export class GameController {
     this.activeBattleIsRematch = false;
     const gleamPrefixEn = isRareVariant ? 'Gleaming ' : '';
     const gleamSuffixVi = isRareVariant ? ' Ánh Sao' : '';
+    const specZh = SPECIES_ZH[spec.id];
+    const gleamPrefixZh = isRareVariant ? '闪光' : '';
     this.activeBattle = createBattleSession({
       kind: 'wild',
       isBoss: false,
       opponentTitleEn: `Wild ${gleamPrefixEn}${spec.name}`,
       opponentTitleVi: `${spec.name}${gleamSuffixVi} hoang dã`,
+      opponentTitleZh: `野生${gleamPrefixZh}${specZh?.nameZh ?? spec.name}`,
       rewardTokens: Math.max(12, level * (isRareVariant ? 5 : 3)),
       playerParty: this.state.party,
       enemyParty: [wildEnemy],
@@ -760,14 +985,26 @@ export class GameController {
         messageVi: isRareVariant
           ? `Một ${spec.name} biến thể Ánh Sao quý hiếm lấp lánh xuất hiện!`
           : `Một ${spec.name} (${spec.titleVi}) xuất hiện từ bụi cỏ!`,
+        messageZh: isRareVariant
+          ? `一只稀有的闪光${specZh?.nameZh ?? spec.name}闪耀现身！`
+          : `一只野生的${specZh?.nameZh ?? spec.name}从草丛里走了出来！`,
       },
     ];
-    recordSentenceExposure(
-      this.state,
-      this.battleLogs[0]!.messageEn,
-      'battle_intro',
-      LEXICON_INDEX,
-    );
+    if (this.state.settings.learningLanguage === 'zh') {
+      recordChineseSentenceExposure(
+        this.state,
+        this.battleLogs[0]!.messageZh ?? '',
+        'battle_intro',
+        ZH_LEXICON_INDEX,
+      );
+    } else if (this.state.settings.learningLanguage !== 'none') {
+      recordSentenceExposure(
+        this.state,
+        this.battleLogs[0]!.messageEn,
+        'battle_intro',
+        LEXICON_INDEX,
+      );
+    }
     this.lastBattleAnim = 'none';
     this.lastBattleVisual = null;
     this.sound.playTrack('wild_battle');
@@ -778,6 +1015,7 @@ export class GameController {
     const npc = NPCS_BY_ID[npcId];
     const battleSpec = isRematch && npc?.rematchBattle ? npc.rematchBattle : npc?.trainerBattle;
     if (!npc || !battleSpec || this.state.party.length === 0) return;
+    this.movement.clearAllInputs('battle');
     if (this.state.party.every((c) => c.currentHp <= 0)) {
       healPartyInState(this.state, MOVES_BY_ID);
     }
@@ -796,21 +1034,28 @@ export class GameController {
 
     this.activeTrainerNpc = npc;
     this.activeBattleIsRematch = Boolean(isRematch && npc.rematchBattle);
+    const npcZh = NPCS_ZH[npc.id];
+    const trainerTitleZh = this.activeBattleIsRematch
+      ? (npcZh?.rematchTitleZh ?? npcZh?.nameZh ?? battleSpec.titleEn)
+      : (npcZh?.trainerTitleZh ?? npcZh?.nameZh ?? battleSpec.titleEn);
     this.activeBattle = createBattleSession({
       kind: 'trainer',
       isBoss: battleSpec.isBoss,
       opponentTitleEn: battleSpec.titleEn,
       opponentTitleVi: battleSpec.titleVi,
+      opponentTitleZh: trainerTitleZh,
       rewardTokens: battleSpec.rewardTokens,
       playerParty: this.state.party,
       enemyParty,
     });
     const firstEnemySpec = SPECIES_BY_ID[enemyParty[0]!.speciesId]!;
+    const firstEnemyZh = SPECIES_ZH[firstEnemySpec.id]?.nameZh ?? firstEnemySpec.name;
     this.battleLogs = [
       {
         kind: 'text',
         messageEn: `${battleSpec.titleEn} sent out ${firstEnemySpec.name}!`,
         messageVi: `${battleSpec.titleVi} đưa ${firstEnemySpec.name} ra sân!`,
+        messageZh: `${trainerTitleZh}派出了${firstEnemyZh}！`,
       },
     ];
     this.lastBattleAnim = 'none';
@@ -867,7 +1112,11 @@ export class GameController {
     }
 
     for (const log of turnLogs) {
-      recordSentenceExposure(this.state, log.messageEn, 'battle_log', LEXICON_INDEX);
+      if (this.state.settings.learningLanguage === 'zh' && log.messageZh) {
+        recordChineseSentenceExposure(this.state, log.messageZh, 'battle_log', ZH_LEXICON_INDEX);
+      } else if (this.state.settings.learningLanguage !== 'none') {
+        recordSentenceExposure(this.state, log.messageEn, 'battle_log', LEXICON_INDEX);
+      }
       if (log.kind === 'damage') {
         if (log.isSuperEffective || log.messageEn.includes('natural weakness')) {
           this.sound.playSfx('super_hit');
@@ -949,6 +1198,7 @@ export class GameController {
     this.activeBattleIsRematch = false;
     this.lastBattleAnim = 'none';
     this.lastBattleVisual = null;
+    this.movement.clearAllInputs('battle');
     this.syncRegionMusic();
 
     if (outcome === 'player_victory' && defeatedTrainer) {
@@ -1043,6 +1293,7 @@ export class GameController {
         this.state.gleamingSpecies.push(session.capturedCreature.speciesId);
       }
       const sp = SPECIES_BY_ID[session.capturedCreature.speciesId];
+      const spZh = sp ? SPECIES_ZH[sp.id]?.nameZh ?? sp.name : '新伙伴';
       this.state.tokens += Math.max(10, Math.round(session.rewardTokens * 0.7));
       this.battleLogs.push({
         kind: 'capture',
@@ -1054,6 +1305,10 @@ export class GameController {
           destination === 'party'
             ? `${sp?.name ?? 'Bạn mới'} đã gia nhập đội hình chính!`
             : `${sp?.name ?? 'Bạn mới'} đã chuyển về Khu bảo tồn dự bị!`,
+        messageZh:
+          destination === 'party'
+            ? `${spZh}加入了你的出战队伍！`
+            : `${spZh}已安全送往圣地备用营地！`,
       });
       this.syncQuestsAndNotify();
       this.refreshGuidanceAndNavigation();
@@ -1084,10 +1339,12 @@ export class GameController {
           addItemToState(this.state, activeSpec.rewardItemId, qty);
           const itemDef = ITEMS_BY_ID[activeSpec.rewardItemId];
           if (itemDef) {
+            const itemZh = ITEMS_ZH[itemDef.id]?.nameZh ?? itemDef.nameVi;
             this.battleLogs.push({
               kind: 'victory',
               messageEn: `Received ${qty}x ${itemDef.nameEn} and ${activeSpec.rewardTokens} Field Tokens!`,
               messageVi: `Nhận được ${qty} ${itemDef.nameVi} và ${activeSpec.rewardTokens} Huy hiệu thực địa!`,
+              messageZh: `获得了 ${qty} 个${itemZh}和 ${activeSpec.rewardTokens} 枚野外徽章！`,
             });
           }
         }
@@ -1097,6 +1354,7 @@ export class GameController {
           kind: 'victory',
           messageEn: `Earned ${session.rewardTokens} Field Tokens.`,
           messageVi: `Nhận được ${session.rewardTokens} Huy hiệu thực địa.`,
+          messageZh: `获得了 ${session.rewardTokens} 枚野外徽章。`,
         });
       }
       this.syncQuestsAndNotify();
@@ -1156,6 +1414,8 @@ export class GameController {
     this.sound.playSfx('gloss');
     recordWordLookup(this.state, entry.id, contextTag);
     this.activePocketGloss = null;
+    this.activeZhGlossEntry = null;
+    this.activeZhProperGloss = null;
     this.activeGlossEntry = entry;
     this.activeGlossContextTag = contextTag;
     this.activeGlossSentenceEn = sentenceEn;
@@ -1172,7 +1432,42 @@ export class GameController {
     this.sound.playSfx('gloss');
     this.state.stats.wordsGlossed += 1;
     this.activeGlossEntry = null;
+    this.activeZhGlossEntry = null;
+    this.activeZhProperGloss = null;
     this.activePocketGloss = { surface, note, sentenceEn };
+    this.activeGlossNoteVi = '';
+    this.refreshGuidanceAndNavigation();
+    this.emitChange();
+  }
+
+  public inspectZhGlossWord(
+    entry: ChineseLexiconEntry,
+    contextTag: string,
+    sentenceZh: string = '',
+    resolvedPinyin: string = '',
+  ): void {
+    this.sound.playSfx('gloss');
+    recordChineseWordLookup(this.state, entry.id, contextTag);
+    this.activeGlossEntry = null;
+    this.activePocketGloss = null;
+    this.activeZhProperGloss = null;
+    this.activeZhGlossEntry = entry;
+    this.activeZhGlossPinyin = resolvedPinyin || entry.pinyin;
+    this.activeZhGlossSentenceZh = sentenceZh;
+    this.activeGlossContextTag = contextTag;
+    this.activeGlossNoteVi = '';
+    this.refreshGuidanceAndNavigation();
+    this.emitChange();
+  }
+
+  public inspectZhProperNoun(properNoun: ChineseProperNoun, sentenceZh: string = ''): void {
+    this.sound.playSfx('gloss');
+    this.activeGlossEntry = null;
+    this.activePocketGloss = null;
+    this.activeZhGlossEntry = null;
+    this.activeZhProperGloss = properNoun;
+    this.activeZhGlossPinyin = properNoun.pinyin;
+    this.activeZhGlossSentenceZh = sentenceZh;
     this.activeGlossNoteVi = '';
     this.refreshGuidanceAndNavigation();
     this.emitChange();
@@ -1181,6 +1476,10 @@ export class GameController {
   public closeGlossPopup(): void {
     this.activeGlossEntry = null;
     this.activePocketGloss = null;
+    this.activeZhGlossEntry = null;
+    this.activeZhProperGloss = null;
+    this.activeZhGlossPinyin = '';
+    this.activeZhGlossSentenceZh = '';
     this.activeGlossContextTag = '';
     this.activeGlossSentenceEn = '';
     this.activeGlossNoteVi = '';
@@ -1188,6 +1487,27 @@ export class GameController {
   }
 
   public pronounceActiveGloss(): void {
+    const uiLang = this.state.settings.uiLanguage === 'en' ? 'en' : 'vi';
+    if (this.activeZhGlossEntry) {
+      const res = this.sound.speakChineseWord(
+        this.activeZhGlossEntry.hanzi,
+        this.activeZhGlossPinyin || this.activeZhGlossEntry.pinyin,
+        uiLang,
+      );
+      this.activeGlossNoteVi = uiLang === 'en' ? res.fallbackMessageEn : res.fallbackMessageVi;
+      this.emitChange();
+      return;
+    }
+    if (this.activeZhProperGloss) {
+      const res = this.sound.speakChineseWord(
+        this.activeZhProperGloss.hanzi,
+        this.activeZhProperGloss.pinyin,
+        uiLang,
+      );
+      this.activeGlossNoteVi = uiLang === 'en' ? res.fallbackMessageEn : res.fallbackMessageVi;
+      this.emitChange();
+      return;
+    }
     if (this.activeGlossEntry) {
       const res = this.sound.speakEnglishWord(
         this.activeGlossEntry.word,
@@ -1210,6 +1530,7 @@ export class GameController {
       this.state = res.state;
       this.rng.setSeedState(this.state.seedState);
       this.followerPos = this.computeDefaultFollowerPos();
+      this.movement.clearAllInputs('reset');
       this.pushToast(
         'Synced latest progress from newer tab.',
         'Đã đồng bộ tiến trình mới nhất từ tab khác.',
@@ -1219,6 +1540,12 @@ export class GameController {
   }
 
   public toggleSaveActiveGloss(): void {
+    if (this.activeZhGlossEntry) {
+      toggleChineseWordSaved(this.state, this.activeZhGlossEntry.id);
+      this.persistState();
+      this.emitChange();
+      return;
+    }
     if (!this.activeGlossEntry) return;
     toggleWordSaved(this.state, this.activeGlossEntry.id);
     this.persistState();
@@ -1231,8 +1558,15 @@ export class GameController {
     this.emitChange();
   }
 
+  public toggleSavedZhWordById(wordId: string): void {
+    toggleChineseWordSaved(this.state, wordId);
+    this.persistState();
+    this.emitChange();
+  }
+
   public openJournal(tab: JournalTab = 'quests'): void {
     if (this.activeModal === 'title' || this.activeBattle !== null) return;
+    this.movement.clearAllInputs('modal');
     this.sound.playSfx('select');
     this.state.flags.onboarding_opened_journal = true;
     this.journalTab = tab;
@@ -1243,6 +1577,7 @@ export class GameController {
 
   public openLostHelper(): void {
     if (this.activeModal === 'title' || this.activeBattle !== null) return;
+    this.movement.clearAllInputs('modal');
     this.sound.playSfx('select');
     this.refreshGuidanceAndNavigation();
     this.activeModal = 'lost_helper';
@@ -1325,7 +1660,13 @@ export class GameController {
   }
 
   public openCampfireReview(): void {
-    this.campPrompts = buildCampfireReviewSet(this.state, LEXICON_INDEX, 4);
+    if (this.state.settings.learningLanguage === 'zh') {
+      this.campPrompts = [];
+      this.zhCampPrompts = buildChineseCampfireReviewSet(this.state, ZH_LEXICON_INDEX, 4);
+    } else {
+      this.zhCampPrompts = [];
+      this.campPrompts = buildCampfireReviewSet(this.state, LEXICON_INDEX, 4);
+    }
     this.campPromptIndex = 0;
     this.activeModal = 'camp_review';
     this.emitChange();
@@ -1345,8 +1686,24 @@ export class GameController {
     return { matched, target: prompt.entry };
   }
 
+  public answerZhCampfirePrompt(chosenWordId: string): {
+    readonly matched: boolean;
+    readonly target: ChineseLexiconEntry | null;
+  } {
+    const prompt = this.zhCampPrompts[this.campPromptIndex];
+    if (!prompt) return { matched: false, target: null };
+    const matched = chosenWordId === prompt.entry.id;
+    recordChineseCampfireRecall(this.state, prompt.entry.id, matched);
+    this.sound.playSfx(matched ? 'heal' : 'select');
+    this.persistState();
+    this.emitChange();
+    return { matched, target: prompt.entry };
+  }
+
   public nextCampfirePrompt(): void {
-    if (this.campPromptIndex + 1 < this.campPrompts.length) {
+    const total =
+      this.zhCampPrompts.length > 0 ? this.zhCampPrompts.length : this.campPrompts.length;
+    if (this.campPromptIndex + 1 < total) {
       this.campPromptIndex += 1;
     } else {
       this.activeModal = 'none';
@@ -1415,16 +1772,56 @@ export class GameController {
     } else if (patch.supportMode && !patch.contentLanguage) {
       nextSettings.contentLanguage = inferContentLanguageFromSupport(patch.supportMode);
     }
+    if (patch.learningLanguage === 'none' && patch.contentLanguage === undefined) {
+      nextSettings.contentLanguage = 'vi_only';
+    } else if (
+      patch.learningLanguage === 'en' &&
+      nextSettings.contentLanguage === 'vi_only' &&
+      patch.contentLanguage === undefined
+    ) {
+      nextSettings.contentLanguage = 'bilingual';
+      nextSettings.supportMode = 'bilingual';
+    } else if (patch.contentLanguage === 'vi_only' && patch.learningLanguage === undefined) {
+      nextSettings.learningLanguage = 'none';
+    } else if (
+      patch.contentLanguage &&
+      patch.contentLanguage !== 'vi_only' &&
+      patch.learningLanguage === undefined &&
+      nextSettings.learningLanguage === 'none'
+    ) {
+      nextSettings.learningLanguage = 'en';
+    }
+    if (patch.zhStudyMode) {
+      if (patch.showPinyin === undefined) {
+        nextSettings.showPinyin =
+          patch.zhStudyMode === 'hanzi_pinyin_vi' || patch.zhStudyMode === 'hanzi_pinyin';
+      }
+      if (patch.showZhTranslation === undefined) {
+        nextSettings.showZhTranslation =
+          patch.zhStudyMode === 'hanzi_pinyin_vi' || patch.zhStudyMode === 'vi_only';
+      }
+    }
+    if (patch.clickToMove === false) {
+      this.movement.clearAutoPath();
+    }
     if (patch.difficulty && patch.battleAssist === undefined && this.activeModal === 'title') {
       nextSettings.battleAssist = getDifficultyProfile(patch.difficulty).defaultBattleAssist;
     }
     this.state.settings = nextSettings;
-    if (patch.cefrBand && this.activeDialogue) {
+    if ((patch.cefrBand || patch.hskLevel || patch.learningLanguage) && this.activeDialogue) {
       const currentLine = this.activeDialogue.node.lines[this.activeDialogue.lineIndex];
       if (currentLine) {
         const resolved = resolveDialogueLineForLevel(currentLine, this.state.settings.cefrBand);
+        const resolvedZhLine = resolveChineseDialogueLine(
+          this.activeDialogue.node.id,
+          this.activeDialogue.lineIndex,
+          this.state.settings.hskLevel ?? 'HSK2',
+          currentLine,
+        );
         this.activeDialogue.resolvedEn = resolved.en;
         this.activeDialogue.resolvedVi = resolved.vi;
+        this.activeDialogue.resolvedZh = resolvedZhLine.zh;
+        this.activeDialogue.choicesZh = resolvedZhLine.choicesZh;
       }
     }
     this.sound.configure({
@@ -1453,6 +1850,7 @@ export class GameController {
     this.activeDialogue = null;
     this.activeModal = 'none';
     this.followerPos = this.computeDefaultFollowerPos();
+    this.movement.clearAllInputs('reset');
     this.refreshGuidanceAndNavigation();
     this.sound.configure({
       bgmVolume: this.state.settings.bgmVolume,

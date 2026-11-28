@@ -10,15 +10,18 @@ export const COMBAT_ELEMENTS: ReadonlyArray<CombatElement> = [
 ];
 
 export const ELEMENT_LABELS: Readonly<
-  Record<ElementType, { readonly en: string; readonly vi: string; readonly color: string }>
+  Record<
+    ElementType,
+    { readonly en: string; readonly vi: string; readonly zh: string; readonly color: string }
+  >
 > = {
-  leaf: { en: 'Leaf', vi: 'Lá rừng', color: '#4d8b55' },
-  water: { en: 'Water', vi: 'Suối nước', color: '#3b7a8c' },
-  ember: { en: 'Ember', vi: 'Lửa ấm', color: '#c85a32' },
-  stone: { en: 'Stone', vi: 'Đá núi', color: '#8a6f52' },
-  gale: { en: 'Gale', vi: 'Gió mây', color: '#5b8a7a' },
-  spark: { en: 'Spark', vi: 'Tia chớp', color: '#c79a2b' },
-  neutral: { en: 'Neutral', vi: 'Cơ bản', color: '#70685f' },
+  leaf: { en: 'Leaf', vi: 'Lá rừng', zh: '草叶', color: '#4d8b55' },
+  water: { en: 'Water', vi: 'Suối nước', zh: '流水', color: '#3b7a8c' },
+  ember: { en: 'Ember', vi: 'Lửa ấm', zh: '火焰', color: '#c85a32' },
+  stone: { en: 'Stone', vi: 'Đá núi', zh: '岩石', color: '#8a6f52' },
+  gale: { en: 'Gale', vi: 'Gió mây', zh: '疾风', color: '#5b8a7a' },
+  spark: { en: 'Spark', vi: 'Tia chớp', zh: '雷电', color: '#c79a2b' },
+  neutral: { en: 'Neutral', vi: 'Cơ bản', zh: '普通', color: '#70685f' },
 };
 
 const SUPER_EFFECTIVE_TARGETS: Readonly<Record<CombatElement, ReadonlyArray<CombatElement>>> = {
@@ -47,12 +50,14 @@ export function describeEffectiveness(multiplier: number): {
   readonly tag: 'super' | 'resisted' | 'normal';
   readonly messageEn: string;
   readonly messageVi: string;
+  readonly messageZh: string;
 } {
   if (multiplier > 1.1) {
     return {
       tag: 'super',
       messageEn: 'It strikes a natural weakness!',
       messageVi: 'Đòn đánh trúng điểm khắc chế tự nhiên!',
+      messageZh: '属性克制，效果非常好！',
     };
   }
   if (multiplier < 0.9) {
@@ -60,12 +65,14 @@ export function describeEffectiveness(multiplier: number): {
       tag: 'resisted',
       messageEn: 'The target resists the element.',
       messageVi: 'Đối phương kháng được nguyên tố này.',
+      messageZh: '对手挡住了部分属性伤害。',
     };
   }
   return {
     tag: 'normal',
     messageEn: '',
     messageVi: '',
+    messageZh: '',
   };
 }
 

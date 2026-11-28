@@ -6,6 +6,9 @@ import { MOVES_BY_ID } from '../data/moves.ts';
 import { NPCS_BY_ID } from '../data/npcs.ts';
 import { QUESTS } from '../data/quests.ts';
 import { SPECIES, SPECIES_BY_ID } from '../data/species.ts';
+import { ZH_DIALOGUES_BY_ID } from '../data/zh-dialogues.ts';
+import { ZH_LEXICON_ENTRIES } from '../data/zh-lexicon.ts';
+import { ITEMS_ZH, SPECIES_ZH } from '../data/zh-world-content.ts';
 import { getUnlockedSpeciesMoves } from '../domain/creatures.ts';
 import { ELEMENT_LABELS } from '../domain/elements.ts';
 import {
@@ -25,9 +28,14 @@ import type {
   ContentLanguageMode,
   DifficultyMode,
   GuidanceMode,
+  HskLevel,
   KeyBindingMap,
+  LearningLanguage,
+  MovementSpeedMode,
+  PinyinPosition,
   RegionId,
   UiLanguage,
+  ZhStudyMode,
 } from '../domain/types.ts';
 import { APP_VERSION, type GameController, type JournalTab } from '../game/controller.ts';
 import {
@@ -35,6 +43,7 @@ import {
   createItemSpriteSpan,
   el,
   RARITY_LABELS,
+  renderInteractiveChinese,
   renderInteractiveEnglish,
   ROLE_LABELS,
 } from './uiHelpers.ts';
@@ -43,6 +52,7 @@ export type LexiconFilter = 'encountered' | 'saved' | 'mastered' | 'due' | 'all'
 
 export interface JournalViewState {
   lexiconFilter: LexiconFilter;
+  lexiconNotebook?: 'en' | 'zh';
   campAnsweredCurrent: boolean;
   campAnsweredMessageVi: string;
   awaitingKeyRebind: keyof KeyBindingMap | null;
@@ -524,7 +534,20 @@ function renderBagTab(controller: GameController, container: HTMLElement): void 
     );
     info.appendChild(titleLine);
     const desc = el('div', 'lw-hud-quest');
-    if (contentLang === 'vi_only' || uiLang === 'vi') {
+    const learningLang = controller.state.settings.learningLanguage ?? 'en';
+    const zhMode = controller.state.settings.zhStudyMode ?? 'hanzi_pinyin_vi';
+    if (learningLang === 'zh' && zhMode !== 'vi_only' && ITEMS_ZH[def.id]) {
+      const zhRow = el('div', 'lw-dialogue-zh');
+      zhRow.appendChild(
+        renderInteractiveChinese(controller, ITEMS_ZH[def.id]!.descriptionZh, 'bag_item', {
+          showPinyin: false,
+        }),
+      );
+      desc.appendChild(zhRow);
+      if (controller.state.settings.showZhTranslation !== false) {
+        desc.appendChild(el('div', '', def.descriptionVi));
+      }
+    } else if (learningLang === 'none' || contentLang === 'vi_only' || uiLang === 'vi') {
       desc.textContent = def.descriptionVi;
     } else {
       desc.appendChild(renderInteractiveEnglish(controller, def.descriptionEn, 'bag_item'));
@@ -618,7 +641,18 @@ function renderCompendiumTab(
       card.appendChild(el('div', 'lw-hud-quest', pickText(uiLang, sp.titleEn, sp.titleVi)));
       if (caught) {
         const note = el('div', 'lw-compendium-note');
-        if (contentLang === 'vi_only') {
+        const learningLang = state.settings.learningLanguage ?? 'en';
+        const zhMode = state.settings.zhStudyMode ?? 'hanzi_pinyin_vi';
+        if (learningLang === 'zh' && zhMode !== 'vi_only' && SPECIES_ZH[sp.id]) {
+          const zhNote = el('div', 'lw-dialogue-zh');
+          zhNote.appendChild(
+            renderInteractiveChinese(controller, SPECIES_ZH[sp.id]!.fieldNoteZh, 'compendium'),
+          );
+          note.appendChild(zhNote);
+          if (state.settings.showZhTranslation !== false && zhMode !== 'zh_immersion') {
+            note.appendChild(el('div', 'lw-hud-quest', sp.fieldNoteVi));
+          }
+        } else if (learningLang === 'none' || contentLang === 'vi_only') {
           note.textContent = sp.fieldNoteVi;
         } else {
           note.appendChild(renderInteractiveEnglish(controller, sp.fieldNoteEn, 'compendium'));
@@ -658,14 +692,43 @@ function renderLexiconTab(
   const state = controller.state;
   const uiLang: UiLanguage = state.settings.uiLanguage === 'en' ? 'en' : 'vi';
   const t = getUiStrings(uiLang);
+  const activeNotebook: 'en' | 'zh' =
+    viewState.lexiconNotebook ?? (state.settings.learningLanguage === 'zh' ? 'zh' : 'en');
 
-  const encounteredCount = Object.keys(state.lexicon).length;
-  const savedCount = Object.values(state.lexicon).filter((m) => m.savedByPlayer).length;
-  const masteredCount = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
-  const dueCount = Object.values(state.lexicon).filter((m) =>
-    isWordDueForReencounter(m, state),
-  ).length;
+  // Separate English & Chinese notebook switcher (both notebooks are preserved across language switches)
+  const nbRow = el('div', 'lw-choice-list');
+  nbRow.style.marginBottom = '8px';
+  const enNbBtn = el(
+    'button',
+    activeNotebook === 'en' ? 'lw-btn lw-btn-primary lw-btn-sm' : 'lw-btn lw-btn-sm',
+    `${t.lexiconNotebookEn} (${Object.keys(state.lexicon).length})`,
+  );
+  enNbBtn.setAttribute('data-testid', 'lexicon-notebook-en');
+  enNbBtn.addEventListener('click', () => {
+    viewState.lexiconNotebook = 'en';
+    onRerender();
+  });
+  const zhLex = state.lexiconZh ?? {};
+  const zhNbBtn = el(
+    'button',
+    activeNotebook === 'zh' ? 'lw-btn lw-btn-primary lw-btn-sm' : 'lw-btn lw-btn-sm',
+    `${t.lexiconNotebookZh} (${Object.keys(zhLex).length})`,
+  );
+  zhNbBtn.setAttribute('data-testid', 'lexicon-notebook-zh');
+  zhNbBtn.addEventListener('click', () => {
+    viewState.lexiconNotebook = 'zh';
+    onRerender();
+  });
+  nbRow.append(enNbBtn, zhNbBtn);
+  container.appendChild(nbRow);
+
+  const memMap = activeNotebook === 'zh' ? zhLex : state.lexicon;
+  const encounteredCount = Object.keys(memMap).length;
+  const savedCount = Object.values(memMap).filter((m) => m.savedByPlayer).length;
+  const masteredCount = Object.values(memMap).filter((m) => m.mastery >= 3).length;
+  const dueCount = Object.values(memMap).filter((m) => isWordDueForReencounter(m, state)).length;
   const dispatchCount = DIALOGUES.filter((d) => d.contextTag === 'ranger_dispatch').length;
+  const totalAllCount = activeNotebook === 'zh' ? ZH_LEXICON_ENTRIES.length : LEXICON_ENTRIES.length;
 
   const filterBar = el('div', 'lw-choice-list');
   filterBar.style.marginBottom = '10px';
@@ -674,7 +737,7 @@ function renderLexiconTab(
     ['saved', t.lexiconFilters.saved(savedCount)],
     ['mastered', t.lexiconFilters.mastered(masteredCount)],
     ['due', t.lexiconFilters.due(dueCount)],
-    ['all', t.lexiconFilters.all(LEXICON_ENTRIES.length)],
+    ['all', t.lexiconFilters.all(totalAllCount)],
     ['dispatches', t.lexiconFilters.dispatches(dispatchCount)],
   ] as const) {
     const b = el(
@@ -696,12 +759,12 @@ function renderLexiconTab(
     for (const disp of dispatches) {
       const isRead = state.readLoreIds.includes(disp.id);
       const row = el('div', 'lw-list-row');
+      const dispTitle =
+        activeNotebook === 'zh' && ZH_DIALOGUES_BY_ID[disp.id]
+          ? `${ZH_DIALOGUES_BY_ID[disp.id]!.speakerZh}`
+          : `${localizeSpeakerName(disp.speaker, uiLang)} (${disp.cefr})`;
       row.appendChild(
-        el(
-          'span',
-          '',
-          `${isRead ? t.lexiconReadTag : t.lexiconUnreadTag}${localizeSpeakerName(disp.speaker, uiLang)} (${disp.cefr})`,
-        ),
+        el('span', '', `${isRead ? t.lexiconReadTag : t.lexiconUnreadTag}${dispTitle}`),
       );
       const readBtn = el('button', 'lw-btn lw-btn-sm', t.lexiconReadNoteBtn);
       readBtn.addEventListener('click', () => {
@@ -710,6 +773,69 @@ function renderLexiconTab(
         onRerender();
       });
       row.appendChild(readBtn);
+      container.appendChild(row);
+    }
+    return;
+  }
+
+  if (activeNotebook === 'zh') {
+    const zhItems = ZH_LEXICON_ENTRIES.filter((entry) => {
+      const mem = zhLex[entry.id];
+      if (viewState.lexiconFilter === 'saved') return Boolean(mem?.savedByPlayer);
+      if (viewState.lexiconFilter === 'mastered') return Boolean(mem && mem.mastery >= 3);
+      if (viewState.lexiconFilter === 'due') {
+        return Boolean(mem && isWordDueForReencounter(mem, state));
+      }
+      if (viewState.lexiconFilter === 'encountered') return Boolean(mem);
+      return true;
+    }).slice(0, 100);
+
+    if (zhItems.length === 0) {
+      container.appendChild(el('p', '', t.lexiconEmpty));
+      return;
+    }
+
+    for (const entry of zhItems) {
+      const mem = zhLex[entry.id];
+      const row = el('div', 'lw-list-row');
+      const left = el('div', '');
+      const hskTag = entry.hsk ? ` | ${entry.hsk}` : '';
+      left.appendChild(
+        el(
+          'strong',
+          '',
+          `${entry.hanzi} (${entry.pinyin}) [${localizePos(entry.pos, uiLang)}${hskTag}] : ${entry.meaningVi}`,
+        ),
+      );
+      left.appendChild(
+        el(
+          'div',
+          'lw-hud-quest',
+          t.lexiconStatsLine(mem?.exposures ?? 0, mem?.glossLookups ?? 0, mem?.mastery ?? 0),
+        ),
+      );
+      left.appendChild(
+        el(
+          'div',
+          'lw-hud-quest lw-lexicon-example',
+          `${entry.exampleZh} (${entry.examplePinyin}) | ${entry.exampleVi}`,
+        ),
+      );
+      row.appendChild(left);
+
+      const acts = el('div', 'lw-hud-actions');
+      const speakBtn = el('button', 'lw-btn lw-btn-sm', t.lexiconListenBtn);
+      speakBtn.addEventListener('click', () =>
+        controller.sound.speakChineseWord(entry.hanzi, entry.pinyin, uiLang),
+      );
+      const saveBtn = el(
+        'button',
+        mem?.savedByPlayer ? 'lw-btn lw-btn-moss lw-btn-sm' : 'lw-btn lw-btn-sm',
+        mem?.savedByPlayer ? t.lexiconSavedBtn : t.lexiconSaveBtn,
+      );
+      saveBtn.addEventListener('click', () => controller.toggleSavedZhWordById(entry.id));
+      acts.append(speakBtn, saveBtn);
+      row.appendChild(acts);
       container.appendChild(row);
     }
     return;
@@ -803,6 +929,8 @@ function renderSettingsTab(
     container.appendChild(row);
   };
 
+  const learningLang: LearningLanguage = s.learningLanguage ?? 'en';
+
   addSelectRow(
     t.labelUiLanguage,
     uiLang,
@@ -815,29 +943,95 @@ function renderSettingsTab(
   );
 
   addSelectRow(
-    t.labelContentLanguage,
-    s.contentLanguage ?? 'bilingual',
+    t.labelLearningLanguage,
+    learningLang,
     [
-      ['vi_only', t.contentLanguageOptions.vi_only],
-      ['bilingual', t.contentLanguageOptions.bilingual],
-      ['en_assist', t.contentLanguageOptions.en_assist],
-      ['en_immersion', t.contentLanguageOptions.en_immersion],
+      ['en', t.learningLanguageOptions.en],
+      ['zh', t.learningLanguageOptions.zh],
+      ['none', t.learningLanguageOptions.none],
     ],
-    (v) => controller.updateSettings({ contentLanguage: v as ContentLanguageMode }),
-    'settings-content-language',
+    (v) => {
+      const next = v as LearningLanguage;
+      viewState.lexiconNotebook = next === 'zh' ? 'zh' : 'en';
+      controller.updateSettings({ learningLanguage: next });
+    },
+    'settings-learning-language',
   );
 
+  if (learningLang === 'en') {
+    addSelectRow(
+      t.labelContentLanguage,
+      s.contentLanguage ?? 'bilingual',
+      [
+        ['vi_only', t.contentLanguageOptions.vi_only],
+        ['bilingual', t.contentLanguageOptions.bilingual],
+        ['en_assist', t.contentLanguageOptions.en_assist],
+        ['en_immersion', t.contentLanguageOptions.en_immersion],
+      ],
+      (v) => controller.updateSettings({ contentLanguage: v as ContentLanguageMode }),
+      'settings-content-language',
+    );
+
+    addSelectRow(
+      t.labelEnglishBand,
+      s.cefrBand,
+      [
+        ['A1', t.cefrOptions.A1],
+        ['A2', t.cefrOptions.A2],
+        ['B1', t.cefrOptions.B1],
+        ['B2', t.cefrOptions.B2],
+      ],
+      (v) => controller.updateSettings({ cefrBand: v as CefrBand }),
+      'settings-cefr-band',
+    );
+  } else if (learningLang === 'zh') {
+    addSelectRow(
+      t.labelHskLevel,
+      s.hskLevel ?? 'HSK2',
+      [
+        ['HSK1', t.hskOptions.HSK1],
+        ['HSK2', t.hskOptions.HSK2],
+        ['HSK3', t.hskOptions.HSK3],
+      ],
+      (v) => controller.updateSettings({ hskLevel: v as HskLevel }),
+      'settings-hsk-level',
+    );
+
+    addSelectRow(
+      t.labelZhStudyMode,
+      s.zhStudyMode ?? 'hanzi_pinyin_vi',
+      [
+        ['hanzi_pinyin_vi', t.zhStudyModeOptions.hanzi_pinyin_vi],
+        ['hanzi_pinyin', t.zhStudyModeOptions.hanzi_pinyin],
+        ['hanzi_assist', t.zhStudyModeOptions.hanzi_assist],
+        ['zh_immersion', t.zhStudyModeOptions.zh_immersion],
+        ['vi_only', t.zhStudyModeOptions.vi_only],
+      ],
+      (v) => controller.updateSettings({ zhStudyMode: v as ZhStudyMode }),
+      'settings-zh-study-mode',
+    );
+
+    addSelectRow(
+      t.labelPinyinPosition,
+      s.pinyinPosition ?? 'above',
+      [
+        ['above', t.pinyinPositionOptions.above],
+        ['below', t.pinyinPositionOptions.below],
+      ],
+      (v) => controller.updateSettings({ pinyinPosition: v as PinyinPosition }),
+      'settings-pinyin-position',
+    );
+  }
+
   addSelectRow(
-    t.labelEnglishBand,
-    s.cefrBand,
+    t.labelMovementSpeed,
+    s.movementSpeed ?? 'walk',
     [
-      ['A1', t.cefrOptions.A1],
-      ['A2', t.cefrOptions.A2],
-      ['B1', t.cefrOptions.B1],
-      ['B2', t.cefrOptions.B2],
+      ['walk', t.movementSpeedOptions.walk],
+      ['run', t.movementSpeedOptions.run],
     ],
-    (v) => controller.updateSettings({ cefrBand: v as CefrBand }),
-    'settings-cefr-band',
+    (v) => controller.updateSettings({ movementSpeed: v as MovementSpeedMode }),
+    'settings-movement-speed',
   );
 
   addSelectRow(
@@ -914,6 +1108,26 @@ function renderSettingsTab(
     container.appendChild(row);
   };
 
+  addCheckboxRow(
+    t.labelClickToMove,
+    s.clickToMove !== false,
+    (v) => controller.updateSettings({ clickToMove: v }),
+    'settings-click-to-move',
+  );
+  if (learningLang === 'zh') {
+    addCheckboxRow(
+      t.labelShowPinyin,
+      s.showPinyin !== false,
+      (v) => controller.updateSettings({ showPinyin: v }),
+      'settings-show-pinyin',
+    );
+    addCheckboxRow(
+      t.labelShowZhTranslation,
+      s.showZhTranslation !== false,
+      (v) => controller.updateSettings({ showZhTranslation: v }),
+      'settings-show-zh-translation',
+    );
+  }
   addCheckboxRow(
     t.settingsBattleAssistLabel,
     s.battleAssist !== false,
@@ -1130,6 +1344,91 @@ export function buildCampReviewModal(
   card.appendChild(header);
 
   const body = el('div', 'lw-notebook-body');
+
+  if (controller.zhCampPrompts.length > 0) {
+    const zhPrompt = controller.zhCampPrompts[controller.campPromptIndex];
+    if (!zhPrompt) {
+      body.appendChild(el('p', '', t.campEmpty));
+      card.appendChild(body);
+      backdrop.appendChild(card);
+      return backdrop;
+    }
+
+    body.appendChild(
+      el(
+        'div',
+        'lw-hud-quest',
+        t.campCardCounter(
+          controller.campPromptIndex + 1,
+          controller.zhCampPrompts.length,
+          zhPrompt.isDueNow,
+        ),
+      ),
+    );
+    const modePromptLabel =
+      zhPrompt.mode === 'hanzi_to_pinyin'
+        ? t.campZhPromptHanziToPinyin
+        : zhPrompt.mode === 'listen_to_hanzi'
+          ? t.campZhPromptListenToHanzi
+          : t.campZhPromptHanziToVi;
+    body.appendChild(el('p', 'lw-hud-quest', modePromptLabel));
+
+    if (zhPrompt.mode === 'listen_to_hanzi') {
+      const listenRow = el('div', 'lw-choice-list');
+      const listenBtn = el('button', 'lw-btn lw-btn-primary', t.campZhListenBtn);
+      listenBtn.setAttribute('data-testid', 'btn-camp-zh-listen');
+      listenBtn.addEventListener('click', () => {
+        controller.sound.speakChineseWord(zhPrompt.entry.hanzi, zhPrompt.entry.pinyin, uiLang);
+      });
+      listenRow.appendChild(listenBtn);
+      listenRow.appendChild(el('span', 'lw-gloss-pinyin', `Pinyin: ${zhPrompt.entry.pinyin}`));
+      body.appendChild(listenRow);
+    } else {
+      const hskTag = zhPrompt.entry.hsk ? ` [${zhPrompt.entry.hsk}]` : '';
+      body.appendChild(el('h3', '', `${zhPrompt.entry.hanzi}${hskTag}`));
+    }
+    body.appendChild(el('p', 'lw-battle-log', zhPrompt.promptSentenceZh));
+    if (zhPrompt.mode !== 'hanzi_to_pinyin') {
+      body.appendChild(el('div', 'lw-hud-quest', zhPrompt.promptSentencePinyin));
+    }
+
+    const choices = el('div', 'lw-move-grid');
+    zhPrompt.choices.forEach((ch, cIdx) => {
+      const cBtn = el('button', 'lw-btn', ch.label) as HTMLButtonElement;
+      cBtn.setAttribute('data-testid', `camp-choice-${cIdx}`);
+      cBtn.disabled = viewState.campAnsweredCurrent;
+      cBtn.addEventListener('click', () => {
+        const res = controller.answerZhCampfirePrompt(ch.wordId);
+        viewState.campAnsweredCurrent = true;
+        const wordSummary = `${zhPrompt.entry.hanzi} (${zhPrompt.entry.pinyin})`;
+        viewState.campAnsweredMessageVi = res.matched
+          ? t.campFeedbackCorrect(wordSummary, zhPrompt.entry.meaningVi, zhPrompt.promptSentenceVi)
+          : t.campFeedbackGentle(wordSummary, zhPrompt.entry.meaningVi, zhPrompt.promptSentenceVi);
+        onRerender();
+      });
+      choices.appendChild(cBtn);
+    });
+    body.appendChild(choices);
+
+    if (viewState.campAnsweredCurrent) {
+      const fb = el('p', 'lw-battle-log', viewState.campAnsweredMessageVi);
+      fb.style.marginTop = '10px';
+      body.appendChild(fb);
+      const nextBtn = el('button', 'lw-btn lw-btn-primary', t.campNextBtn);
+      nextBtn.setAttribute('data-testid', 'btn-camp-next');
+      nextBtn.addEventListener('click', () => {
+        viewState.campAnsweredCurrent = false;
+        viewState.campAnsweredMessageVi = '';
+        controller.nextCampfirePrompt();
+      });
+      body.appendChild(nextBtn);
+    }
+
+    card.appendChild(body);
+    backdrop.appendChild(card);
+    return backdrop;
+  }
+
   const prompt = controller.campPrompts[controller.campPromptIndex];
   if (!prompt) {
     body.appendChild(el('p', '', t.campEmpty));
@@ -1214,7 +1513,9 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
   body.appendChild(showcase);
 
   const completedQuests = Object.values(state.quests).filter((q) => q.status === 'completed').length;
-  const masteredWords = Object.values(state.lexicon).filter((m) => m.mastery >= 3).length;
+  const activeLex =
+    state.settings.learningLanguage === 'zh' ? (state.lexiconZh ?? {}) : state.lexicon;
+  const masteredWords = Object.values(activeLex).filter((m) => m.mastery >= 3).length;
   body.appendChild(
     el(
       'div',
@@ -1225,7 +1526,7 @@ export function buildEndingBannerModal(controller: GameController): HTMLElement 
         completedQuests,
         QUESTS.length,
         state.rematchCleared.length,
-        Object.keys(state.lexicon).length,
+        Object.keys(activeLex).length,
         masteredWords,
       ),
     ),
@@ -1373,6 +1674,8 @@ export function buildCreditsModal(controller: GameController): HTMLElement {
     ['Hazy Hills & Gothicvania Swamp (Luis Zuno / @ansimuz)', 'CC-BY 3.0 & CC0 1.0 (battle-bg.png)'],
     ['Parallax Backgrounds (Admurin)', 'CC-BY 4.0 (battle-bg.png)'],
     ['Sunset Temple Tiles (Pyromantic)', 'CC0 1.0 / CC-BY 3.0 (battle-bg.png)'],
+    ['HSK 2.0 Vocabulary Reference Lists (sawcordwell/HSK-Vocab)', 'CC0 1.0 Public Domain'],
+    ['Complete HSK Vocabulary Reference (drkameleon/complete-hsk-vocabulary)', 'MIT License'],
     ['Phaser 3.90.0, Vite 8.4.0, Vitest 5.1.2', 'MIT License'],
     ['TypeScript 5.8.3, Playwright 1.65.1', 'Apache-2.0 License'],
   ];

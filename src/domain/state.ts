@@ -28,10 +28,18 @@ export function createInitialOnboardingState(): OnboardingState {
 export function createDefaultSettings(): GameSettings {
   return {
     uiLanguage: 'vi',
+    learningLanguage: 'en',
     contentLanguage: 'bilingual',
+    hskLevel: 'HSK2',
+    zhStudyMode: 'hanzi_pinyin_vi',
+    showPinyin: true,
+    pinyinPosition: 'above',
+    showZhTranslation: true,
     difficulty: 'relaxed',
     guidanceMode: 'full',
     battleAssist: true,
+    clickToMove: true,
+    movementSpeed: 'walk',
     cefrBand: 'A2',
     supportMode: 'bilingual',
     bgmVolume: 0.45,
@@ -57,7 +65,7 @@ export function createDefaultSettings(): GameSettings {
 
 export function createInitialGameState(seed: number = 0x5eed2026): GameState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     seedState: seed >>> 0 || 0x5eed2026,
     playTimeSeconds: 0,
     stepCount: 0,
@@ -99,12 +107,15 @@ export function createInitialGameState(seed: number = 0x5eed2026): GameState {
     trackedQuestId: 'q01_first_partner',
     onboarding: createInitialOnboardingState(),
     lexicon: {},
+    lexiconZh: {},
     stats: {
       battlesWon: 0,
       wildCaught: 0,
       wordsGlossed: 0,
       campReviewsCompleted: 0,
       fledCount: 0,
+      zhWordsGlossed: 0,
+      zhCampReviewsCompleted: 0,
     },
     settings: createDefaultSettings(),
   };

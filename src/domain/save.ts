@@ -2,11 +2,12 @@ import { MAX_ACTIVE_MOVES, MAX_CREATURE_LEVEL, MAX_PARTY_SIZE } from './creature
 import { inferContentLanguageFromSupport, syncSupportModeFromContent } from './i18n.ts';
 import type { GameState } from './types.ts';
 
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
+export const LEGACY_V2_SAVE_SCHEMA_VERSION = 2;
 export const LEGACY_SAVE_SCHEMA_VERSION = 1;
 export const PRIMARY_SAVE_KEY = 'lingowild_save_v1';
 export const BACKUP_SAVE_KEY = 'lingowild_save_v1_backup';
-export const MAX_SAVE_BYTES = 262_144;
+export const MAX_SAVE_BYTES = 393_216;
 export const MAX_SANCTUARY_SIZE = 240;
 export const MAX_ITEM_STACK = 999;
 export const MAX_TOKENS = 999_999;
@@ -23,6 +24,7 @@ export interface SaveValidationRegistry {
   readonly validItemIds: ReadonlySet<string>;
   readonly validQuestIds: ReadonlySet<string>;
   readonly validWordIds: ReadonlySet<string>;
+  readonly validZhWordIds?: ReadonlySet<string>;
   readonly mapBounds: Readonly<Record<string, { readonly width: number; readonly height: number }>>;
   readonly regionSpawns?: Readonly<Record<string, { readonly x: number; readonly y: number }>>;
   readonly isPositionSafe?: (regionId: string, x: number, y: number, state: GameState) => boolean;
@@ -30,7 +32,7 @@ export interface SaveValidationRegistry {
 
 export interface SaveEnvelope {
   readonly magic: typeof SAVE_MAGIC;
-  readonly version: 1 | 2;
+  readonly version: 1 | 2 | 3;
   readonly sequence: number;
   readonly savedAtMs: number;
   readonly savedAtIso: string;
@@ -62,6 +64,17 @@ const VALID_REGIONS = new Set([
 ]);
 
 const VALID_CEFR = new Set(['A1', 'A2', 'B1', 'B2']);
+const VALID_LEARNING_LANG = new Set(['en', 'zh', 'none']);
+const VALID_HSK_LEVEL = new Set(['HSK1', 'HSK2', 'HSK3']);
+const VALID_ZH_STUDY_MODE = new Set([
+  'hanzi_pinyin_vi',
+  'hanzi_pinyin',
+  'hanzi_assist',
+  'zh_immersion',
+  'vi_only',
+]);
+const VALID_PINYIN_POS = new Set(['above', 'below']);
+const VALID_MOVEMENT_SPEED = new Set(['walk', 'run']);
 const VALID_UI_LANG = new Set(['vi', 'en']);
 const VALID_CONTENT_LANG = new Set(['vi_only', 'bilingual', 'en_assist', 'en_immersion']);
 const VALID_DIFFICULTY = new Set(['relaxed', 'adventure', 'challenge']);
@@ -197,6 +210,7 @@ export function validateGameStateShape(
   if (!isPlainObject(candidate)) return false;
   if (
     candidate.schemaVersion !== LEGACY_SAVE_SCHEMA_VERSION &&
+    candidate.schemaVersion !== LEGACY_V2_SAVE_SCHEMA_VERSION &&
     candidate.schemaVersion !== SAVE_SCHEMA_VERSION
   ) {
     return false;
@@ -355,41 +369,55 @@ export function validateGameStateShape(
     if (typeof ob.firstCaptureGuaranteedUsed !== 'boolean') return false;
   }
 
-  if (!isPlainObject(candidate.lexicon)) return false;
-  for (const [wKey, wVal] of Object.entries(candidate.lexicon)) {
-    if (registry && !registry.validWordIds.has(wKey)) return false;
-    if (!isPlainObject(wVal)) return false;
-    if (wVal.wordId !== wKey) return false;
-    if (!isIntInRange(wVal.exposures, 0, 1_000_000)) return false;
-    if (!isIntInRange(wVal.glossLookups, 0, 1_000_000)) return false;
-    if (typeof wVal.savedByPlayer !== 'boolean') return false;
-    if (!isIntInRange(wVal.mastery, 0, 3)) return false;
-    if (!isIntInRange(wVal.lastSeenStep, 0, MAX_STEP_COUNT)) return false;
-    if (wVal.lastSeenAtMs !== undefined && !isIntInRange(wVal.lastSeenAtMs, 0, 9_999_999_999_999)) {
-      return false;
+  const validateLexiconMap = (
+    mapCandidate: unknown,
+    validIds?: ReadonlySet<string>,
+  ): boolean => {
+    if (!isPlainObject(mapCandidate)) return false;
+    for (const [wKey, wVal] of Object.entries(mapCandidate)) {
+      if (validIds && !validIds.has(wKey)) return false;
+      if (!isPlainObject(wVal)) return false;
+      if (wVal.wordId !== wKey) return false;
+      if (!isIntInRange(wVal.exposures, 0, 1_000_000)) return false;
+      if (!isIntInRange(wVal.glossLookups, 0, 1_000_000)) return false;
+      if (typeof wVal.savedByPlayer !== 'boolean') return false;
+      if (!isIntInRange(wVal.mastery, 0, 3)) return false;
+      if (!isIntInRange(wVal.lastSeenStep, 0, MAX_STEP_COUNT)) return false;
+      if (wVal.lastSeenAtMs !== undefined && !isIntInRange(wVal.lastSeenAtMs, 0, 9_999_999_999_999)) {
+        return false;
+      }
+      if (
+        wVal.nextReviewStep !== undefined &&
+        !isIntInRange(wVal.nextReviewStep, 0, MAX_STEP_COUNT + 10_000)
+      ) {
+        return false;
+      }
+      if (
+        wVal.nextReviewAtMs !== undefined &&
+        !isIntInRange(wVal.nextReviewAtMs, 0, 9_999_999_999_999)
+      ) {
+        return false;
+      }
+      if (wVal.correctReviews !== undefined && !isIntInRange(wVal.correctReviews, 0, 100_000)) {
+        return false;
+      }
+      if (wVal.lapses !== undefined && !isIntInRange(wVal.lapses, 0, 100_000)) {
+        return false;
+      }
+      if (!Array.isArray(wVal.contextsSeen) || wVal.contextsSeen.length > 60) return false;
+      for (const ctx of wVal.contextsSeen) {
+        if (typeof ctx !== 'string' || ctx.length > 64) return false;
+      }
     }
-    if (
-      wVal.nextReviewStep !== undefined &&
-      !isIntInRange(wVal.nextReviewStep, 0, MAX_STEP_COUNT + 10_000)
-    ) {
-      return false;
-    }
-    if (
-      wVal.nextReviewAtMs !== undefined &&
-      !isIntInRange(wVal.nextReviewAtMs, 0, 9_999_999_999_999)
-    ) {
-      return false;
-    }
-    if (wVal.correctReviews !== undefined && !isIntInRange(wVal.correctReviews, 0, 100_000)) {
-      return false;
-    }
-    if (wVal.lapses !== undefined && !isIntInRange(wVal.lapses, 0, 100_000)) {
-      return false;
-    }
-    if (!Array.isArray(wVal.contextsSeen) || wVal.contextsSeen.length > 60) return false;
-    for (const ctx of wVal.contextsSeen) {
-      if (typeof ctx !== 'string' || ctx.length > 64) return false;
-    }
+    return true;
+  };
+
+  if (!validateLexiconMap(candidate.lexicon, registry?.validWordIds)) return false;
+  if (
+    candidate.lexiconZh !== undefined &&
+    !validateLexiconMap(candidate.lexiconZh, registry?.validZhWordIds)
+  ) {
+    return false;
   }
 
   if (!isPlainObject(candidate.stats)) return false;
@@ -402,12 +430,63 @@ export function validateGameStateShape(
   ) {
     return false;
   }
+  if (
+    candidate.stats.zhWordsGlossed !== undefined &&
+    !isIntInRange(candidate.stats.zhWordsGlossed, 0, 1_000_000)
+  ) {
+    return false;
+  }
+  if (
+    candidate.stats.zhCampReviewsCompleted !== undefined &&
+    !isIntInRange(candidate.stats.zhCampReviewsCompleted, 0, 1_000_000)
+  ) {
+    return false;
+  }
 
   if (!isPlainObject(candidate.settings)) return false;
   const s = candidate.settings;
   if (
     s.uiLanguage !== undefined &&
     (typeof s.uiLanguage !== 'string' || !VALID_UI_LANG.has(s.uiLanguage))
+  ) {
+    return false;
+  }
+  if (
+    s.learningLanguage !== undefined &&
+    (typeof s.learningLanguage !== 'string' || !VALID_LEARNING_LANG.has(s.learningLanguage))
+  ) {
+    return false;
+  }
+  if (
+    s.hskLevel !== undefined &&
+    (typeof s.hskLevel !== 'string' || !VALID_HSK_LEVEL.has(s.hskLevel))
+  ) {
+    return false;
+  }
+  if (
+    s.zhStudyMode !== undefined &&
+    (typeof s.zhStudyMode !== 'string' || !VALID_ZH_STUDY_MODE.has(s.zhStudyMode))
+  ) {
+    return false;
+  }
+  if (s.showPinyin !== undefined && typeof s.showPinyin !== 'boolean') {
+    return false;
+  }
+  if (
+    s.pinyinPosition !== undefined &&
+    (typeof s.pinyinPosition !== 'string' || !VALID_PINYIN_POS.has(s.pinyinPosition))
+  ) {
+    return false;
+  }
+  if (s.showZhTranslation !== undefined && typeof s.showZhTranslation !== 'boolean') {
+    return false;
+  }
+  if (s.clickToMove !== undefined && typeof s.clickToMove !== 'boolean') {
+    return false;
+  }
+  if (
+    s.movementSpeed !== undefined &&
+    (typeof s.movementSpeed !== 'string' || !VALID_MOVEMENT_SPEED.has(s.movementSpeed))
   ) {
     return false;
   }
@@ -535,13 +614,16 @@ export function migrateAndNormalizeSaveState(
 ): { readonly ok: true; readonly state: GameState; readonly migrated: boolean } | { readonly ok: false } {
   if (!isPlainObject(rawCandidate)) return { ok: false };
   const cloned = structuredClone(rawCandidate);
-  const isLegacy =
+  const isLegacyV1 =
     envelopeVersion === LEGACY_SAVE_SCHEMA_VERSION ||
     cloned.schemaVersion === LEGACY_SAVE_SCHEMA_VERSION;
+  const isLegacyV2 =
+    envelopeVersion === LEGACY_V2_SAVE_SCHEMA_VERSION ||
+    cloned.schemaVersion === LEGACY_V2_SAVE_SCHEMA_VERSION;
 
   let migrated = false;
 
-  if (isLegacy) {
+  if (isLegacyV1) {
     // Allow legacy 1.0/1.1 coordinates slightly outside resized/reshaped maps to clamp cleanly before validation
     if (
       typeof cloned.regionId === 'string' &&
@@ -579,6 +661,9 @@ export function migrateAndNormalizeSaveState(
     }
     cloned.schemaVersion = SAVE_SCHEMA_VERSION;
     migrated = true;
+  } else if (isLegacyV2) {
+    cloned.schemaVersion = SAVE_SCHEMA_VERSION;
+    migrated = true;
   }
 
   if (!validateGameStateShape(cloned, registry)) {
@@ -590,11 +675,25 @@ export function migrateAndNormalizeSaveState(
   cloned.settings.contentLanguage =
     cloned.settings.contentLanguage ?? inferContentLanguageFromSupport(cloned.settings.supportMode);
   cloned.settings.supportMode = syncSupportModeFromContent(cloned.settings.contentLanguage);
+  // Preserve returning v1.0-v1.2 players' English learning preference (or vi_only -> none)
+  cloned.settings.learningLanguage =
+    cloned.settings.learningLanguage ??
+    (cloned.settings.contentLanguage === 'vi_only' ? 'none' : 'en');
+  cloned.settings.hskLevel = cloned.settings.hskLevel ?? 'HSK2';
+  cloned.settings.zhStudyMode = cloned.settings.zhStudyMode ?? 'hanzi_pinyin_vi';
+  cloned.settings.showPinyin = cloned.settings.showPinyin ?? true;
+  cloned.settings.pinyinPosition = cloned.settings.pinyinPosition ?? 'above';
+  cloned.settings.showZhTranslation = cloned.settings.showZhTranslation ?? true;
+  cloned.settings.clickToMove = cloned.settings.clickToMove ?? true;
+  cloned.settings.movementSpeed = cloned.settings.movementSpeed ?? 'walk';
   cloned.settings.difficulty = cloned.settings.difficulty ?? 'adventure';
   cloned.settings.guidanceMode = cloned.settings.guidanceMode ?? 'full';
   cloned.settings.battleAssist = cloned.settings.battleAssist ?? true;
   cloned.settings.battleSpeed = cloned.settings.battleSpeed ?? 'normal';
   cloned.settings.showFollower = cloned.settings.showFollower ?? true;
+  cloned.lexiconZh = cloned.lexiconZh ?? {};
+  cloned.stats.zhWordsGlossed = cloned.stats.zhWordsGlossed ?? 0;
+  cloned.stats.zhCampReviewsCompleted = cloned.stats.zhCampReviewsCompleted ?? 0;
   cloned.gleamingSpecies = cloned.gleamingSpecies ?? [];
   cloned.rematchCleared = cloned.rematchCleared ?? [];
   cloned.discoveredTraces = cloned.discoveredTraces ?? [];
@@ -624,7 +723,7 @@ export function migrateAndNormalizeSaveState(
 export function serializeSaveEnvelope(
   state: GameState,
   sequence: number = 1,
-  version: 1 | 2 = SAVE_SCHEMA_VERSION,
+  version: 1 | 2 | 3 = SAVE_SCHEMA_VERSION,
 ): string {
   const stateJson = JSON.stringify(state);
   const checksum = computeFnv1aChecksum(stateJson);
@@ -682,6 +781,7 @@ export function deserializeSaveEnvelope(
   }
   if (
     parsed.version !== LEGACY_SAVE_SCHEMA_VERSION &&
+    parsed.version !== LEGACY_V2_SAVE_SCHEMA_VERSION &&
     parsed.version !== SAVE_SCHEMA_VERSION
   ) {
     return { ok: false, reason: `Unsupported save schema version: ${String(parsed.version)}` };

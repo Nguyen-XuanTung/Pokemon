@@ -5,10 +5,15 @@ import type {
   DifficultyMode,
   Direction,
   GuidanceMode,
+  HskLevel,
   LanguageSupportMode,
+  LearningLanguage,
+  MovementSpeedMode,
+  PinyinPosition,
   StatusId,
   TimeOfDay,
   UiLanguage,
+  ZhStudyMode,
 } from './types.ts';
 
 export interface UiCatalog {
@@ -17,13 +22,26 @@ export interface UiCatalog {
   readonly titleDesc: string;
   readonly starterRoleSummary: Readonly<Record<'mosskit' | 'kindlet' | 'ripplefin', string>>;
   readonly labelUiLanguage: string;
+  readonly labelLearningLanguage: string;
   readonly labelContentLanguage: string;
   readonly labelEnglishBand: string;
+  readonly labelHskLevel: string;
+  readonly labelZhStudyMode: string;
+  readonly labelShowPinyin: string;
+  readonly labelPinyinPosition: string;
+  readonly labelShowZhTranslation: string;
+  readonly labelClickToMove: string;
+  readonly labelMovementSpeed: string;
   readonly labelDifficulty: string;
   readonly labelGuidanceMode: string;
   readonly uiLanguageOptions: Readonly<Record<UiLanguage, string>>;
+  readonly learningLanguageOptions: Readonly<Record<LearningLanguage, string>>;
   readonly contentLanguageOptions: Readonly<Record<ContentLanguageMode, string>>;
   readonly cefrOptions: Readonly<Record<CefrBand, string>>;
+  readonly hskOptions: Readonly<Record<HskLevel, string>>;
+  readonly zhStudyModeOptions: Readonly<Record<ZhStudyMode, string>>;
+  readonly pinyinPositionOptions: Readonly<Record<PinyinPosition, string>>;
+  readonly movementSpeedOptions: Readonly<Record<MovementSpeedMode, string>>;
   readonly difficultyOptions: Readonly<Record<DifficultyMode, string>>;
   readonly difficultyDescriptions: Readonly<Record<DifficultyMode, string>>;
   readonly guidanceOptions: Readonly<Record<GuidanceMode, string>>;
@@ -50,13 +68,19 @@ export interface UiCatalog {
   readonly dialogueListenBtn: string;
   readonly dialogueShowVi: string;
   readonly dialogueHideVi: string;
+  readonly dialogueShowPinyin: string;
+  readonly dialogueHidePinyin: string;
   readonly dialogueNext: string;
   readonly dialogueClose: string;
   readonly dialogueBandBadge: (band: CefrBand) => string;
+  readonly dialogueHskBadge: (level: HskLevel) => string;
   readonly glossCloseBtn: string;
   readonly glossQuickMeaning: string;
   readonly glossContextMeaning: string;
   readonly glossOtherMeaning: (pos: string, meaning: string) => string;
+  readonly glossOtherReading: (pinyin: string, pos: string, meaning: string) => string;
+  readonly glossProperNounBadge: string;
+  readonly glossProperNounNote: string;
   readonly glossListenBtn: string;
   readonly glossSaveBtn: string;
   readonly glossSavedBtn: string;
@@ -215,6 +239,12 @@ export interface UiCatalog {
   readonly lexiconListenBtn: string;
   readonly lexiconSaveBtn: string;
   readonly lexiconSavedBtn: string;
+  readonly lexiconNotebookEn: string;
+  readonly lexiconNotebookZh: string;
+  readonly campZhPromptHanziToVi: string;
+  readonly campZhPromptHanziToPinyin: string;
+  readonly campZhPromptListenToHanzi: string;
+  readonly campZhListenBtn: string;
   readonly settingsBattleSpeedLabel: string;
   readonly settingsBattleSpeedOptions: Readonly<Record<BattleSpeedMode, string>>;
   readonly settingsTouchLabel: string;
@@ -272,20 +302,33 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     appTagline: 'CHUYẾN THÁM HIỂM THUNG LŨNG RÊU XANH',
     offlineBadge: 'Nhập vai ngoại tuyến',
     titleDesc:
-      'Khám phá năm vùng sinh thái sống động, kết bạn ba mươi loài sinh vật đi theo sau bước chân và làm quen tiếng Anh tự nhiên theo tốc độ của bạn. Mọi hỗ trợ tra từ và ôn tập đều hoàn toàn tự nguyện.',
+      'Khám phá năm vùng sinh thái sống động, kết bạn ba mươi loài sinh vật đi theo sau bước chân và làm quen tiếng Anh hoặc tiếng Trung tự nhiên theo tốc độ của bạn. Mọi hỗ trợ tra từ và ôn tập đều hoàn toàn tự nguyện.',
     starterRoleSummary: {
       mosskit: 'Hệ Lá rừng | Cân bằng',
       kindlet: 'Hệ Lửa ấm | Tốc chiến',
       ripplefin: 'Hệ Suối nước | Vững chãi',
     },
     labelUiLanguage: 'Ngôn ngữ giao diện:',
-    labelContentLanguage: 'Ngôn ngữ hội thoại và nội dung:',
+    labelLearningLanguage: 'Ngôn ngữ đang học:',
+    labelContentLanguage: 'Chế độ hỗ trợ tiếng Anh:',
     labelEnglishBand: 'Mức tiếng Anh:',
+    labelHskLevel: 'Cấp độ tiếng Trung (HSK 2.0):',
+    labelZhStudyMode: 'Chế độ học tiếng Trung:',
+    labelShowPinyin: 'Hiển thị phiên âm Pinyin:',
+    labelPinyinPosition: 'Vị trí Pinyin:',
+    labelShowZhTranslation: 'Hiện nghĩa tiếng Việt kèm theo:',
+    labelClickToMove: 'Chạm hoặc nhấp chuột bản đồ để tự di chuyển:',
+    labelMovementSpeed: 'Tốc độ di chuyển:',
     labelDifficulty: 'Độ khó chiến đấu:',
     labelGuidanceMode: 'Mức dẫn đường:',
     uiLanguageOptions: {
       vi: 'Tiếng Việt',
       en: 'Tiếng Anh',
+    },
+    learningLanguageOptions: {
+      en: 'Tiếng Anh (CEFR A1-B2)',
+      zh: 'Tiếng Trung giản thể (HSK 1-3)',
+      none: 'Không học ngoại ngữ (Chỉ tiếng Việt)',
     },
     contentLanguageOptions: {
       vi_only: 'Tiếng Việt hoàn toàn',
@@ -298,6 +341,26 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
       A2: 'A2 Sơ cấp',
       B1: 'B1 Trung cấp',
       B2: 'B2 Nâng cao',
+    },
+    hskOptions: {
+      HSK1: 'HSK 1 (Sơ cấp nhập môn)',
+      HSK2: 'HSK 2 (Sơ cấp căn bản)',
+      HSK3: 'HSK 3 (Sơ trung cấp)',
+    },
+    zhStudyModeOptions: {
+      hanzi_pinyin_vi: 'Chữ Hán + Pinyin + Nghĩa Việt',
+      hanzi_pinyin: 'Chữ Hán + Pinyin (Ấn để xem nghĩa)',
+      hanzi_assist: 'Chữ Hán (Chạm từng từ tra Pinyin và nghĩa)',
+      zh_immersion: 'Đắm chìm tiếng Trung (Chỉ chữ Hán)',
+      vi_only: 'Chỉ tiếng Việt',
+    },
+    pinyinPositionOptions: {
+      above: 'Phía trên chữ Hán',
+      below: 'Phía dưới chữ Hán',
+    },
+    movementSpeedOptions: {
+      walk: 'Đi bộ tiêu chuẩn (giữ Shift để chạy)',
+      run: 'Chạy nhanh liên tục',
     },
     difficultyOptions: {
       relaxed: 'Thư giãn (Khuyên dùng cho người mới)',
@@ -356,13 +419,19 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     dialogueListenBtn: 'Nghe đọc',
     dialogueShowVi: 'Xem nghĩa Việt',
     dialogueHideVi: 'Ẩn nghĩa Việt',
+    dialogueShowPinyin: 'Hiện Pinyin',
+    dialogueHidePinyin: 'Ẩn Pinyin',
     dialogueNext: 'Tiếp theo',
     dialogueClose: 'Đóng hội thoại',
     dialogueBandBadge: (band) => `Mức ${band}`,
+    dialogueHskBadge: (level) => `${level.replace('HSK', 'HSK ')}`,
     glossCloseBtn: 'Đóng',
     glossQuickMeaning: 'Nghĩa nhanh:',
     glossContextMeaning: 'Nghĩa trong câu:',
     glossOtherMeaning: (pos, meaning) => `Nghĩa khác (${pos}): ${meaning}`,
+    glossOtherReading: (pinyin, pos, meaning) => `Âm/nghĩa khác (${pinyin}, ${pos}): ${meaning}`,
+    glossProperNounBadge: 'Tên riêng',
+    glossProperNounNote: 'Tên riêng trong thế giới game, không tính vào danh sách từ HSK.',
     glossListenBtn: 'Nghe phát âm',
     glossSaveBtn: 'Lưu vào sổ từ',
     glossSavedBtn: 'Đã lưu sổ từ',
@@ -565,6 +634,12 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     lexiconListenBtn: 'Nghe',
     lexiconSaveBtn: 'Lưu',
     lexiconSavedBtn: 'Đã lưu',
+    lexiconNotebookEn: 'Sổ từ Tiếng Anh',
+    lexiconNotebookZh: 'Sổ từ Tiếng Trung (HSK)',
+    campZhPromptHanziToVi: 'Chọn nghĩa tiếng Việt đúng với từ chữ Hán này:',
+    campZhPromptHanziToPinyin: 'Chọn phiên âm Pinyin đúng với từ chữ Hán này:',
+    campZhPromptListenToHanzi: 'Nghe phát âm hoặc xem Pinyin rồi chọn chữ Hán tương ứng:',
+    campZhListenBtn: 'Nghe phát âm tiếng Trung',
     settingsBattleSpeedLabel: 'Tốc độ hoạt ảnh chiến đấu:',
     settingsBattleSpeedOptions: {
       normal: '1x Chuẩn',
@@ -637,20 +712,33 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     appTagline: 'VERDANT BASIN EXPEDITION',
     offlineBadge: 'Offline Pixel RPG',
     titleDesc:
-      'Explore five living regions, bond with thirty Wildkin companions who walk behind you, and pick up English naturally at your own pace. All lookup and review tools stay completely optional.',
+      'Explore five living regions, bond with thirty Wildkin companions who walk behind you, and pick up English or Chinese naturally at your own pace. All lookup and review tools stay completely optional.',
     starterRoleSummary: {
       mosskit: 'Leaf | Balanced',
       kindlet: 'Ember | Swift Striker',
       ripplefin: 'Water | Sturdy Bulwark',
     },
     labelUiLanguage: 'Interface language:',
-    labelContentLanguage: 'Dialogue and content language:',
+    labelLearningLanguage: 'Learning language:',
+    labelContentLanguage: 'English support mode:',
     labelEnglishBand: 'English level band:',
+    labelHskLevel: 'Chinese level (HSK 2.0):',
+    labelZhStudyMode: 'Chinese study mode:',
+    labelShowPinyin: 'Show Pinyin:',
+    labelPinyinPosition: 'Pinyin position:',
+    labelShowZhTranslation: 'Show Vietnamese translation:',
+    labelClickToMove: 'Click or tap map to move automatically:',
+    labelMovementSpeed: 'Movement speed:',
     labelDifficulty: 'Battle difficulty:',
     labelGuidanceMode: 'Navigation guidance:',
     uiLanguageOptions: {
       vi: 'Vietnamese',
       en: 'English',
+    },
+    learningLanguageOptions: {
+      en: 'English (CEFR A1-B2)',
+      zh: 'Simplified Chinese (HSK 1-3)',
+      none: 'No foreign language (Vietnamese only)',
     },
     contentLanguageOptions: {
       vi_only: 'Vietnamese only',
@@ -663,6 +751,26 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
       A2: 'A2 Elementary',
       B1: 'B1 Intermediate',
       B2: 'B2 Upper Intermediate',
+    },
+    hskOptions: {
+      HSK1: 'HSK 1 (Introductory)',
+      HSK2: 'HSK 2 (Elementary)',
+      HSK3: 'HSK 3 (Pre-Intermediate)',
+    },
+    zhStudyModeOptions: {
+      hanzi_pinyin_vi: 'Hanzi + Pinyin + Vietnamese',
+      hanzi_pinyin: 'Hanzi + Pinyin (Tap for meaning)',
+      hanzi_assist: 'Hanzi (Tap any word for Pinyin & meaning)',
+      zh_immersion: 'Chinese immersion (Hanzi only)',
+      vi_only: 'Vietnamese only',
+    },
+    pinyinPositionOptions: {
+      above: 'Above Hanzi',
+      below: 'Below Hanzi',
+    },
+    movementSpeedOptions: {
+      walk: 'Standard walk (hold Shift to run)',
+      run: 'Continuous run',
     },
     difficultyOptions: {
       relaxed: 'Relaxed (Recommended for beginners)',
@@ -719,13 +827,19 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     dialogueListenBtn: 'Listen',
     dialogueShowVi: 'Show Vietnamese',
     dialogueHideVi: 'Hide Vietnamese',
+    dialogueShowPinyin: 'Show Pinyin',
+    dialogueHidePinyin: 'Hide Pinyin',
     dialogueNext: 'Next',
     dialogueClose: 'Close',
     dialogueBandBadge: (band) => `Band ${band}`,
+    dialogueHskBadge: (level) => `${level.replace('HSK', 'HSK ')}`,
     glossCloseBtn: 'Close',
     glossQuickMeaning: 'Quick meaning:',
     glossContextMeaning: 'Meaning in context:',
     glossOtherMeaning: (pos, meaning) => `Other sense (${pos}): ${meaning}`,
+    glossOtherReading: (pinyin, pos, meaning) => `Other reading (${pinyin}, ${pos}): ${meaning}`,
+    glossProperNounBadge: 'Proper Noun',
+    glossProperNounNote: 'In-world proper noun; excluded from HSK study list.',
     glossListenBtn: 'Listen',
     glossSaveBtn: 'Save Word',
     glossSavedBtn: 'Saved',
@@ -920,6 +1034,12 @@ export const UI_STRINGS: Readonly<Record<UiLanguage, UiCatalog>> = {
     lexiconListenBtn: 'Listen',
     lexiconSaveBtn: 'Save',
     lexiconSavedBtn: 'Saved',
+    lexiconNotebookEn: 'English Notebook',
+    lexiconNotebookZh: 'Chinese Notebook (HSK)',
+    campZhPromptHanziToVi: 'Choose the Vietnamese meaning for this Chinese word:',
+    campZhPromptHanziToPinyin: 'Choose the correct Pinyin for this Chinese word:',
+    campZhPromptListenToHanzi: 'Listen or read the Pinyin, then pick the matching Hanzi:',
+    campZhListenBtn: 'Listen in Mandarin',
     settingsBattleSpeedLabel: 'Battle animation pace:',
     settingsBattleSpeedOptions: {
       normal: 'Normal (1x)',
@@ -1023,6 +1143,10 @@ const POS_VI_MAP: Readonly<Record<string, string>> = {
   phrase: 'cụm từ',
   interj: 'thán từ',
   conj: 'liên từ',
+  mw: 'lượng từ',
+  pron: 'đại từ',
+  num: 'số từ',
+  part: 'trợ từ',
 };
 
 export function localizePos(pos: string, lang: UiLanguage | undefined): string {
