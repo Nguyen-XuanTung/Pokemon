@@ -1,0 +1,67 @@
+name: CI and GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - develop/lingowild
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install locked dependencies safely
+        run: npm ci --ignore-scripts
+
+      - name: Audit dependency security
+        run: npm audit --audit-level=moderate
+
+      - name: Run build, data validation, and strict typecheck
+        run: npm run build
+
+      - name: Run project lint
+        run: npm run lint
+
+      - name: Run unit and integration tests with coverage
+        run: npm run test:coverage
+
+      - name: Install Playwright Chromium browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright browser E2E and full playthrough tests
+        run: npm run test:e2e
+
+      - name: Upload Pages artifact on main
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy-pages:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: verify-and-build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

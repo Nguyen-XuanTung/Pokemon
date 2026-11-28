@@ -1,0 +1,26 @@
+Verified Open-License Battle Background Layers Used in LingoWild
+================================================================
+
+1. Battle Background - Hazy Hills (ansimuz-sunny-hills.png)
+   Author: Luis Zuno (@ansimuz)
+   Source: https://opengameart.org/content/battle-background-hazy-hills-0
+   License: CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+   Usage: Whisperwood Glen battle arena background, tinted and composited into battle-bg.png.
+
+2. Gothicvania Swamp Environment Layers (ansimuz-swamp-bg.png, ansimuz-swamp-mid.png)
+   Author: Luis Zuno (@ansimuz)
+   Source: https://opengameart.org/content/gotthicvania-swamp
+   License: CC0 1.0 Public Domain (https://creativecommons.org/publicdomain/zero/1.0/)
+   Usage: Misty wetland canopy silhouette layers composited into Reedwater Fen battle arena.
+
+3. Parallax Backgrounds - Plains, Dock, Snowy Mountains (admurin-plains/, admurin-dock/, admurin-mountains/)
+   Author: Admurin
+   Source: https://opengameart.org/content/parallax-backgrounds
+   License: CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+   Usage: Layered pixel-art mountains, plains, dock pilings, and night peaks composited into Mosslight Camp, Reedwater Fen, Terracotta Ridge, and Starfall Sanctuary battle arenas.
+
+4. Sunset Temple Background (pyromantic-sunset-clouds.png)
+   Author: Pyromantic
+   Source: https://opengameart.org/content/sunset-temple-tiles
+   License: CC0 1.0 / CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+   Usage: Warm sunset canyon cloud strata composited into Terracotta Ridge battle arena.

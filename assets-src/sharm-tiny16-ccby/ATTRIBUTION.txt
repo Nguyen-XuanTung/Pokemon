@@ -1,0 +1,9 @@
+Title: Tiny 16: Basic
+Author: Lanea Zimmerman (Sharm)
+Source: https://opengameart.org/content/tiny-16-basic
+Licenses: CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/) / CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/) / OGA-BY 3.0
+Author Attribution Notice: "Please credit Lanea Zimmerman. The anti-DRM clause of CC-BY 3.0 is waved."
+Files used in LingoWild:
+- characters_1.png (recolored into 6 LingoWild Ranger & Naturalist palettes)
+- things_0.png (animated chests, braziers, pots, hearths)
+- basictiles_2.png (supplementary cobblestones, staircases, pillars, outdoor props)
