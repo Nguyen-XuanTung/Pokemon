@@ -5,6 +5,7 @@ import type {
   GameState,
   NpcDefinition,
   PortalDefinition,
+  PropKind,
   QuestDefinition,
   RegionId,
   RegionMapDefinition,
@@ -1088,4 +1089,262 @@ export function buildLostHelperReport(params: {
     recommendedPrepEn: obj?.recommendedPrepEn,
     recommendedPrepVi: obj?.recommendedPrepVi,
   };
+}
+
+export type ClickMoveGoal =
+  | { readonly kind: 'tile'; readonly x: number; readonly y: number }
+  | {
+      readonly kind: 'npc';
+      readonly npcId: string;
+      readonly x: number;
+      readonly y: number;
+      readonly labelEn: string;
+      readonly labelVi: string;
+    }
+  | {
+      readonly kind: 'prop';
+      readonly propId: string;
+      readonly propKind: PropKind;
+      readonly x: number;
+      readonly y: number;
+      readonly labelEn: string;
+      readonly labelVi: string;
+    }
+  | {
+      readonly kind: 'portal';
+      readonly portal: PortalDefinition;
+      readonly unlocked: boolean;
+      readonly x: number;
+      readonly y: number;
+    };
+
+export interface ClickMovePlan {
+  readonly ok: boolean;
+  readonly goal: ClickMoveGoal | null;
+  readonly waypoints: ReadonlyArray<GridPoint>;
+  readonly immediateInteract: boolean;
+  readonly immediateBlockedPortal?: PortalDefinition;
+  readonly reason?: 'out_of_bounds' | 'same_tile' | 'blocked_tile' | 'unreachable';
+  readonly reasonEn?: string;
+  readonly reasonVi?: string;
+}
+
+export function directionBetweenAdjacentTiles(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+): Direction | null {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  if (dx === 1 && dy === 0) return 'right';
+  if (dx === -1 && dy === 0) return 'left';
+  if (dx === 0 && dy === 1) return 'down';
+  if (dx === 0 && dy === -1) return 'up';
+  return null;
+}
+
+export function planClickToMove(params: {
+  state: GameState;
+  map: RegionMapDefinition;
+  npcsInRegion: ReadonlyArray<NpcDefinition>;
+  speciesById: Readonly<Record<string, SpeciesDefinition>>;
+  tileX: number;
+  tileY: number;
+}): ClickMovePlan {
+  const { state, map, npcsInRegion, speciesById, tileX, tileY } = params;
+  if (tileX < 0 || tileY < 0 || tileX >= map.width || tileY >= map.height) {
+    return {
+      ok: false,
+      goal: null,
+      waypoints: [],
+      immediateInteract: false,
+      reason: 'out_of_bounds',
+      reasonEn: 'Clicked outside the playable map.',
+      reasonVi: 'Vị trí chọn nằm ngoài bản đồ.',
+    };
+  }
+
+  const startX = state.playerPos.x;
+  const startY = state.playerPos.y;
+  if (tileX === startX && tileY === startY) {
+    return {
+      ok: true,
+      goal: { kind: 'tile', x: tileX, y: tileY },
+      waypoints: [],
+      immediateInteract: false,
+      reason: 'same_tile',
+    };
+  }
+
+  const manhattan = Math.abs(tileX - startX) + Math.abs(tileY - startY);
+
+  // 1. Check portals first (unlocked portals transition region; locked portals explain gate condition)
+  const portal = map.portals.find((p) => p.x === tileX && p.y === tileY);
+  if (portal) {
+    const unlocked = isPortalUnlocked(portal, state, speciesById);
+    const goal: ClickMoveGoal = {
+      kind: 'portal',
+      portal,
+      unlocked,
+      x: portal.x,
+      y: portal.y,
+    };
+    const waypoints = computeLocalBfsPath({
+      map,
+      npcsInRegion,
+      state,
+      startX,
+      startY,
+      targetX: portal.x,
+      targetY: portal.y,
+      stopAdjacent: false,
+      allowTargetPortal: true,
+    });
+    if (waypoints.length === 0) {
+      if (!unlocked) {
+        const desc = portal.requiredFlag
+          ? describeGateFlag(portal.requiredFlag)
+          : { en: portal.labelEn, vi: portal.labelVi };
+        return {
+          ok: false,
+          goal,
+          waypoints: [],
+          immediateInteract: false,
+          immediateBlockedPortal: portal,
+          reason: 'unreachable',
+          reasonEn: desc.en,
+          reasonVi: desc.vi,
+        };
+      }
+      return {
+        ok: false,
+        goal,
+        waypoints: [],
+        immediateInteract: false,
+        reason: 'unreachable',
+        reasonEn: `Cannot find a clear path to ${portal.labelEn}.`,
+        reasonVi: `Không tìm thấy đường tới ${portal.labelVi}.`,
+      };
+    }
+    return { ok: true, goal, waypoints, immediateInteract: false };
+  }
+
+  // 2. Check NPCs (walk to reachable adjacent tile, face NPC, and interact once)
+  const npc = npcsInRegion.find((n) => n.x === tileX && n.y === tileY);
+  if (npc) {
+    const goal: ClickMoveGoal = {
+      kind: 'npc',
+      npcId: npc.id,
+      x: npc.x,
+      y: npc.y,
+      labelEn: npc.name,
+      labelVi: localizeSpeakerName(npc.name, 'vi'),
+    };
+    if (manhattan === 1) {
+      return { ok: true, goal, waypoints: [], immediateInteract: true };
+    }
+    const waypoints = computeLocalBfsPath({
+      map,
+      npcsInRegion,
+      state,
+      startX,
+      startY,
+      targetX: npc.x,
+      targetY: npc.y,
+      stopAdjacent: true,
+      allowTargetPortal: false,
+    });
+    if (waypoints.length === 0) {
+      return {
+        ok: false,
+        goal,
+        waypoints: [],
+        immediateInteract: false,
+        reason: 'unreachable',
+        reasonEn: `Cannot reach ${goal.labelEn} from here.`,
+        reasonVi: `Không thể đi tới cạnh ${goal.labelVi} từ vị trí hiện tại.`,
+      };
+    }
+    return { ok: true, goal, waypoints, immediateInteract: false };
+  }
+
+  // 3. Check visible interactive props (chests, signs, campfires, shrines, supply posts, overlooks, traces)
+  const prop = map.props.find((p) => p.x === tileX && p.y === tileY && isPropVisible(p, state));
+  if (prop) {
+    const goal: ClickMoveGoal = {
+      kind: 'prop',
+      propId: prop.id,
+      propKind: prop.kind,
+      x: prop.x,
+      y: prop.y,
+      labelEn: prop.labelEn,
+      labelVi: prop.labelVi,
+    };
+    if (manhattan === 1) {
+      return { ok: true, goal, waypoints: [], immediateInteract: true };
+    }
+    const waypoints = computeLocalBfsPath({
+      map,
+      npcsInRegion,
+      state,
+      startX,
+      startY,
+      targetX: prop.x,
+      targetY: prop.y,
+      stopAdjacent: true,
+      allowTargetPortal: false,
+    });
+    if (waypoints.length === 0) {
+      return {
+        ok: false,
+        goal,
+        waypoints: [],
+        immediateInteract: false,
+        reason: 'unreachable',
+        reasonEn: `Cannot reach ${prop.labelEn} from here.`,
+        reasonVi: `Không thể đi tới ${prop.labelVi} từ vị trí hiện tại.`,
+      };
+    }
+    return { ok: true, goal, waypoints, immediateInteract: false };
+  }
+
+  // 4. Reject non-walkable terrain or blocking structures (never clip through water, trees, or walls)
+  if (!isTileWalkable({ map, npcsInRegion, state, x: tileX, y: tileY })) {
+    return {
+      ok: false,
+      goal: null,
+      waypoints: [],
+      immediateInteract: false,
+      reason: 'blocked_tile',
+      reasonEn: 'Cannot walk onto water, trees, or obstacles.',
+      reasonVi: 'Không thể đi vào nước, cây hoặc vật cản.',
+    };
+  }
+
+  // 5. Walkable ground tile -> shortest BFS route avoiding portals and obstacles
+  const goal: ClickMoveGoal = { kind: 'tile', x: tileX, y: tileY };
+  const waypoints = computeLocalBfsPath({
+    map,
+    npcsInRegion,
+    state,
+    startX,
+    startY,
+    targetX: tileX,
+    targetY: tileY,
+    stopAdjacent: false,
+    allowTargetPortal: false,
+  });
+  if (waypoints.length === 0) {
+    return {
+      ok: false,
+      goal,
+      waypoints: [],
+      immediateInteract: false,
+      reason: 'unreachable',
+      reasonEn: 'No clear path to that spot.',
+      reasonVi: 'Không tìm thấy lối đi tới ô đã chọn.',
+    };
+  }
+  return { ok: true, goal, waypoints, immediateInteract: false };
 }
